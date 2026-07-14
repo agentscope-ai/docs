@@ -1,0 +1,400 @@
+---
+title: "微服务嵌入三方系统"
+description: "将 AgentScope 作为 Agent 执行引擎嵌入企业系统，对接三方用户体系与权限体系"
+---
+
+## 场景定位
+
+将 AgentScope 作为 Agent 执行引擎嵌入已有的企业系统中（如 CRM、ERP、协同平台），与三方系统的用户体系、权限体系、文件服务对接。
+
+## 前置依赖
+
+```bash
+# 按需安装扩展
+pip install "agentscope[service,storage]"         # 基础
+pip install "agentscope[workspace]"                # Docker/K8s 沙箱
+pip install "agentscope[rag,s3]"                   # 知识库 + S3 Blob
+# 或
+pip install "agentscope[full]"
+```
+
+## 关键约束
+
+- **用户体系对接**：三方系统已有用户/租户管理，AgentScope 不自建用户系统
+- **权限体系对接**：三方系统控制谁能创建/使用哪些 Agent 和 Credential
+- **沙箱安全**：企业环境通常要求强隔离（Docker/K8s）
+- **文件服务对接**：三方系统可能有自己的 OSS/文件服务
+
+## 架构模式
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     三方系统 + AgentScope 微服务                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌──────────────┐                                                  │
+│   │  三方系统前端  │──────┐                                           │
+│   └──────────────┘      │                                           │
+│                          ▼                                           │
+│   ┌──────────────────────────────────────────────┐                  │
+│   │              三方系统后端 (API Gateway)         │                  │
+│   │  ┌─────────┐  ┌──────────┐  ┌─────────────┐ │                  │
+│   │  │ 用户认证  │  │ 权限引擎  │  │ 文件服务     │ │                  │
+│   │  │ (JWT/SSO)│  │ (RBAC)   │  │ (OSS/MinIO) │ │                  │
+│   │  └────┬─────┘  └─────┬────┘  └──────┬──────┘ │                  │
+│   └───────┼──────────────┼───────────────┼────────┘                  │
+│           │              │               │                           │
+│           ▼              ▼               ▼                           │
+│   ┌──────────────────────────────────────────────┐                  │
+│   │         agentscope.app (mount 或独立部署)      │                  │
+│   │                                              │                  │
+│   │   Storage ──► Redis                          │                  │
+│   │   MessageBus ──► Redis                       │                  │
+│   │   Workspace ──► Docker/K8s                   │                  │
+│   │   BlobStore ──► 对接三方 OSS                   │                  │
+│   │   AccessPolicy ──► 对接三方 RBAC               │                  │
+│   └──────────────────────────────────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 集成方式选择
+
+| 方式 | 代码 | 适用场景 |
+|------|------|---------|
+| **Mount 模式** | `main_app.mount("/agentscope", agentscope_app)` | 三方系统也是 FastAPI/Starlette |
+| **独立部署 + 反向代理** | Nginx 路由 `/agent-api/*` → AgentScope 服务 | 三方系统非 Python / 独立运维 |
+| **SDK 调用** | 三方后端直接 HTTP 调用 AgentScope API | 松耦合、语言无关 |
+
+**Mount 模式**（推荐，同进程最低延迟）：
+
+```python
+# 三方系统的 main.py
+from fastapi import FastAPI
+from agentscope.app import create_app
+
+main_app = FastAPI(title="企业协同平台")
+
+# ... 三方系统的路由 ...
+
+agentscope_app = create_app(
+    storage=...,
+    message_bus=...,
+    workspace_manager=...,
+)
+
+main_app.mount("/agentscope", agentscope_app)
+```
+
+### 对接多租户用户系统
+
+覆盖 `get_current_user_id`，从三方系统的 JWT / Session 中提取身份：
+
+```python
+from fastapi import Depends, Header, HTTPException, Request
+from agentscope.app.deps import get_current_user_id
+
+async def extract_tenant_user(request: Request) -> str:
+    """从三方系统的认证上下文中提取 tenant_id + user_id。
+    格式: tenant:{tenant_id}:user:{user_id}，确保跨租户隔离。"""
+
+    # 方案 A: 从三方网关转发的 header 中读取
+    tenant_id = request.headers.get("X-Tenant-ID")
+    user_id = request.headers.get("X-User-ID")
+
+    # 方案 B: 从 JWT 中解析
+    # auth_header = request.headers.get("Authorization", "")
+    # payload = verify_jwt(auth_header.replace("Bearer ", ""))
+    # tenant_id = payload["tenant_id"]
+    # user_id = payload["sub"]
+
+    if not tenant_id or not user_id:
+        raise HTTPException(status_code=401, detail="Missing identity")
+
+    # 组合 tenant + user 作为 AgentScope 的 user_id，
+    # 确保不同租户的用户数据完全隔离
+    return f"tenant:{tenant_id}:user:{user_id}"
+
+agentscope_app.dependency_overrides[get_current_user_id] = extract_tenant_user
+```
+
+### 对接自定义权限体系
+
+通过 `ResourceAccessPolicyBase` 对接三方 RBAC：
+
+```python
+from agentscope.app.access import (
+    ResourceAccessPolicyBase,
+    ResourceKind,
+    ResourceRef,
+    ResourcePermission,
+)
+from agentscope.app.storage import StorageBase
+
+class EnterpriseRBACPolicy(ResourceAccessPolicyBase):
+    """对接企业 RBAC 权限引擎，决定谁能使用哪些共享资源。"""
+
+    def __init__(self, rbac_client):
+        self._rbac = rbac_client  # 三方系统的 RBAC SDK
+
+    async def list_accessible(
+        self,
+        viewer_id: str,
+        kind: ResourceKind,
+        storage: StorageBase,
+    ) -> list[ResourceRef]:
+        # 从三方权限引擎查询该用户可访问的资源
+        grants = await self._rbac.list_grants(
+            user_id=viewer_id,
+            resource_type=f"agentscope:{kind.value}",
+        )
+
+        refs = []
+        for grant in grants:
+            refs.append(ResourceRef(
+                kind=kind,
+                owner_id=grant.owner_id,
+                resource_id=grant.resource_id,
+                permission=(
+                    ResourcePermission.EDIT
+                    if "write" in grant.actions
+                    else ResourcePermission.READ
+                ),
+            ))
+        return refs
+```
+
+通过 `extra_agent_middlewares` 注入运行时权限检查：
+
+```python
+from agentscope.middleware import MiddlewareBase
+
+async def enterprise_middleware_factory(
+    user_id: str, agent_id: str, session_id: str
+) -> list[MiddlewareBase]:
+    """注入企业级中间件：审计日志、用量计量、功能开关等。"""
+    tenant_id = user_id.split(":")[1]  # 从 tenant:{tid}:user:{uid} 中提取
+
+    middlewares = [
+        AuditLogMiddleware(tenant_id=tenant_id, user_id=user_id),
+        UsageMeteringMiddleware(tenant_id=tenant_id),
+    ]
+
+    # 检查租户功能开关
+    features = await feature_flags.get_tenant_features(tenant_id)
+    if features.get("rag_enabled"):
+        # knowledge_bases 需从 knowledge_base_manager 获取
+        middlewares.append(RAGMiddleware(knowledge_bases=[...]))
+
+    return middlewares
+```
+
+通过 `extra_agent_tools` 注入租户专属工具：
+
+```python
+from agentscope.tool import ToolBase
+
+async def enterprise_tool_factory(
+    user_id: str, agent_id: str, session_id: str
+) -> list[ToolBase]:
+    """根据租户配置注入企业专属工具（CRM、ERP 集成等）。"""
+    tenant_id = user_id.split(":")[1]
+
+    tools = []
+    integrations = await get_tenant_integrations(tenant_id)
+
+    if "salesforce" in integrations:
+        tools.append(SalesforceTool(
+            api_key=integrations["salesforce"]["api_key"],
+        ))
+    if "jira" in integrations:
+        tools.append(JiraTool(
+            base_url=integrations["jira"]["base_url"],
+            token=integrations["jira"]["token"],
+        ))
+
+    return tools
+```
+
+### 沙箱服务选型
+
+企业场景需要强隔离 + 可审计：
+
+| 方案 | 特点 | 适用场景 |
+|------|------|---------|
+| **DockerWorkspaceManager** | 容器级隔离、bind-mount、可自定义镜像 | 自有基础设施 |
+| **K8sWorkspaceManager** | Pod 级隔离、资源配额、网络策略 | K8s 集群环境 |
+| **DaytonaWorkspaceManager** | 开发环境管理平台 | 需要完整 IDE 环境 |
+
+```python
+from agentscope.app.workspace_manager import K8sWorkspaceManager, IsolationPolicy
+
+workspace_manager = K8sWorkspaceManager(
+    namespace="agentscope-workspaces",
+    image="company-registry.com/agent-sandbox:latest",
+    isolation=IsolationPolicy.PER_SESSION,
+    # K8s 资源限制（标准 K8s ResourceRequirements 格式）
+    resources={
+        "requests": {"cpu": "250m", "memory": "256Mi"},
+        "limits": {"cpu": "500m", "memory": "512Mi"},
+    },
+    # 企业镜像仓库需要 pull secret
+    image_pull_secrets=["company-registry-secret"],
+)
+```
+
+> **K8sWorkspaceManager 构造参数一览**：`namespace`（K8s 命名空间）、`kubeconfig`（kubeconfig 路径，None 用 in-cluster）、`image`（Pod 镜像）、`image_pull_policy`、`image_pull_secrets`、`resources`（K8s ResourceRequirements dict）、`node_selector`、`tolerations`、`service_account`、`gateway_port`、`extra_pip`、`storage_class`、`storage_size`（PVC 大小，默认 "1Gi"）、`env`、`default_mcps`、`skill_paths`、`ttl`（默认 3600s）、`sweep_interval`（默认 300s）、`delete_pvc_on_close`（默认 False）、`isolation`。
+
+### 分布式文件服务对接
+
+如果三方 OSS 兼容 S3 协议（MinIO、阿里云 OSS S3 兼容模式、腾讯 COS 等），直接使用 `S3BlobStore` 即可，无需自定义实现。只有完全不兼容 S3 的私有存储才需要自行实现 `BlobStoreBase`（需实现 `write_stream`、`open`、`delete`、`exists` 四个抽象方法）。
+
+或直接使用已有的 `S3BlobStore`（兼容 S3 协议的 OSS 均可使用）：
+
+```python
+from agentscope.app.rag.blob_store import S3BlobStore
+
+blob_store = S3BlobStore(
+    bucket="company-agentscope",
+    endpoint_url="https://minio.internal:9000",  # MinIO 兼容 S3 协议
+    region_name="cn-hangzhou",
+)
+```
+
+> **S3BlobStore 构造参数**：`bucket`（必填，Bucket 名称）、`region_name`、`endpoint_url`（非 AWS S3 时指定，如 MinIO/阿里云 OSS）、`aws_access_key_id`、`aws_secret_access_key`、`session_token`、`use_ssl`（默认 True）、`config`。URI 格式为 `s3://{bucket}/{key}`。
+
+### 完整启动代码
+
+```python
+# enterprise_integration.py — 可直接复制运行
+#
+# 本代码块已内联最小可运行的占位实现。
+# 如需完整功能，替换以下占位：
+#   - extract_tenant_user()  → 对接你的 JWT/SSO（参见前文"对接多租户用户系统"小节）
+#   - resource_policy        → 替换 DenyAllResourceAccessPolicy 为你的 RBAC 策略
+#   - extra_agent_middlewares → 取消注释并实现审计/Quota 等中间件
+#   - extra_agent_tools      → 取消注释并实现企业工具注入
+#
+import os
+from fastapi import FastAPI, HTTPException, Request
+from agentscope.app import create_app
+from agentscope.app.storage import RedisStorage
+from agentscope.app.message_bus import RedisMessageBus
+from agentscope.app.workspace_manager import DockerWorkspaceManager, IsolationPolicy
+from agentscope.app.rag.blob_store import S3BlobStore
+from agentscope.app.rag.knowledge_base_manager import CollectionPerKbManager
+from agentscope.app.access import DenyAllResourceAccessPolicy
+from agentscope.app.deps import get_current_user_id
+from agentscope.rag import QdrantStore
+
+# 实现完整 RBAC/中间件/工具时需要的额外 import：
+# from agentscope.app.storage import StorageBase
+# from agentscope.app.access import (
+#     ResourceAccessPolicyBase, ResourceKind, ResourceRef, ResourcePermission,
+# )
+# from agentscope.middleware import MiddlewareBase
+# from agentscope.tool import ToolBase
+
+
+# ---- 1. 身份提取（参见前文"对接多租户用户系统"） ----
+async def extract_tenant_user(request: Request) -> str:
+    tenant_id = request.headers.get("X-Tenant-ID")
+    user_id = request.headers.get("X-User-ID")
+    if not tenant_id or not user_id:
+        raise HTTPException(status_code=401, detail="Missing identity")
+    return f"tenant:{tenant_id}:user:{user_id}"
+
+
+# ---- 2. RBAC 策略（参见前文"对接自定义权限体系"） ----
+# 此处用 DenyAll 占位，替换为你的 EnterpriseRBACPolicy 实现
+resource_policy = DenyAllResourceAccessPolicy()
+
+
+# ---- 3. 组装应用 ----
+storage = RedisStorage(
+    host=os.environ["REDIS_HOST"],
+    port=6379,
+    password=os.environ["REDIS_PASSWORD"],
+)
+
+agentscope_app = create_app(
+    storage=storage,
+    message_bus=RedisMessageBus(
+        host=os.environ["REDIS_HOST"],
+        port=6379,
+        password=os.environ["REDIS_PASSWORD"],
+    ),
+    workspace_manager=DockerWorkspaceManager(
+        basedir="/data/agent-workspaces",
+        base_image="company-registry/agent-sandbox:latest",
+        isolation=IsolationPolicy.PER_SESSION,
+        ttl=3600.0,
+    ),
+    knowledge_base_manager=CollectionPerKbManager(
+        storage=storage,
+        vector_store=QdrantStore(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ.get("QDRANT_API_KEY"),
+        ),
+    ),
+    blob_store=S3BlobStore(
+        bucket=os.environ["OSS_BUCKET"],
+        endpoint_url=os.environ.get("OSS_ENDPOINT"),
+    ),
+    resource_access_policy=resource_policy,
+    # extra_agent_middlewares=enterprise_middleware_factory,  # 取消注释以启用
+    # extra_agent_tools=enterprise_tool_factory,             # 取消注释以启用
+    enable_index_worker=False,  # 使用独立 Index Worker 进程
+)
+
+agentscope_app.dependency_overrides[get_current_user_id] = extract_tenant_user
+
+# 方式 A: Mount 到三方系统
+main_app = FastAPI(title="企业协同平台")
+main_app.mount("/agentscope", agentscope_app)
+
+# 方式 B: 独立部署
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(agentscope_app, host="0.0.0.0", port=8001)
+```
+
+### 独立 Index Worker（RAG 索引）
+
+上面的完整代码设置了 `enable_index_worker=False`，意味着 API 进程不自带索引能力。如果使用了 RAG 知识库，需要单独运行 Index Worker 进程。启动方式与分布式部署相同（参见[分布式部署 > RAG 索引服务](/versions/2.0.5dev/zh/best-practices/distributed#rag-索引服务)），编写一个返回后端配置的 bootstrap 函数并通过环境变量指定：
+
+```bash
+AGENTSCOPE_WORKER_BOOTSTRAP=worker_bootstrap:bootstrap \
+    python -m agentscope.app.rag.index_worker
+```
+
+> 如果不使用 RAG 知识库（未传 `knowledge_base_manager`），则无需运行 Index Worker，`enable_index_worker` 设为 True 或 False 均无影响。
+
+### 部署流程
+
+```
+1. 基础设施准备
+   ├── Redis 集群（企业已有 / 新建，Storage + MessageBus 共用）
+   ├── Docker Registry（推送 Agent 沙箱镜像）
+   ├── 对象存储（MinIO / 阿里云 OSS / S3）
+   └── 向量数据库（Qdrant / Milvus，用于 RAG）
+
+2. 权限对接
+   ├── 实现 extract_tenant_user() — 从 JWT/Session 提取 tenant + user
+   ├── 实现 EnterpriseRBACPolicy — 对接 RBAC 引擎
+   └── 配置 extra_agent_middlewares — 审计/计量/功能开关
+
+3. 集成部署
+   ├── Mount 模式：agentscope_app mount 到三方 FastAPI
+   ├── 独立模式：独立进程 + Nginx 反向代理
+   └── 独立 Index Worker 进程（如使用 RAG）
+
+4. 沙箱镜像准备
+   ├── 基于 python:3.11-slim 构建企业沙箱镜像
+   ├── 预装企业内部 Python 包、证书、代理配置
+   └── 推送到企业 Docker Registry
+
+5. 监控与运维
+   ├── OpenTelemetry → 企业 APM（Datadog / 阿里云 ARMS）
+   ├── 审计日志 → 企业日志中心
+   └── 用量计量 → 企业计费系统
+```

@@ -1,0 +1,59 @@
+---
+title: "方案对比总结"
+description: "四种部署方案的横向对比、关键决策树与首要技术风险一览"
+---
+
+## 方案对比
+
+| 维度 | Serverless | 桌面应用 | 微服务嵌入 | 分布式部署 |
+|------|-----------|---------|-----------|-----------|
+| **用户规模** | 多用户 (SaaS) | 单用户 | 多租户 | 大规模多租户 |
+| **Storage** | Redis Cloud | Redis (本地) | Redis (企业) | Redis Cluster |
+| **MessageBus** | RedisMessageBus | InMemoryMessageBus | RedisMessageBus | RedisMessageBus |
+| **Workspace** | E2B / OpenSandbox | Local / Docker | Docker / K8s | K8s |
+| **Blob Store** | S3 | LocalBlobStore | S3 / 企业 OSS | S3 |
+| **Vector Store** | Qdrant Cloud | Qdrant (内存) | Qdrant / Milvus | Qdrant Cluster |
+| **认证** | API Gateway JWT | 固定用户 | 三方 JWT/SSO | JWT + OAuth |
+| **Credential** | 平台预置 + 用户自有 | 用户本地配置 | RBAC 控制 | RBAC + Quota |
+| **Index Worker** | 嵌入式 | 嵌入式 | 独立进程 | 独立集群 |
+| **运维复杂度** | ⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **成本模型** | 按调用计费 | 零（本地） | 企业内部分摊 | 固定 + 弹性 |
+| **冷启动** | 有（需优化） | 无 | 无 | 无 |
+| **SSE 支持** | 受限 | 完整 | 完整 | 完整 |
+
+## 关键决策树
+
+```
+需求分析
+├── 单用户、本地运行？
+│   └── → 桌面应用方案
+├── 多用户、已有企业系统需要集成？
+│   └── → 微服务嵌入方案
+├── 多用户、需要低运维 SaaS？
+│   └── → Serverless 方案
+└── 大规模多租户、需要水平扩展？
+    └── → 分布式部署方案
+```
+
+- [Serverless 部署](/versions/2.0.5dev/zh/best-practices/serverless)
+- [桌面应用](/versions/2.0.5dev/zh/best-practices/desktop)
+- [微服务嵌入三方系统](/versions/2.0.5dev/zh/best-practices/microservice)
+- [分布式部署](/versions/2.0.5dev/zh/best-practices/distributed)
+
+## 各方案的首要技术风险
+
+| 方案 | 首要风险 | 缓解措施 |
+|------|---------|---------|
+| Serverless | SSE 长连接受限、冷启动延迟 | 使用 Cloud Run（原生 HTTP streaming）、设置 min_instances=1 |
+| 桌面应用 | 强依赖 Redis 不够轻量 | 未来实现 SQLiteStorage；当前可用 Docker 内置 Redis |
+| 微服务嵌入 | 权限对接复杂度 | 渐进实现：先 DenyAll，再逐步对接 RBAC |
+| 分布式 | Redis 单点 / SchedulerManager 重复触发 / Workspace 跨节点一致性 | Redis Cluster + Sentinel；K8s/E2B Workspace；如需精确调度可自行扩展单 scheduler 模式 |
+
+## MessageBus 选择指南
+
+| MessageBus | 适用场景 | 限制 |
+|------------|---------|------|
+| `InMemoryMessageBus` | 单进程（桌面应用、开发环境） | 分布式锁和 Pub/Sub 仅在本进程内生效，多进程/多节点**完全不可用** |
+| `RedisMessageBus` | 多进程、多节点、生产环境 | 依赖 Redis；所有节点必须连接同一 Redis 实例/集群 |
+
+> **关键规则**：只要使用 `uvicorn --workers > 1` 或多节点部署，就**必须**使用 `RedisMessageBus`。`InMemoryMessageBus` 会导致分布式锁失效（同一 Session 可能并发执行）、Wakeup/Cancel 信号丢失、SSE 事件无法跨进程传播。

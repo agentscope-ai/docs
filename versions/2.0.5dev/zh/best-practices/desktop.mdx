@@ -1,0 +1,242 @@
+---
+title: "桌面应用"
+description: "单用户、本地运行的 AgentScope 部署方案，适用于个人 AI 助手等场景"
+---
+
+## 场景定位
+
+单用户、本地运行，无需联网（除 LLM API 调用）。典型场景：个人 AI 助手、本地代码助手、离线办公 Agent。
+
+## 前置依赖
+
+```bash
+# 最小安装（service + storage）
+pip install "agentscope[service,storage]"
+
+# 启动本地 Redis（三选一）
+# 方式 A: Docker（推荐）
+docker run --rm -d -p 6379:6379 --name agentscope-redis redis:7
+
+# 方式 B: macOS Homebrew
+brew install redis && brew services start redis
+
+# 方式 C: Ubuntu/Debian
+sudo apt install redis-server && sudo systemctl start redis
+```
+
+## 关键约束
+
+- **单用户**：无租户隔离需求，`user_id` 固定为常量
+- **本地运行**：所有组件在本机进程内，无需分布式协调
+- **沙箱选择**：本地文件系统或 Docker（如有安全需求）
+- **最小依赖**：尽量避免外部服务（如 Redis）
+
+## 组件选型
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                       桌面应用架构                                 │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌─────────────┐    localhost:8000     ┌──────────────────┐     │
+│   │  Electron /  │◄──────────────────►  │  agentscope.app  │     │
+│   │  Tauri / Web │     HTTP + SSE       │  (FastAPI)       │     │
+│   │  Browser     │                      └────────┬─────────┘     │
+│   └─────────────┘                                │               │
+│                                    ┌─────────────┼──────────┐    │
+│                                    │             │          │    │
+│                               SQLite/Redis  InMemory    Local    │
+│                               (Storage)     MessageBus  Workspace│
+│                                                         ~/agent/ │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Storage：本地轻量存储
+
+桌面场景应避免强依赖 Redis 服务。有两种策略：
+
+| 方案 | 优点 | 缺点 | 推荐 |
+|------|------|------|------|
+| **嵌入式 Redis (via Docker)** | 完全兼容已有 `RedisStorage` | 需要 Docker 或嵌入 Redis 进程 | 快速方案 |
+| **实现 SQLite StorageBase** | 零依赖、单文件、便携 | 需要新增实现 | 长期方案 |
+| **Redis on localhost** | 现有代码直接用 | macOS/Linux 安装简单 | 开发期方案 |
+
+**快速方案**（使用本地 Redis）：
+
+```python
+storage = RedisStorage(
+    host="localhost",
+    port=6379,
+    # key_ttl 默认为 None，表示 key 永不过期。
+    # 桌面场景数据应永久保留，不要设置 key_ttl。
+)
+```
+
+**长期方案**（SQLiteStorage 接口设计，需新增实现）：
+
+```python
+# 未来实现 — 提供零依赖桌面体验
+# storage = SQLiteStorage(db_path="~/.agentscope/data.db")
+```
+
+### MessageBus：进程内消息总线
+
+单进程场景下 `InMemoryMessageBus` 完全满足需求，无需分布式能力：
+
+```python
+from agentscope.app.message_bus import InMemoryMessageBus
+
+message_bus = InMemoryMessageBus()
+```
+
+`InMemoryMessageBus` 已实现所有 `MessageBus` 接口（drain queue、replay log、broadcast、lock、registry），全部基于 `asyncio` 原语，零外部依赖。
+
+### Workspace：本地文件系统
+
+```python
+from agentscope.app.workspace_manager import LocalWorkspaceManager, IsolationPolicy
+
+workspace_manager = LocalWorkspaceManager(
+    basedir=os.path.expanduser("~/.agentscope/workspaces"),
+    # isolation 默认为 PER_AGENT（同一 Agent 的不同 Session 共享工作目录）
+    default_mcps=[
+        # 本地文件浏览器、终端等 MCP Server
+    ],
+)
+```
+
+如需代码执行安全隔离（Agent 执行不可信代码），改用 Docker：
+
+```python
+from agentscope.app.workspace_manager import DockerWorkspaceManager
+
+workspace_manager = DockerWorkspaceManager(
+    basedir=os.path.expanduser("~/.agentscope/workspaces"),
+    base_image="python:3.11-slim",
+    ttl=7200.0,       # 2 小时空闲后回收容器
+    sweep_interval=600.0,
+)
+```
+
+### 用户身份：固定单用户
+
+覆盖 `get_current_user_id`，始终返回固定用户名：
+
+```python
+from agentscope.app.deps import get_current_user_id
+
+DESKTOP_USER_ID = "local-user"
+
+async def desktop_user_id() -> str:
+    return DESKTOP_USER_ID
+
+app = create_app(...)
+app.dependency_overrides[get_current_user_id] = desktop_user_id
+```
+
+### 前端集成
+
+| 方案 | 技术栈 | 特点 |
+|------|--------|------|
+| **Electron + Web UI** | Electron 主进程管理后端进程 + 渲染进程加载 Web UI | 跨平台、最成熟 |
+| **Tauri + Web UI** | Rust 后端启动 Python 进程 + WebView 加载 UI | 轻量、安装包小 |
+| **系统浏览器** | 纯 Python 后端 + `webbrowser.open()` | 最简单 |
+
+Electron 集成示例（主进程启动后端）：
+
+```javascript
+// electron/main.js
+const { spawn } = require('child_process');
+const path = require('path');
+
+let backendProcess;
+
+function startBackend() {
+  backendProcess = spawn('python', [
+    path.join(__dirname, '../backend/desktop_main.py')
+  ], {
+    env: { ...process.env, AGENTSCOPE_MODE: 'desktop' }
+  });
+
+  backendProcess.stdout.on('data', (data) => {
+    if (data.toString().includes('Uvicorn running')) {
+      createWindow('http://localhost:8000');
+    }
+  });
+}
+```
+
+### 知识库（可选）
+
+桌面场景使用内存向量存储即可：
+
+```python
+from agentscope.rag import QdrantStore
+from agentscope.app.rag.knowledge_base_manager import CollectionPerKbManager
+from agentscope.app.rag.blob_store import LocalBlobStore
+
+knowledge_base_manager = CollectionPerKbManager(
+    storage=storage,
+    vector_store=QdrantStore(location=":memory:"),  # 或持久化到本地文件
+    # vector_store=QdrantStore(path="~/.agentscope/qdrant"),
+)
+blob_store = LocalBlobStore(root_dir=os.path.expanduser("~/.agentscope/blobs"))
+```
+
+### 完整启动代码
+
+```python
+# desktop_main.py — 可直接复制运行（需先启动本地 Redis）
+import os
+import uvicorn
+from agentscope.app import create_app
+from agentscope.app.storage import RedisStorage
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.workspace_manager import LocalWorkspaceManager
+from agentscope.app.deps import get_current_user_id
+
+DESKTOP_USER_ID = "local-user"
+DATA_DIR = os.path.expanduser("~/.agentscope")
+
+storage = RedisStorage(host="localhost", port=6379)
+
+app = create_app(
+    storage=storage,
+    message_bus=InMemoryMessageBus(),
+    workspace_manager=LocalWorkspaceManager(
+        basedir=os.path.join(DATA_DIR, "workspaces"),
+    ),
+    enable_index_worker=True,
+)
+
+
+async def desktop_user_id() -> str:
+    return DESKTOP_USER_ID
+
+
+app.dependency_overrides[get_current_user_id] = desktop_user_id
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+```
+
+### 部署流程
+
+```
+1. 打包分发
+   ├── Python 环境打包（PyInstaller / conda-pack / 嵌入 Python）
+   ├── Redis 嵌入（redis-server 二进制 / Docker Compose）
+   └── 前端打包（Electron Builder / Tauri Build）
+
+2. 首次启动
+   ├── 创建 ~/.agentscope/ 目录结构
+   ├── 启动嵌入 Redis（或等待用户自行启动）
+   ├── 启动 FastAPI 后端（localhost:8000）
+   └── 打开前端界面
+
+3. 用户体验
+   ├── 无需注册/登录（固定 user_id）
+   ├── 在 UI 中配置自己的 LLM API Key (Credential)
+   ├── 创建 Agent → 开始对话
+   └── 数据完全本地，关闭应用即停止
+```

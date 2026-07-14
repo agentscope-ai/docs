@@ -1,0 +1,37 @@
+---
+title: "架构基础：可组合的部署模型"
+description: "了解 agentscope.app 的可插拔组件与扩展点，是选择部署方案的基础"
+---
+
+`agentscope.app` 的核心是 `create_app()` 工厂函数，通过构造注入三大可插拔组件来适配不同部署形态：
+
+| 组件 | 接口 | 职责 |
+|------|------|------|
+| `StorageBase` | 持久化 | Credential、Agent、Session、Message 的 CRUD |
+| `MessageBus` | 实时传输 | 分布式锁、Pub/Sub、Inbox 队列、SSE 事件流 |
+| `WorkspaceManagerBase` | 执行沙箱 | Agent 代码执行的文件系统/容器隔离 |
+
+扩展点：
+
+| 扩展点 | 用途 |
+|--------|------|
+| `extra_middlewares` | ASGI 层中间件（Auth、CORS、限流等） |
+| `extra_agent_middlewares` | Agent 层中间件工厂（审计、Quota、RAG 等） |
+| `extra_agent_tools` | 租户级工具注入 |
+| `resource_access_policy` | 跨租户资源访问策略 |
+| `knowledge_base_manager` + `blob_store` | RAG 知识库 |
+
+四种部署场景（[Serverless 部署](/versions/2.0.5dev/zh/best-practices/serverless)、[桌面应用](/versions/2.0.5dev/zh/best-practices/desktop)、[微服务嵌入三方系统](/versions/2.0.5dev/zh/best-practices/microservice)、[分布式部署](/versions/2.0.5dev/zh/best-practices/distributed)）正是通过不同的组件组合和扩展配置来实现的。
+
+## 已有组件 vs 需自行实现
+
+| 组件 | 已有实现（开箱即用） | 需自行实现 |
+|------|---------------------|-----------|
+| **Storage** | `RedisStorage` | SQLiteStorage（桌面场景理想选择，当前未实现） |
+| **MessageBus** | `InMemoryMessageBus`、`RedisMessageBus` | NatsMessageBus 等（如有特殊需求） |
+| **WorkspaceManager** | `Local`、`Docker`、`E2B`、`K8s`、`Daytona`、`OpenSandbox` | — |
+| **BlobStore** | `LocalBlobStore`、`S3BlobStore` | 企业自定义 OSS 适配（如非 S3 兼容） |
+| **VectorStore** | `QdrantStore`、`MilvusStore`、`MongoDBStore` | — |
+| **ResourceAccessPolicy** | `DenyAllResourceAccessPolicy`（默认全隔离） | 平台共享策略、企业 RBAC 策略 |
+| **认证** | `X-User-ID` Header（临时方案） | JWT 认证、三方 SSO 对接 |
+| **Agent 中间件** | `InboxMiddleware`、`StateChangeMiddleware`、`ToolOffloadMiddleware`、`RAGMiddleware` | 审计日志、Quota 限流、租户功能开关 |
