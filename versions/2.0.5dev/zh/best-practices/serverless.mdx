@@ -1,0 +1,374 @@
+---
+title: "Serverless 部署"
+description: "适用于 SaaS 平台、Demo 站点等一次部署、多用户开箱即用的场景"
+---
+
+## 场景定位
+
+一次部署后，所有用户通过平台提供的 Credential 和 Agent 开箱即用，无需自行搭建基础设施。典型场景包括：SaaS 平台、Demo 站点、面向终端用户的 Agent 服务。
+
+## 前置依赖
+
+```bash
+# 安装 AgentScope（含 service + storage + s3 + rag 扩展）
+pip install "agentscope[service,storage,rag,s3]"
+
+# 或一次安装所有可选依赖
+pip install "agentscope[full]"
+```
+
+## 关键约束
+
+- **冷启动优化**：Serverless 函数有冷启动延迟（100ms~数秒），需最小化启动路径
+- **无状态要求**：函数实例随时销毁/重建，所有状态必须外部化
+- **并发模型**：单实例通常处理单请求或少量并发，分布式协调完全依赖外部服务
+- **SSE 长连接**：Serverless 对长连接支持有限，需额外方案
+
+## 组件选型
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     Serverless 部署架构                           │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Client ──► API Gateway ──► Lambda/Cloud Run/Vercel Function    │
+│                                      │                           │
+│              ┌───────────────────────┼───────────────────┐       │
+│              │                       │                   │       │
+│         Redis Cloud            E2B/OpenSandbox      S3 Blob      │
+│         (Storage +             (Workspace)          (知识库)      │
+│          MessageBus)                                             │
+│              │                                                   │
+│         Qdrant Cloud                                             │
+│         (向量检索)                                                │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Storage：托管 Redis
+
+| 选项 | 推荐场景 | 理由 |
+|------|---------|------|
+| **Redis Cloud (Upstash / AWS ElastiCache Serverless)** | ✅ 首选 | 免运维、按需计费、连接池友好 |
+| Vercel KV (Upstash 封装) | 轻量演示 | 与 Vercel 平台深度集成 |
+
+```python
+from agentscope.app.storage import RedisStorage
+
+storage = RedisStorage(
+    host="xxx.upstash.io",
+    port=6379,
+    password=os.environ["REDIS_PASSWORD"],
+    key_ttl=86400 * 30,  # 30 天滑动过期，控制存储成本
+    ssl=True,  # TLS 连接（Upstash 等云服务需要）
+)
+```
+
+> **注意**：`RedisStorage` 的构造函数接受 `host`、`port`、`db`、`password`、`key_ttl`、`key_config` 和 `**kwargs`。所有额外的关键字参数（如 `ssl=True`、`max_connections=20`、`socket_timeout=5`）会被直接转发给 `redis.asyncio.ConnectionPool`。如需更精细控制，也可以传入预配置好的 `connection_pool` 参数。`RedisMessageBus` 的构造函数签名完全相同。
+
+### MessageBus：共享 Redis
+
+Serverless 函数实例无共享内存，**必须使用 `RedisMessageBus`**，不能用 `InMemoryMessageBus`。
+
+```python
+from agentscope.app.message_bus import RedisMessageBus
+
+message_bus = RedisMessageBus(
+    host="xxx.upstash.io",
+    port=6379,
+    password=os.environ["REDIS_PASSWORD"],
+    # 与 RedisStorage 相同，额外参数通过 **kwargs 转发给 ConnectionPool
+)
+```
+
+### Workspace：云端沙箱
+
+Serverless 函数无持久化本地磁盘，必须使用云端沙箱：
+
+| 选项 | 特点 | 适用场景 |
+|------|------|---------|
+| **E2BWorkspaceManager** | 托管沙箱、按秒计费、隔离性强 | ✅ 推荐，最低运维 |
+| **OpenSandboxWorkspaceManager** | 自托管沙箱服务 | 合规要求严格 |
+
+```python
+from agentscope.app.workspace_manager import E2BWorkspaceManager, IsolationPolicy
+
+workspace_manager = E2BWorkspaceManager(
+    api_key=os.environ["E2B_API_KEY"],
+    # template 默认为 E2B 预置模板，也可指定自定义模板 ID
+    isolation=IsolationPolicy.PER_SESSION,  # 每会话独立沙箱
+)
+```
+
+> **E2BWorkspaceManager 构造参数一览**：`template`（E2B 沙箱模板 ID）、`api_key`、`domain`、`timeout_seconds`、`gateway_port`、`env`（环境变量 dict）、`sandbox_metadata`、`extra_pip`（额外安装包）、`default_mcps`（预装 MCP Server）、`skill_paths`、`ttl`（空闲回收秒数，默认 3600）、`sweep_interval`（扫描间隔，默认 300s）、`isolation`。
+
+### Credential 共享策略
+
+**核心关键点**：平台预置的 Credential 需要对所有用户可用。
+
+实现方案：通过 `ResourceAccessPolicyBase` 暴露平台级 Credential：
+
+```python
+from agentscope.app.access import (
+    ResourceAccessPolicyBase,
+    ResourceKind,
+    ResourceRef,
+    ResourcePermission,
+)
+from agentscope.app.storage import StorageBase
+
+PLATFORM_USER_ID = "__platform__"
+
+class PlatformSharedPolicy(ResourceAccessPolicyBase):
+    """让所有用户都能使用平台预置的 Credential 和 Agent。
+
+    platform user 预先通过 seed 脚本写入的 Credential/Agent，
+    通过 list_accessible() 暴露给所有普通用户（只读）。
+    """
+
+    async def list_accessible(
+        self,
+        viewer_id: str,
+        kind: ResourceKind,
+        storage: StorageBase,
+    ) -> list[ResourceRef]:
+        if viewer_id == PLATFORM_USER_ID:
+            return []
+
+        if kind == ResourceKind.CREDENTIAL:
+            # storage.list_credentials(user_id) → list[CredentialRecord]
+            # CredentialRecord.id 是记录 ID（继承自 _RecordBase）
+            records = await storage.list_credentials(PLATFORM_USER_ID)
+            return [
+                ResourceRef(
+                    kind=ResourceKind.CREDENTIAL,
+                    owner_id=PLATFORM_USER_ID,
+                    resource_id=r.id,  # _RecordBase.id
+                    permission=ResourcePermission.READ,
+                )
+                for r in records
+            ]
+
+        if kind == ResourceKind.AGENT:
+            # storage.list_agents(user_id) → list[AgentRecord]
+            records = await storage.list_agents(PLATFORM_USER_ID)
+            return [
+                ResourceRef(
+                    kind=ResourceKind.AGENT,
+                    owner_id=PLATFORM_USER_ID,
+                    resource_id=r.id,  # _RecordBase.id
+                    permission=ResourcePermission.READ,
+                )
+                for r in records
+            ]
+
+        return []
+```
+
+**启动时预置 Credential**（独立脚本，在部署后执行一次）：
+
+```python
+# seed_credentials.py
+import asyncio
+import os
+from agentscope.app.storage import RedisStorage
+from agentscope.credential import OpenAICredential, AnthropicCredential
+
+PLATFORM_USER_ID = "__platform__"
+
+async def main() -> None:
+    storage = RedisStorage(
+        host=os.environ["REDIS_HOST"],
+        port=int(os.environ.get("REDIS_PORT", 6379)),
+        password=os.environ.get("REDIS_PASSWORD"),
+    )
+    async with storage:  # 必须先进入 async context 以建立 Redis 连接
+        await storage.upsert_credential(
+            PLATFORM_USER_ID,
+            OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+        )
+        await storage.upsert_credential(
+            PLATFORM_USER_ID,
+            AnthropicCredential(api_key=os.environ["ANTHROPIC_API_KEY"]),
+        )
+        print("Platform credentials seeded successfully.")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+```bash
+# 部署后执行一次
+python seed_credentials.py
+```
+
+### SSE 事件流处理
+
+Serverless 平台对长连接的支持有限（AWS Lambda 默认 29s 超时、Vercel 30s）。有两种处理方案：
+
+| 方案 | 实现 | 适用平台 |
+|------|------|---------|
+| **A: 流式响应网关** | 使用 Cloud Run（支持 HTTP streaming）、AWS Lambda 响应流（Response Streaming） | GCP Cloud Run, AWS Lambda |
+| **B: 轮询替代** | 前端改为轮询 `GET /sessions/{sid}/messages`，放弃 SSE 实时推送 | 所有 Serverless 平台 |
+
+**推荐方案 A**（以 Cloud Run 为例）：
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY . .
+RUN pip install "agentscope[full]"
+CMD ["uvicorn", "serverless_main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+Cloud Run 的 HTTP/2 + SSE 不受 30s 限制，且支持最小实例为 0（真正的 Serverless 计费模式）。
+
+### 认证方案
+
+Serverless 场景下通常前面有 API Gateway / Auth 网关：
+
+```python
+from fastapi import Header, HTTPException
+from agentscope.app.deps import get_current_user_id
+
+async def api_gateway_user_id(
+    x_user_id: str = Header(default=""),
+    x_forwarded_user: str = Header(default=""),
+) -> str:
+    """从 API Gateway 注入的 header 中提取已验证的 user_id。
+    网关负责 JWT 验证，这里只信任转发的身份。"""
+    user_id = x_forwarded_user or x_user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthenticated")
+    return user_id
+
+app = create_app(...)
+app.dependency_overrides[get_current_user_id] = api_gateway_user_id
+```
+
+### 完整启动代码
+
+```python
+# serverless_main.py — 可直接复制运行
+import os
+
+from fastapi import Header, HTTPException
+from agentscope.app import create_app
+from agentscope.app.deps import get_current_user_id
+from agentscope.app.storage import RedisStorage, StorageBase
+from agentscope.app.message_bus import RedisMessageBus
+from agentscope.app.workspace_manager import E2BWorkspaceManager, IsolationPolicy
+from agentscope.app.rag.blob_store import S3BlobStore
+from agentscope.app.rag.knowledge_base_manager import CollectionPerKbManager
+from agentscope.app.access import (
+    ResourceAccessPolicyBase,
+    ResourceKind,
+    ResourceRef,
+    ResourcePermission,
+)
+from agentscope.rag import QdrantStore
+
+
+# ---- 1. 平台级 Credential 共享策略 ----
+
+PLATFORM_USER_ID = "__platform__"
+
+
+class PlatformSharedPolicy(ResourceAccessPolicyBase):
+    """让所有用户都能使用平台预置的 Credential 和 Agent（只读）。"""
+
+    async def list_accessible(
+        self,
+        viewer_id: str,
+        kind: ResourceKind,
+        storage: StorageBase,
+    ) -> list[ResourceRef]:
+        if viewer_id == PLATFORM_USER_ID:
+            return []
+
+        if kind in (ResourceKind.CREDENTIAL, ResourceKind.AGENT):
+            if kind == ResourceKind.CREDENTIAL:
+                records = await storage.list_credentials(PLATFORM_USER_ID)
+            else:
+                records = await storage.list_agents(PLATFORM_USER_ID)
+            return [
+                ResourceRef(
+                    kind=kind,
+                    owner_id=PLATFORM_USER_ID,
+                    resource_id=r.id,
+                    permission=ResourcePermission.READ,
+                )
+                for r in records
+            ]
+        return []
+
+
+# ---- 2. 认证（信任 API Gateway 转发的身份） ----
+
+async def api_gateway_user_id(
+    x_user_id: str = Header(default=""),
+    x_forwarded_user: str = Header(default=""),
+) -> str:
+    user_id = x_forwarded_user or x_user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthenticated")
+    return user_id
+
+
+# ---- 3. 组装应用 ----
+
+REDIS_OPTS = dict(
+    host=os.environ["REDIS_HOST"],
+    port=int(os.environ.get("REDIS_PORT", 6379)),
+    password=os.environ.get("REDIS_PASSWORD"),
+)
+
+storage = RedisStorage(**REDIS_OPTS, key_ttl=86400 * 30)
+
+app = create_app(
+    storage=storage,
+    message_bus=RedisMessageBus(**REDIS_OPTS),
+    workspace_manager=E2BWorkspaceManager(
+        api_key=os.environ["E2B_API_KEY"],
+        isolation=IsolationPolicy.PER_SESSION,
+    ),
+    knowledge_base_manager=CollectionPerKbManager(
+        storage=storage,
+        vector_store=QdrantStore(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ["QDRANT_API_KEY"],
+        ),
+    ),
+    blob_store=S3BlobStore(
+        bucket=os.environ["S3_BUCKET"],
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    ),
+    resource_access_policy=PlatformSharedPolicy(),
+    enable_index_worker=True,  # 嵌入式 Worker，与 API 同进程运行，简化 Serverless 部署
+)
+
+app.dependency_overrides[get_current_user_id] = api_gateway_user_id
+```
+
+### 部署流程
+
+```
+1. 环境变量配置
+   ├── REDIS_HOST, REDIS_PASSWORD       → Upstash / ElastiCache
+   ├── E2B_API_KEY                       → E2B 沙箱
+   ├── S3_BUCKET, AWS_REGION             → S3 Blob 存储
+   ├── QDRANT_URL, QDRANT_API_KEY        → Qdrant Cloud
+   ├── OPENAI_API_KEY, ANTHROPIC_API_KEY → 平台预置 Credential
+   └── AUTH_SECRET                       → JWT / 网关密钥
+
+2. 容器镜像构建 → 推送 Registry
+
+3. 部署到 Cloud Run / AWS Lambda (Container) / Fly.io
+   ├── 最小实例: 0 (真 Serverless)
+   ├── 最大实例: 按需（如 10）
+   ├── 内存: 1~2 GB（含 Agent 推理时的上下文）
+   └── 超时: 300s~900s（Agent 执行可能较长）
+
+4. 预置平台 Credential（一次性 / CI 中执行 seed 脚本）
+
+5. 配置 API Gateway / CDN → 自定义域名 + Auth
+```

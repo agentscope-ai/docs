@@ -1,0 +1,506 @@
+---
+title: "分布式部署"
+description: "大规模生产环境下的多租户、多节点水平扩展与高可用部署方案"
+---
+
+## 场景定位
+
+大规模生产环境：多租户、多节点水平扩展、高可用。典型场景：大型 SaaS 平台、企业级 Agent 平台。
+
+## 前置依赖
+
+```bash
+pip install "agentscope[full]"
+
+# 基础设施
+# - Redis Cluster（推荐 6 节点：3 主 3 从）
+# - K8s 集群（API 节点池 + Sandbox 节点池）
+# - S3 / MinIO（Blob 存储）
+# - Qdrant Cluster 或 Milvus（向量数据库）
+# - 负载均衡（Nginx Ingress / AWS ALB）
+```
+
+## 关键约束
+
+- **多租户隔离**：数据、执行环境、资源配额全面隔离
+- **多节点部署**：API 无状态、分布式协调、负载均衡
+- **消息总线**：跨节点事件传播、会话锁、任务调度
+- **高可用**：节点故障自动恢复、无单点瓶颈
+
+## 架构总览
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        分布式部署架构                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│    Client ──► Load Balancer (Nginx / ALB / Istio)                       │
+│                        │                                                │
+│              ┌─────────┼──────────┐                                     │
+│              ▼         ▼          ▼                                      │
+│         ┌────────┐ ┌────────┐ ┌────────┐                                │
+│         │ Node A │ │ Node B │ │ Node C │    API 层 (无状态)               │
+│         │ 4 wkr  │ │ 4 wkr  │ │ 4 wkr  │                               │
+│         └───┬────┘ └───┬────┘ └───┬────┘                                │
+│             │          │          │                                      │
+│             └──────────┼──────────┘                                      │
+│                        │                                                │
+│         ┌──────────────┼──────────────────────┐                         │
+│         │              │                      │                         │
+│    ┌────▼─────┐  ┌─────▼──────┐  ┌────────────▼────────────┐           │
+│    │ Redis    │  │ Redis      │  │ Workspace 集群           │           │
+│    │ Cluster  │  │ Cluster    │  │ ┌─────┐ ┌─────┐ ┌─────┐ │           │
+│    │(Storage) │  │(MessageBus)│  │ │ K8s │ │ K8s │ │ K8s │ │           │
+│    └──────────┘  └────────────┘  │ │Pod A│ │Pod B│ │Pod C│ │           │
+│                                  │ └─────┘ └─────┘ └─────┘ │           │
+│                                  └──────────────────────────┘           │
+│                                                                         │
+│    ┌──────────────────────────────────────────────┐                     │
+│    │           Index Worker 集群 (独立进程)          │                     │
+│    │  ┌─────────┐  ┌─────────┐  ┌─────────┐      │                     │
+│    │  │ Worker1 │  │ Worker2 │  │ Worker3 │      │                     │
+│    │  └─────────┘  └─────────┘  └─────────┘      │                     │
+│    └──────────────────────────────────────────────┘                     │
+│                                                                         │
+│    ┌──────────┐  ┌──────────┐                                           │
+│    │ S3 / OSS │  │ Qdrant / │                                           │
+│    │ (Blob)   │  │ Milvus   │                                           │
+│    └──────────┘  │ (Vector) │                                           │
+│                  └──────────┘                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## 组件选型详解
+
+### Redis Cluster 策略
+
+分布式场景建议 Storage 和 MessageBus 使用**同一 Redis Cluster**（简化运维），但也可以分开部署以实现读写分离：
+
+| 部署策略 | 优点 | 缺点 |
+|---------|------|------|
+| **共享 Redis Cluster** | 运维简单、成本低 | 持久化和实时流量互相影响 |
+| **分离 Redis** | Storage 可独立优化持久化策略 | 多一套 Redis 运维 |
+
+```python
+# 共享模式
+REDIS_OPTS = dict(
+    host=os.environ["REDIS_HOST"],
+    port=6379,
+    password=os.environ["REDIS_PASSWORD"],
+)
+
+storage = RedisStorage(**REDIS_OPTS, key_ttl=86400 * 30)
+message_bus = RedisMessageBus(**REDIS_OPTS)
+```
+
+```python
+# 分离模式
+storage = RedisStorage(
+    host=os.environ["REDIS_STORAGE_HOST"],
+    port=6379, password=os.environ["REDIS_STORAGE_PASSWORD"],
+    key_ttl=86400 * 30,
+)
+message_bus = RedisMessageBus(
+    host=os.environ["REDIS_BUS_HOST"],
+    port=6379, password=os.environ["REDIS_BUS_PASSWORD"],
+)
+```
+
+### 多节点 API 部署
+
+每个节点运行多个 uvicorn worker，所有 worker 共享 Redis：
+
+```bash
+# Node A
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# Node B
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+> **重要**：`--workers 4` 意味着每个节点启动 4 个独立进程，每个进程都有自己的 `WakeupDispatcher`、`CancelDispatcher`、`ChatRunRegistry`、`SchedulerManager`。3 节点 × 4 workers = 12 个进程全部连接同一 Redis，通过 Redis 分布式锁 + 竞争消费来协调。
+
+**跨节点协调机制**（已内置，无需额外配置）：
+
+| 机制 | 实现 | 作用 |
+|------|------|------|
+| **分布式会话锁** | `MessageBus.acquire_lock()` → Redis SETNX + 心跳续期 | 同一 Session 全局串行执行 |
+| **竞争消费 Wakeup** | `WakeupDispatcher` drain 共享 queue（Mode A，ack-on-read） | 多节点先到先得，不重复执行 |
+| **广播 Cancel** | `CancelDispatcher` subscribe cancel channel（Mode D） | 所有节点收到，持有 task 的节点执行取消 |
+| **广播 Interrupt** | `CancelDispatcher` subscribe interrupt channel（Mode D） | 同上，但只取消 chat run，不取消 BG task |
+| **SSE 事件跨节点** | `log_append`（Mode C replay log）+ `publish`（Mode D） | 客户端连接到任意节点都能收到事件 |
+
+**SSE 跨节点工作原理**：
+
+```
+1. ChatService.run() 在 Node B 运行
+   ├── 事件 → log_append(Redis Stream)  ← 持久化到共享 Redis
+   └── 事件 → publish(Redis Pub/Sub)    ← 实时通知
+
+2. 客户端 SSE 连接到 Node A
+   ├── 先 log_read() 重放已有事件        ← 从 Redis Stream 读取
+   └── 再 subscribe() 接收实时事件       ← 订阅 Redis Pub/Sub
+
+结论：SSE 不需要 sticky session，任何节点都能提供完整事件流。
+```
+
+**跨节点注意事项**：
+
+| 问题 | 说明 | 建议 |
+|------|------|------|
+| **SchedulerManager 重复触发** | 每个 worker 进程独立运行 APScheduler，都会加载所有 schedule 并触发。多进程/多节点会产生 N 次重复的 inbox HintBlock 推送 | 影响可控：wakeup 是竞争消费的，重复 wakeup 被分布式锁过滤；Agent 可能看到重复的 HintBlock 但只执行一次。如需严格去重，可只在 1 个 worker 上启用 scheduler（其他 worker 设 `enable_scheduler=False`，需自行扩展） |
+| **Load Balancer SSE** | SSE 是长连接，标准 HTTP 负载均衡可能超时断开 | 配置 Nginx `proxy-read-timeout: 600s` + `proxy-buffering: off`；或使用支持 streaming 的 ALB/Istio |
+| **Workspace 跨节点一致性** | `DockerWorkspaceManager` 每个节点有独立 Docker daemon，容器不共享 | 多节点**必须**使用 `K8sWorkspaceManager`（共享集群）或 `E2BWorkspaceManager`（云沙箱）。`DockerWorkspaceManager` 仅适用于单节点或开发环境 |
+
+### Workspace 集群
+
+分布式多节点场景对 WorkspaceManager 有严格要求——**Agent 的执行沙箱必须对所有 API 节点可达**：
+
+| 方案 | 多节点可用 | 原理 | 适用场景 |
+|------|-----------|------|---------|
+| **K8sWorkspaceManager** | ✅ 推荐 | Pod 在共享 K8s 集群中，任何 API 节点都可通过 K8s API 访问 | 已有 K8s 集群 |
+| **E2BWorkspaceManager** | ✅ | 云端沙箱，任何节点通过 HTTP API 访问 | 不想管基础设施 |
+| **DaytonaWorkspaceManager** | ✅ | 远程开发环境，HTTP 可达 | 需要完整 IDE 环境 |
+| **OpenSandboxWorkspaceManager** | ✅ | 自托管沙箱服务，HTTP 可达 | 安全合规要求 |
+| **DockerWorkspaceManager** | ❌ 仅单节点 | 每个节点有独立 Docker daemon，容器不共享 | 仅开发/单节点 |
+| **LocalWorkspaceManager** | ❌ 仅单节点 | 依赖本地文件系统 | 仅开发/单节点 |
+
+> **关键提醒**：分布式部署中，如果 Session S1 的 ChatService.run() 在 Node A 创建了容器/沙箱，后续 S1 的新请求可能被 WakeupDispatcher 在 Node B 消费。如果 Workspace 不是全局可达的（如 Docker/Local），Node B 会找不到之前的沙箱，导致运行失败。务必使用 K8s/E2B 等全局可达的方案。
+
+K8s Workspace 配置：
+
+```python
+from agentscope.app.workspace_manager import K8sWorkspaceManager, IsolationPolicy
+
+workspace_manager = K8sWorkspaceManager(
+    namespace="agentscope-sandboxes",
+    image="company-registry/sandbox:latest",
+    isolation=IsolationPolicy.PER_SESSION,
+    resources={
+        "requests": {"cpu": "500m", "memory": "512Mi"},
+        "limits": {"cpu": "1000m", "memory": "1Gi"},
+    },
+    storage_class="gp3",
+    storage_size="5Gi",
+    image_pull_secrets=["company-registry-secret"],
+    ttl=3600.0,
+    sweep_interval=300.0,
+)
+```
+
+### 多租户隔离策略
+
+分布式场景下的隔离策略矩阵：
+
+| 维度 | 实现 | 级别 |
+|------|------|------|
+| **数据隔离** | Redis key 前缀 `user:{user_id}:` | 逻辑隔离 |
+| **计算隔离** | K8s Pod 资源配额 + 网络策略 | 物理隔离 |
+| **存储隔离** | Blob 按 tenant 分目录/分 Bucket | 逻辑/物理 |
+| **向量隔离** | 每个 KB 独立 collection | 逻辑隔离 |
+| **API 隔离** | Rate Limiting per tenant | 逻辑隔离 |
+
+实现租户级 Quota 和限流（示例思路，`TokenQuotaMiddleware` 等需自行实现）：
+
+```python
+from agentscope.middleware import MiddlewareBase
+
+# 通过 extra_agent_middlewares 注入 Quota 检查
+async def distributed_middleware_factory(
+    user_id: str, agent_id: str, session_id: str
+) -> list[MiddlewareBase]:
+    tenant_id = user_id.split(":")[1]  # 假设 user_id 格式为 tenant:{tid}:user:{uid}
+    # quota = await get_tenant_quota(tenant_id)  # 自行实现的配额查询
+
+    middlewares = []
+    # 以下 Middleware 需自行实现，继承 agentscope.middleware.MiddlewareBase
+    # if quota.max_tokens_per_day:
+    #     middlewares.append(TokenQuotaMiddleware(
+    #         tenant_id=tenant_id,
+    #         daily_limit=quota.max_tokens_per_day,
+    #     ))
+    return middlewares
+```
+
+> **API 层限流**可通过 `extra_middlewares` 添加第三方 ASGI 限流中间件（如 `slowapi`），这是 ASGI 层面的限流，与 Agent 层的 `extra_agent_middlewares` 互补。
+
+### RAG 索引服务
+
+分布式场景下 RAG 索引应**独立部署**。Index Worker 通过环境变量 `AGENTSCOPE_WORKER_BOOTSTRAP` 指定一个 bootstrap 函数来获取后端配置：
+
+**1. 编写 bootstrap 模块**：
+
+```python
+# worker_bootstrap.py
+import os
+from agentscope.app.storage import RedisStorage
+from agentscope.app.message_bus import RedisMessageBus
+from agentscope.app.rag.blob_store import S3BlobStore
+from agentscope.app.rag.knowledge_base_manager import CollectionPerKbManager
+from agentscope.rag import QdrantStore, ApproxTokenChunker, TextParser
+
+def bootstrap() -> dict:
+    """返回 run_worker() 所需的 kwargs dict。"""
+    storage = RedisStorage(
+        host=os.environ["REDIS_HOST"],
+        port=int(os.environ.get("REDIS_PORT", 6379)),
+        password=os.environ.get("REDIS_PASSWORD"),
+    )
+    return {
+        "storage": storage,
+        "message_bus": RedisMessageBus(
+            host=os.environ["REDIS_HOST"],
+            port=int(os.environ.get("REDIS_PORT", 6379)),
+            password=os.environ.get("REDIS_PASSWORD"),
+        ),
+        "blob_store": S3BlobStore(
+            bucket=os.environ["S3_BUCKET"],
+            region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        ),
+        "knowledge_base_manager": CollectionPerKbManager(
+            storage=storage,
+            vector_store=QdrantStore(
+                url=os.environ["QDRANT_URL"],
+                api_key=os.environ.get("QDRANT_API_KEY"),
+            ),
+        ),
+        "parsers": [TextParser()],
+        "chunker": ApproxTokenChunker(),
+    }
+```
+
+**2. 启动独立 Index Worker**：
+
+```bash
+# API 进程：enable_index_worker=False（不启动嵌入式 Worker）
+
+# 独立 Index Worker（可水平扩展，启动多个实例竞争消费）
+AGENTSCOPE_WORKER_BOOTSTRAP=worker_bootstrap:bootstrap \
+    python -m agentscope.app.rag.index_worker
+```
+
+Index Worker 的分布式协调通过 `MessageBus` 的 drain queue 语义实现：多个 Worker 竞争消费同一 index task queue，加上文档级 lease 防止重复索引。
+
+### 完整启动代码
+
+```python
+# distributed_main.py — 可直接复制运行
+#
+# 本代码块已内联最小可运行的占位实现。
+# 如需完整功能，替换以下占位：
+#   - jwt_get_current_user_id → 实现你的 JWT 验证逻辑
+#   - DenyAllResourceAccessPolicy → 替换为你的 RBAC 策略
+#   - extra_agent_middlewares → 取消注释并实现 Quota/审计等中间件
+#
+import os
+from fastapi import Header, HTTPException
+from fastapi.middleware import Middleware
+from fastapi.middleware.cors import CORSMiddleware
+from agentscope.app import create_app
+from agentscope.app.storage import RedisStorage
+from agentscope.app.message_bus import RedisMessageBus
+from agentscope.app.workspace_manager import K8sWorkspaceManager, IsolationPolicy
+from agentscope.app.rag.blob_store import S3BlobStore
+from agentscope.app.rag.knowledge_base_manager import CollectionPerKbManager
+from agentscope.app.access import DenyAllResourceAccessPolicy
+from agentscope.app.deps import get_current_user_id
+from agentscope.rag import QdrantStore
+
+
+# ---- JWT 认证（替换为你的 JWT 验证逻辑） ----
+async def jwt_get_current_user_id(
+    authorization: str = Header(default=""),
+) -> str:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+    token = authorization[7:]
+    # payload = verify_jwt(token)  # 替换为你的 JWT 验证
+    # return payload["sub"]
+    raise HTTPException(status_code=501, detail="JWT验证未实现，请替换此占位")
+
+
+# ---- 组装应用 ----
+REDIS_OPTS = dict(
+    host=os.environ["REDIS_HOST"],
+    port=int(os.environ.get("REDIS_PORT", 6379)),
+    password=os.environ.get("REDIS_PASSWORD"),
+)
+
+storage = RedisStorage(**REDIS_OPTS, key_ttl=86400 * 30)
+
+app = create_app(
+    storage=storage,
+    message_bus=RedisMessageBus(**REDIS_OPTS),
+    workspace_manager=K8sWorkspaceManager(
+        namespace="agentscope-sandboxes",
+        image=os.environ.get("SANDBOX_IMAGE", "python:3.11-slim"),
+        isolation=IsolationPolicy.PER_SESSION,
+        resources={
+            "requests": {"cpu": "500m", "memory": "512Mi"},
+            "limits": {"cpu": "1000m", "memory": "1Gi"},
+        },
+    ),
+    knowledge_base_manager=CollectionPerKbManager(
+        storage=storage,
+        vector_store=QdrantStore(
+            url=os.environ["QDRANT_URL"],
+            api_key=os.environ.get("QDRANT_API_KEY"),
+        ),
+    ),
+    blob_store=S3BlobStore(
+        bucket=os.environ["S3_BUCKET"],
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    ),
+    resource_access_policy=DenyAllResourceAccessPolicy(),  # 替换为你的 RBAC 策略
+    # extra_agent_middlewares=...,  # 可选：注入 Quota/审计等中间件
+    enable_index_worker=False,  # 独立 Worker 集群
+    extra_middlewares=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+            allow_methods=["*"],
+            allow_headers=["*"],
+        ),
+    ],
+)
+
+app.dependency_overrides[get_current_user_id] = jwt_get_current_user_id
+```
+
+### 部署流程（K8s）
+
+```yaml
+# k8s/api-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentscope-api
+spec:
+  replicas: 3                     # 3 节点
+  selector:
+    matchLabels:
+      app: agentscope-api
+  template:
+    metadata:
+      labels:
+        app: agentscope-api
+    spec:
+      containers:
+      - name: api
+        image: company/agentscope-api:latest
+        command: ["uvicorn", "distributed_main:app",
+                  "--host", "0.0.0.0", "--port", "8000",
+                  "--workers", "4"]     # 每节点 4 worker = 12 并发
+        ports:
+        - containerPort: 8000
+        resources:
+          requests: { cpu: "1", memory: "2Gi" }
+          limits:   { cpu: "2", memory: "4Gi" }
+        env:
+        - name: REDIS_HOST
+          valueFrom: { secretKeyRef: { name: redis, key: host } }
+        # ... 其他环境变量 (REDIS_PASSWORD, QDRANT_URL, S3_BUCKET 等)
+
+---
+# k8s/index-worker-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentscope-index-worker
+spec:
+  replicas: 2                     # 2 个 Index Worker
+  selector:
+    matchLabels:
+      app: agentscope-index-worker
+  template:
+    metadata:
+      labels:
+        app: agentscope-index-worker
+    spec:
+      containers:
+      - name: worker
+        image: company/agentscope-api:latest
+        command: ["python", "-m", "agentscope.app.rag.index_worker"]
+        env:
+        - name: AGENTSCOPE_WORKER_BOOTSTRAP
+          value: "worker_bootstrap:bootstrap"
+        # ... REDIS_HOST, QDRANT_URL 等环境变量同 API 节点
+        resources:
+          requests: { cpu: "2", memory: "4Gi" }
+          limits:   { cpu: "4", memory: "8Gi" }
+
+---
+# k8s/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentscope-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+  selector:
+    app: agentscope-api
+
+---
+# k8s/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentscope
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"  # Agent 长运行
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"      # SSE 流式
+spec:
+  rules:
+  - host: agent.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agentscope-api
+            port: { number: 8000 }
+```
+
+### 部署流程
+
+```
+1. 基础设施
+   ├── Redis Cluster（3 主 3 从，高可用）
+   ├── K8s 集群（API 节点 + Sandbox 节点池）
+   ├── S3 / MinIO（Blob 存储）
+   ├── Qdrant Cluster / Milvus（向量数据库）
+   └── 负载均衡（Nginx Ingress / ALB）
+
+2. 镜像准备
+   ├── API 镜像：agentscope[full] + 业务代码
+   ├── Index Worker 镜像：同 API 镜像（不同 entrypoint）
+   └── Sandbox 镜像：Agent 代码执行环境
+
+3. K8s 部署
+   ├── API Deployment: 3 replicas × 4 workers
+   ├── Index Worker Deployment: 2 replicas
+   ├── Ingress: SSL + SSE 优化
+   ├── HPA: CPU > 70% 自动扩容
+   └── PDB: maxUnavailable=1
+
+4. 故障恢复机制（框架已内置）
+   ├── API 节点重启 → WakeupDispatcher.__aenter__() 执行初始 drain，
+   │   恢复队列中所有未处理的 wakeup（设计上 wakeup queue 是持久的）
+   ├── 分布式锁超时 → TTL 600s 后自动释放（由 acquire_lock 心跳续期，
+   │   只有持有者真正崩溃时才超时）
+   ├── Redis 短暂不可用 → Storage/MessageBus 内部重试
+   ├── Sandbox Pod 被 sweep 回收 → 下次 get_workspace() 自动重建
+   │   （K8sWorkspaceManager 通过 deterministic Pod name 重新 attach）
+   └── 进程关闭 → ChatRunRegistry.__aexit__() 取消所有 in-flight chat run，
+       释放所有分布式锁
+
+5. 监控
+   ├── OpenTelemetry Tracing（agentscope 已内置 trace hook）
+   ├── Redis 监控（内存、连接数、命令延迟）
+   │   └── 关键指标：wakeup queue 长度（积压 = 处理能力不足）
+   ├── K8s 监控（Pod 状态、资源使用）
+   └── 业务指标（活跃会话数、Agent 执行时长、Token 用量）
+```

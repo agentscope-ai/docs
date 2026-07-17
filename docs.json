@@ -371,6 +371,21 @@
                     ]
                   }
                 ]
+              },
+              {
+                "tab": "最佳实践",
+                "groups": [
+                  {
+                    "group": "部署场景",
+                    "pages": [
+                      "versions/2.0.5dev/zh/best-practices/architecture-overview",
+                      "versions/2.0.5dev/zh/best-practices/serverless",
+                      "versions/2.0.5dev/zh/best-practices/desktop",
+                      "versions/2.0.5dev/zh/best-practices/microservice",
+                      "versions/2.0.5dev/zh/best-practices/distributed"
+                    ]
+                  }
+                ]
               }
             ]
           },
