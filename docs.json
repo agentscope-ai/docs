@@ -382,8 +382,7 @@
                       "versions/2.0.5dev/zh/best-practices/serverless",
                       "versions/2.0.5dev/zh/best-practices/desktop",
                       "versions/2.0.5dev/zh/best-practices/microservice",
-                      "versions/2.0.5dev/zh/best-practices/distributed",
-                      "versions/2.0.5dev/zh/best-practices/comparison"
+                      "versions/2.0.5dev/zh/best-practices/distributed"
                     ]
                   }
                 ]
