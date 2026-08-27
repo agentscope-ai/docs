@@ -72,6 +72,14 @@
                       },
                       "versions/2.0.8dev/en/building-blocks/plan",
                       {
+                        "group": "Pipeline",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8dev/en/building-blocks/pipeline/overview",
+                          "versions/2.0.8dev/en/building-blocks/pipeline/goal"
+                        ]
+                      },
+                      {
                         "group": "Permission System",
                         "pages": [
                           "versions/2.0.8dev/en/building-blocks/permission-system/overview",
@@ -805,6 +813,14 @@
                         ]
                       },
                       "versions/2.0.8dev/zh/building-blocks/plan",
+                      {
+                        "group": "流水线",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8dev/zh/building-blocks/pipeline/overview",
+                          "versions/2.0.8dev/zh/building-blocks/pipeline/goal"
+                        ]
+                      },
                       {
                         "group": "权限系统",
                         "pages": [

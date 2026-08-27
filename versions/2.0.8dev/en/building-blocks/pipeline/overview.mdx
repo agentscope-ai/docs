@@ -1,0 +1,75 @@
+---
+title: "Overview"
+description: "Run several agents by a fixed logic behind a single interface"
+---
+
+A pipeline composes several agents: the developer settles their order and the conditions that move work between them before the run starts, and nothing changes it afterwards. To a caller it looks exactly like one agent, taking inputs and streaming events back.
+
+A pipeline takes on three things:
+
+| Responsibility | What it means |
+|----------------|---------------|
+| Fixed logic | Who goes first, what sends work back, how many rounds are allowed: all settled when the pipeline is built, never left to the model |
+| One event stream | Every event from every agent inside leaves through the same `reply_stream` |
+| Human interaction | When an agent stops for tool authorization the pipeline ends the stream instead of suspending, and hands the answer back to whichever agent was waiting |
+
+<Tip>
+Every agent's events leave through the same `reply_stream`. A developer rendering them needs `reply_id` to tell which agent an event belongs to; it matches that agent's `agent.state.reply_id`.
+</Tip>
+
+<Note>
+The pipeline module is experimental. Its interfaces may change in later releases.
+</Note>
+
+## Interface
+
+`PipelineProtocol` names one capability: take inputs, stream events.
+
+```python PipelineProtocol
+class PipelineProtocol(Protocol):
+    def reply_stream(
+        self,
+        inputs: Msg
+        | list[Msg]
+        | UserConfirmResultEvent
+        | UserInterruptEvent
+        | ExternalExecutionResultEvent,
+    ) -> AsyncGenerator[AgentEvent | Msg, None]:
+        """Reply to the inputs and stream what happens."""
+```
+
+`Agent` already satisfies it, an agent being a pipeline of one. So a pipeline goes wherever an agent goes:
+
+```python Accepting either
+async def watch(target: Agent | PipelineProtocol, inputs) -> None:
+    # Both are driven the same way, with nothing to branch on
+    async for event in target.reply_stream(inputs):
+        print(event)
+```
+
+`launch_console` in the [console](/versions/2.0.8dev/en/building-blocks/console) was widened this way, so a developer can hand a pipeline straight to the terminal.
+
+## Implementations
+
+AgentScope ships one pipeline so far:
+
+| Class | Arrangement |
+|-------|-------------|
+| [`GoalPipeline`](/versions/2.0.8dev/en/building-blocks/pipeline/goal) | An executor produces, a verifier judges, a refusal goes back with its reason, until the work passes or the attempts run out |
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Goal Pipeline" icon="bullseye" href="/versions/2.0.8dev/en/building-blocks/pipeline/goal" cta="Read more">
+    Keep an executor working until a verifier accepts the result.
+  </Card>
+  <Card title="Console" icon="terminal" href="/versions/2.0.8dev/en/building-blocks/console" cta="Read more">
+    Run a pipeline in the terminal and answer its authorization prompts.
+  </Card>
+  <Card title="Planning" icon="list-check" href="/versions/2.0.8dev/en/building-blocks/plan" cta="Read more">
+    Let the model keep its own task list, which pipelines complement.
+  </Card>
+  <Card title="Human in the Loop" icon="user-check" href="/versions/2.0.8dev/en/building-blocks/agent/human-in-the-loop" cta="Read more">
+    Authorize tools and resume after an interruption on a single agent.
+  </Card>
+</CardGroup>

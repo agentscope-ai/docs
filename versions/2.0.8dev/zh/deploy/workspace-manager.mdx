@@ -18,7 +18,7 @@ description: "在服务中分配、管理智能体的运行环境（Workspace）
 | `BubblewrapWorkspaceManager` | 每个 workspace 对应一个 [bubblewrap](https://github.com/containers/bubblewrap) 沙箱，落在宿主目录下。只需 Linux 主机上装有 `bwrap`，但与宿主共享网络命名空间。 |
 | `DockerWorkspaceManager` | 每个 workspace 对应一个 Docker 容器，宿主目录以 bind mount 的方式挂进去做持久化。需要一个可达的 Docker daemon。 |
 | `E2BWorkspaceManager` | 通过 [E2B](https://e2b.dev) 托管的云沙箱。空闲时自动挂起，下一次访问时恢复。 |
-| `DaytonaWorkspaceManager` | 通过 [Daytona](https://www.daytona.io) 托管的云沙箱。重新挂接依据沙箱标签进行，`user_id` / `agent_id` 也会作为额外标签写入，便于在控制台上筛选。 |
+| `DaytonaWorkspaceManager` | 通过 [Daytona](https://www.daytona.io) 托管的云沙箱。重新挂接依据沙箱标签进行，`user_id` / `agent_id` 也会作为额外标签写入，便于在终端 UI上筛选。 |
 | `OpenSandboxWorkspaceManager` | 通过 [OpenSandbox](https://github.com/agentscope-ai/opensandbox) 托管的云沙箱。沙箱在暂停/恢复之间保留自己的文件系统；重新挂接依据沙箱 metadata 进行，因此任意服务副本都能重连。 |
 | `K8sWorkspaceManager` | 在 Kubernetes 集群上为每个 workspace 起一个 Pod + PVC。适合已经在跑其他负载的生产集群。 |
 

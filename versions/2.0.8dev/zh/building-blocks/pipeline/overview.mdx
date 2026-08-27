@@ -1,0 +1,75 @@
+---
+title: "概述"
+description: "按照固化逻辑运行多智能体，并向外提供统一接口"
+---
+
+流水线（Pipeline）是多智能体的一种组合方式：智能体之间的运行顺序与流转条件由开发者预先确定，运行过程中不再改变，对外则收敛成与单个智能体相同的形态，递入输入，流式取回事件。
+
+流水线承担三件事：
+
+| 职责 | 说明 |
+|------|------|
+| 固化运行逻辑 | 谁先谁后、什么条件下回退、最多跑几轮，均由流水线在构造时确定，不交给模型临场决定 |
+| 统一事件出口 | 内部所有智能体产生的事件从同一个 `reply_stream` 流出 |
+| 处理人机交互 | 任一智能体停在工具授权上时，流水线结束事件流而非挂起，恢复时把答复送回被挂起的那一个 |
+
+<Tip>
+流水线内所有智能体的事件都从同一个 `reply_stream` 出口流出。开发者在外层渲染时，需要用 `reply_id` 区分当前事件属于哪一个智能体，它与该智能体的 `agent.state.reply_id` 一致。
+</Tip>
+
+<Note>
+流水线模块处于实验阶段，接口可能在后续版本调整。
+</Note>
+
+## 统一接口
+
+`PipelineProtocol` 描述的就是「接收输入、流式产出事件」这一件事：
+
+```python PipelineProtocol
+class PipelineProtocol(Protocol):
+    def reply_stream(
+        self,
+        inputs: Msg
+        | list[Msg]
+        | UserConfirmResultEvent
+        | UserInterruptEvent
+        | ExternalExecutionResultEvent,
+    ) -> AsyncGenerator[AgentEvent | Msg, None]:
+        """回复输入，并流式产出过程中的事件。"""
+```
+
+`Agent` 天然满足这一协议，一个智能体本身就是「只有一个成员」的流水线。因此凡是接受智能体的地方，开发者都可以传入流水线：
+
+```python 同时接受智能体与流水线
+async def watch(target: Agent | PipelineProtocol, inputs) -> None:
+    # 两者的调用方式完全一致，无需区分
+    async for event in target.reply_stream(inputs):
+        print(event)
+```
+
+[终端 UI](/versions/2.0.8dev/zh/building-blocks/console) 的 `launch_console` 就是这样放宽的，开发者可以直接把流水线传进去调试。
+
+## 现有实现
+
+AgentScope 目前提供一种流水线实现：
+
+| 类 | 编排逻辑 |
+|----|----------|
+| [`GoalPipeline`](/versions/2.0.8dev/zh/building-blocks/pipeline/goal) | 执行者产出，验证者判定，不通过则带着理由退回重做，直到通过或用尽次数 |
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="目标流水线" icon="bullseye" href="/versions/2.0.8dev/zh/building-blocks/pipeline/goal" cta="查看详情">
+    让执行者反复工作，直到验证者认可结果。
+  </Card>
+  <Card title="终端 UI" icon="terminal" href="/versions/2.0.8dev/zh/building-blocks/console" cta="查看详情">
+    在终端里运行流水线并处理工具授权。
+  </Card>
+  <Card title="计划模式" icon="list-check" href="/versions/2.0.8dev/zh/building-blocks/plan" cta="查看详情">
+    让模型自行维护任务清单，与流水线互补。
+  </Card>
+  <Card title="人机协同" icon="user-check" href="/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop" cta="查看详情">
+    在单个智能体上完成工具授权与中断恢复。
+  </Card>
+</CardGroup>

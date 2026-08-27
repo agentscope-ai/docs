@@ -1,11 +1,11 @@
 ---
-title: "控制台"
+title: "终端 UI"
 description: "在终端快速测试、验证智能体运行逻辑"
 ---
 
 当开发者需要快速验证或调试一个智能体时，可以使用 `agentscope.console` 模块直接在终端中与智能体对话、查看完整的事件流，无需启动 Web 服务，也无需手动分发 `reply_stream` 产出的数十种事件。
 
-控制台（Console）模块提供两个接口，分别对应两类使用场景：
+终端 UI（Console）模块提供两个接口，分别对应两类使用场景：
 
 | 接口 | 适用场景 |
 |------|----------|
@@ -58,8 +58,10 @@ asyncio.run(main())
 
 `launch_console` 支持以下参数：
 
-<ParamField path="agent" type="Agent" required>
-  要交互的智能体。
+<ParamField path="agent" type="Agent | PipelineProtocol" required>
+  要交互的智能体，或任意满足
+  [`PipelineProtocol`](/versions/2.0.8dev/zh/building-blocks/pipeline/overview)
+  的流水线。
 </ParamField>
 
 <ParamField path="user_name" type="str" default="user">

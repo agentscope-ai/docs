@@ -1,0 +1,177 @@
+---
+title: "Goal Pipeline"
+description: "Keep an executor working until a verifier accepts the result"
+---
+
+`GoalPipeline` is a pipeline of two agents: an executor produces a result, a verifier judges it against the goal, and a refusal goes back to the executor with its reason, until the work passes or the attempts run out.
+
+The loop runs like this:
+
+```
+        ┌───────── refused: sent back with the reason ─────────┐
+        │                                                     │
+        ▼                                                     │
+input ─▶ executor ────── result ──────▶ verifier ─────────────┘
+                                           │
+                                           └── passed ──▶ done
+```
+
+The verifier is an ordinary `Agent`, not a special kind of object. Its verdict comes back as [structured output](/versions/2.0.8dev/en/building-blocks/agent/run-agent), so a check that has to read files, run commands or ask a person goes through exactly the machinery the executor does.
+
+## Running a Pipeline
+
+The example below has two agents collaborate on a programming task: the executor writes the code, the verifier checks it.
+
+```python goal_pipeline.py
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.pipeline import GoalPipeline
+from agentscope.tool import Toolkit
+from agentscope.workspace import LocalWorkspace
+
+
+async def main() -> None:
+    # Both agents share one workspace, so the verifier sees what the
+    # executor actually wrote rather than what it claims to have written
+    async with LocalWorkspace(workdir="./workspace") as workspace:
+        model = DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.getenv("DASHSCOPE_API_KEY"),
+            ),
+            model="qwen3.8-max",
+        )
+
+        # The executor does the work, writing code with the workspace tools
+        executor = Agent(
+            name="Executor",
+            system_prompt="You're a programmer named 'Executor'.",
+            model=model,
+            toolkit=Toolkit(tools=await workspace.list_tools()),
+            offloader=workspace,
+        )
+
+        # The verifier judges it. Given the same tools, it can read the
+        # code and run the tests instead of trusting the executor's account
+        verifier = Agent(
+            name="Verifier",
+            system_prompt="You're a reviewer named 'Verifier'.",
+            model=model,
+            toolkit=Toolkit(tools=await workspace.list_tools()),
+            offloader=workspace,
+        )
+
+        pipe = GoalPipeline(
+            executor=executor,
+            verifier=verifier,
+            # Stop after five refusals, passed or not
+            max_iters=5,
+        )
+
+        # The pipeline satisfies PipelineProtocol, so the console takes it
+        await launch_console(agent=pipe)
+
+
+asyncio.run(main())
+```
+
+### Constructor Arguments
+
+`GoalPipeline` takes the following arguments:
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `executor` | `Agent` | The agent doing the work |
+| `verifier` | `Agent` | The agent judging it |
+| `max_iters` | `int`, defaults to `10` | How many refusals are allowed |
+
+<Note>
+The goal is not given at construction. It arrives with the task: the first message the pipeline receives is both what the executor is asked to do and what the verifier judges against.
+</Note>
+
+### Verification and Retries
+
+Both agents hand their results to the pipeline as structured output:
+
+| Agent | Field | Meaning |
+|-------|-------|---------|
+| Executor | `report` | What was achieved (file paths, entry points, how to run it), for the verifier to check against |
+| Verifier | `result` | `pass`, `fail`, or `impossible` when the goal cannot be reached at all |
+| Verifier | `message` | On a refusal, what is missing and where to fix it |
+
+`message` reaches the executor verbatim, so it has to say what is missing rather than that something is. A full round goes:
+
+<Steps>
+  <Step title="The executor works">
+    The executor takes the task, leaves its output in the shared workspace, and hands back a `report`.
+  </Step>
+  <Step title="The verifier judges">
+    The verifier checks the output against the goal and returns `result` and `message`.
+  </Step>
+  <Step title="Passing ends the run">
+    On `pass` or `impossible` the pipeline finishes and the event stream closes.
+  </Step>
+  <Step title="A refusal goes back">
+    `message` is wrapped in a reminder and handed to the executor, which starts the round again.
+  </Step>
+</Steps>
+
+Two kinds of retry are counted differently, and only the first spends an attempt:
+
+| Case | Meaning | Spends `max_iters` |
+|------|---------|--------------------|
+| The verifier returns `fail` | The work genuinely is not good enough | Yes |
+| Either agent returns no valid structured output | The model did not call the tool it was asked to | No, it is reminded and asked again |
+
+The second is a malfunction rather than a judgement; charging it would quietly cost the executor attempts. Once `max_iters` is reached the pipeline stops, the stream ends, and the last `message` stays in the verifier's conversation.
+
+## Interruption and Resuming
+
+When either agent stops for tool authorization, `reply_stream` simply ends: no coroutine pinned, no lock held, no polling. Feed the result back in to carry on:
+
+```python Resuming after an interruption
+# A RequireUserConfirmEvent appears mid-stream and the stream ends
+async for event in pipe.reply_stream(user_msg):
+    ...
+
+# Hand the answer back, and the run picks up where it stopped
+async for event in pipe.reply_stream(user_confirm_result_event):
+    ...
+```
+
+Resuming does not require saying who to resume. The event carries the `reply_id` of whichever agent parked, and the pipeline routes the result there.
+
+`reply_stream` accepts these inputs:
+
+| Input | Meaning |
+|-------|---------|
+| `Msg` / `list[Msg]` | Start a fresh run; the attempt budget starts over |
+| `UserConfirmResultEvent` | The user's answer to a tool authorization prompt |
+| `ExternalExecutionResultEvent` | The result of an external execution |
+| `UserInterruptEvent` | Abandon the parked call, ending the pipeline with it |
+
+<Note>
+The attempt budget lives on the pipeline instance rather than inside `reply_stream`, so resuming does not hand the run a fresh set of attempts.
+</Note>
+
+## Debugging in the Terminal
+
+The quickest way to watch a pipeline is to hand the whole thing to the [console](/versions/2.0.8dev/en/building-blocks/console), with no adapter code:
+
+```python Running a pipeline in the terminal
+await launch_console(agent=pipe)
+```
+
+Once it is running, the parts divide up like this:
+
+| What you see | Who provides it |
+|--------------|-----------------|
+| Both agents taking turns, their thinking, tool calls and results in one stream | The pipeline, emitting its agents' events with `reply_id` telling them apart |
+| Authorization prompts (`y` allows once, `a` also accepts the suggested rules) | The console asking, with `reply_id` returning the answer to the right agent |
+| `Ctrl+C` interrupts the current reply, `exit` / `quit` / `Ctrl+D` leaves | The console |
+
+Answering an authorization prompt with `Ctrl+D` sends a `UserInterruptEvent`: the parked agent closes its pending tool calls and the pipeline ends with it. An interruption abandons the run rather than continuing it.
