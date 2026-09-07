@@ -100,7 +100,8 @@
                           "versions/2.0.8dev/en/building-blocks/workspace/mcp-gateway"
                         ]
                       },
-                      "versions/2.0.8dev/en/building-blocks/console"
+                      "versions/2.0.8dev/en/building-blocks/console",
+                      "versions/2.0.8dev/en/building-blocks/a2a"
                     ]
                   },
                   {
@@ -842,7 +843,8 @@
                           "versions/2.0.8dev/zh/building-blocks/workspace/mcp-gateway"
                         ]
                       },
-                      "versions/2.0.8dev/zh/building-blocks/console"
+                      "versions/2.0.8dev/zh/building-blocks/console",
+                      "versions/2.0.8dev/zh/building-blocks/a2a"
                     ]
                   },
                   {

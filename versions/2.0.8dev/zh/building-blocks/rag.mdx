@@ -72,7 +72,7 @@ chunker = ApproxTokenChunker(
 | `ElasticsearchStore` | 基于 Elasticsearch 稠密向量索引的实现，使用近似 kNN 检索，每个知识库对应一个索引 |
 
 <Tip>
-Qdrant 支持已包含在 `pip install agentscope[rag]` 中。其余后端各有独立的可选依赖：`agentscope[milvuslite]`、`agentscope[mongodb]`、`agentscope[elasticsearch]`。
+`agentscope[rag]` 只包含文档解析所需的依赖，向量数据库各有独立的可选依赖：`agentscope[vdb-qdrant]`、`agentscope[vdb-milvus]`、`agentscope[vdb-mongodb]`、`agentscope[vdb-elasticsearch]`。
 </Tip>
 
 ## RAG 使用
@@ -248,14 +248,14 @@ AgentScope 推荐通过**知识库句柄 `KnowledgeBase`** 作为入口使用 RA
     ```python Milvus Lite
     from agentscope.rag import MilvusLiteStore
 
-    # 本地持久化 .db 文件；需要 agentscope[milvuslite]
+    # 本地持久化 .db 文件；需要 agentscope[vdb-milvus]
     store = MilvusLiteStore(uri="./rag_demo.db")
     ```
 
     ```python MongoDB
     from agentscope.rag import MongoDBStore
 
-    # MongoDB Vector Search（Atlas 或自建集群）；需要 agentscope[mongodb]
+    # MongoDB Vector Search（Atlas 或自建集群）；需要 agentscope[vdb-mongodb]
     store = MongoDBStore(
         uri="mongodb+srv://user:pass@cluster.mongodb.net",
         database="agentscope_rag",
@@ -268,7 +268,7 @@ AgentScope 推荐通过**知识库句柄 `KnowledgeBase`** 作为入口使用 RA
     ```python Elasticsearch
     from agentscope.rag import ElasticsearchStore
 
-    # 稠密向量索引 + 近似 kNN 检索；需要 agentscope[elasticsearch]
+    # 稠密向量索引 + 近似 kNN 检索；需要 agentscope[vdb-elasticsearch]
     store = ElasticsearchStore(hosts="http://localhost:9200")
     ```
 
@@ -285,7 +285,7 @@ async with store:
     results = await knowledge.search(
         queries=["When do cats sleep?"],
         top_k=3,
-        score_threshold=None,  # 仅对 cosine / dot-product 有意义
+        score_threshold=None,  # 命中分数下限，None 表示不过滤
     )
     for r in results:
         print(r.score, r.document_id, r.chunk.content)
@@ -299,6 +299,10 @@ async with store:
 4. **截断**：按分数降序排序后截断为 `top_k`。
 
 返回结果是 `VectorSearchResult` 数组，每条记录包含 `score`、`document_id` 与命中 `chunk`。
+
+<Note>
+`score` 统一为**越大越相关**：使用距离度量（如 L2）的向量库会在返回前取负，因此这类知识库的分数为负值，`score_threshold` 也要相应地填负数。分数只在同一个知识库内部可比，不同嵌入模型或不同度量的知识库之间没有可比性。
+</Note>
 
 ### 文档管理
 
@@ -379,7 +383,8 @@ AgentScope 的 RAG 原生支持多模态数据的入库与检索，关键在于�
 |------|--------|------|
 | `mode` | `"agentic"` | 集成模式，详见上表 |
 | `top_k` | `5` | 单次检索返回的最大命中数；跨所有知识库与 query 输入去重后截断 |
-| `score_threshold` | `None` | 命中相似度下限，仅在 cosine / dot-product 下有意义 |
+| `score_threshold` | `None` | 命中分数下限，`None` 表示不过滤；分数越大越相关，距离度量下为负值 |
+| `rerank_candidate_k` | `None` | 交给重排模型判断的候选数，从中保留 `top_k` 条；必须不小于 `top_k`，默认为其两倍，上限 50。未配置重排模型时忽略 |
 | `emit_hint_event` | `True` | `static` 模式下是否额外发出 `HintBlockEvent` 供前端展示命中片段 |
 | `persist_hint` | `False` | `static` 模式下注入块是否持久留在上下文（默认推理后即移除，避免污染下一轮） |
 
@@ -394,7 +399,7 @@ from agentscope.middleware import RAGMiddleware
 from agentscope.tool import Toolkit
 
 static_mw = RAGMiddleware(
-    knowledges=[knowledge],            # 一个或多个 KnowledgeBase 句柄
+    knowledge_bases=[knowledge],       # 一个或多个 KnowledgeBase 句柄
     parameters=RAGMiddleware.Parameters(
         mode="static",
         top_k=3,
@@ -416,7 +421,7 @@ from agentscope.middleware import RAGMiddleware
 from agentscope.tool import Toolkit
 
 agentic_mw = RAGMiddleware(
-    knowledges=[knowledge],
+    knowledge_bases=[knowledge],
     parameters=RAGMiddleware.Parameters(mode="agentic", top_k=3),
 )
 
@@ -438,11 +443,11 @@ from agentscope.tool import Toolkit
 
 # static 自动给首轮一个背景；agentic 让模型在需要时再补检索
 static_mw = RAGMiddleware(
-    knowledges=[knowledge],
+    knowledge_bases=[knowledge],
     parameters=RAGMiddleware.Parameters(mode="static", top_k=3),
 )
 agentic_mw = RAGMiddleware(
-    knowledges=[knowledge],
+    knowledge_bases=[knowledge],
     parameters=RAGMiddleware.Parameters(mode="agentic", top_k=3),
 )
 
@@ -459,6 +464,42 @@ agent = Agent(
 ```
 
 </CodeGroup>
+
+### 重排检索结果
+
+向量检索按嵌入相似度排序，语义上更贴近问题的片段未必排在前面。给 `RAGMiddleware` 传入 `rerank_model`，检索会先取回 `rerank_candidate_k` 条候选，再由该模型读完内容后挑出最终的 `top_k` 条：
+
+```python 配置重排模型
+from agentscope.middleware import RAGMiddleware
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+rag_mw = RAGMiddleware(
+    knowledge_bases=[knowledge],
+    rerank_model=DashScopeChatModel(       # 承担重排的对话模型
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+    parameters=RAGMiddleware.Parameters(
+        mode="agentic",
+        top_k=3,                # 最终保留 3 条
+        rerank_candidate_k=10,  # 先取 10 条候选交给重排模型
+    ),
+)
+```
+
+两种模式都会走重排。使用时需要了解：
+
+| 特性 | 说明 |
+|------|------|
+| 候选数量 | `rerank_candidate_k` 必须不小于 `top_k`，默认取 `2 × top_k`，上限 50；候选太少时重排只能在向量检索已经返回的结果里换顺序 |
+| 失败处理 | 重排是尽力而为的，模型调用失败时记录一条警告并回退到向量检索的顺序，不会中断本次检索 |
+| 多模态候选 | 重排模型无法阅读的候选（如它不支持的模态）会被排到最后或直接剔除 |
+| 提示词 | `rerank_prompt` 可以覆盖重排指令，必须包含 `{query}` 占位符，可选 `{top_k}`；候选内容由框架以内容块的形式追加在指令之后 |
+
+<Warning>
+重排每次检索都会额外调用一次大模型。候选数越多、内容越长，延迟与成本越高，建议从默认的 `2 × top_k` 开始调整。
+</Warning>
 
 ## 自定义拓展
 

@@ -216,6 +216,58 @@ async def _on_button_click(self, click) -> None:
 | `chat_kind()` / `chat_name()` | 返回某个聊天是群聊还是私聊、以及它的名称，用于丰富智能体的会话上下文 |
 | `list_tools()` | 向智能体暴露平台专属工具（如向指定用户 / 群发送文件） |
 
+## 扫码授权
+
+平台若支持让操作者在别处（扫码、点确认页）把凭据交出来，就不必让用户手抄 App Secret。给渠道类挂一个 `credential_binding`，管理界面的凭据表单里会多出"扫码授权"页签：
+
+```python 声明扫码授权
+from typing import Any
+
+from agentscope.app.channel import (
+    BindingState,
+    BindingStep,
+    ChannelBase,
+    CredentialBindingBase,
+)
+
+
+class MyCredentialBinding(CredentialBindingBase):
+    async def begin(self) -> BindingStep:
+        """开启一次授权会话，返回操作者需要访问的地址。"""
+        payload = await request_device_code()
+        return BindingStep(
+            verification_url=payload["verification_uri"],  # 前端渲染为二维码
+            provider_state={"device_code": payload["device_code"]},  # 下一步原样收到
+            retry_after_secs=5,                            # 平台要求的轮询间隔
+            expires_in_secs=600,                           # 会话有效期
+        )
+
+    async def advance(self, provider_state: dict[str, Any]) -> BindingStep:
+        """被轮询一次，向平台问一次操作者是否已确认。"""
+        payload = await poll_device_code(provider_state["device_code"])
+        if payload.get("client_secret"):
+            return BindingStep(
+                state=BindingState.AUTHORIZED,
+                credentials={"token": payload["client_secret"]},  # 需匹配 Credentials
+            )
+        # 仍在等待：把 provider_state 原样带回，会话继续
+        return BindingStep(provider_state=provider_state)
+
+
+class MyChannel(ChannelBase):
+    channel_type = "my_platform"
+    credential_binding = MyCredentialBinding   # 不声明则只有手动填写
+```
+
+实现时要注意：
+
+| 约束 | 说明 |
+|------|------|
+| 无状态 | 提供方每进程只实例化一次，一次授权的两步很可能落在不同副本上。步骤之间需要的东西（device code、PKCE verifier、被重定向到的域名）一律放进 `provider_state` 返回，下一步会原样收到 |
+| 由轮询驱动 | `advance()` 在客户端每次查询状态时被调用一次，而不是自己起循环，因此不要在其中等待或重试 |
+| 凭据字段 | `AUTHORIZED` 时返回的 `credentials` 必须与渠道类的 `Credentials` 字段对齐，服务据此直接创建渠道 |
+| 终态 | `AUTHORIZED` / `FAILED` / `CANCELLED` 都是终态，之后不会再调用 `advance()`；失败时把原因写进 `error`，操作者能在界面上看到 |
+
 ## 启用渠道
 
 把你的渠道类加进 `create_app` 的 `channels`，服务即允许接入该平台。`channels` 声明的是**整个服务允许接入哪些渠道类型**；不传则不启用任何渠道，因此把需要的内置类型和自定义类型一并列出。

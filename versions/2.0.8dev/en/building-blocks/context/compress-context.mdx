@@ -3,7 +3,7 @@ title: "Compress Context"
 description: "Keep the context length within the preset limit"
 ---
 
-When the context window fills up, AgentScope keeps it in shape with two automatic mechanisms governed by `ContextConfig`: **context compression** (summarize older messages) and **tool result truncation** (cap oversized tool outputs). Both run transparently; the agent continues working without interruption.
+When the context window fills up, AgentScope keeps it in shape with two automatic mechanisms governed by `ContextConfig`: **context compression** (summarize older messages) and **tool result truncation** (cap oversized tool outputs). Both run transparently; the agent continues working without interruption. Beyond that, developers can compress at any time by hand, or leave the timing to the agent itself.
 
 ## Configure Compression
 
@@ -35,9 +35,16 @@ Available fields:
 | `reserve_ratio`      | `float`         | Proportion of context tokens kept as recent messages after compression                                            |
 | `tool_result_limit`  | `int`           | Maximum tokens per tool result; outputs exceeding this are truncated                                              |
 | `max_image_num`      | `int`           | Maximum number of images kept in the context, `5` by default                                                      |
+| `context_buffer_ratio` | `float`       | Buffer ahead of the compression threshold, `0.2` by default; with a trigger ratio of 0.8 and a buffer of 0.2, [context usage is injected](/versions/2.0.8dev/en/building-blocks/context/environment-awareness) once the input tokens exceed 60% of the model context size, which is also the band where agentic compression takes effect |
+| `compression_tool_enabled` | `bool`    | Whether to expose the `CompressContext` tool so the agent decides when to compress, `False` by default            |
+| `compression_fallback_to_truncation` | `bool` | Whether to fall back to truncating the oldest messages when summarization fails, `True` by default; `False` raises an error instead |
 | `compression_prompt` | `str`           | The prompt that guides the model to generate the summary                                                          |
 | `summary_template`   | `str`           | String template for formatting the summary into the context                                                       |
 | `summary_schema`     | `dict`          | JSON Schema constraining the model's structured summary output                                                    |
+
+<Note>
+`context_buffer_ratio` must be smaller than `trigger_ratio`, so that the context usage is injected and the agent still has room to compress on its own before a hard compression happens. Otherwise the agent constructor raises a `ValueError`.
+</Note>
 
 ## Compress Automatically
 
@@ -65,6 +72,8 @@ Compression runs automatically before each reasoning step. The flow:
 The remaining 10% between `trigger_ratio` (max `0.9`) and the full context size is reserved for the compression model call itself: the model needs room to generate the summary.
 </Note>
 
+Summarization is retried a few times. When every attempt fails, `compression_fallback_to_truncation` decides what happens: by default the oldest messages are dropped and a truncation note is left where the summary would go, so the agent keeps running with a shortened context; with `False` an error is raised and the context is left untouched, at the risk of exceeding the model's context size.
+
 ## Compress Manually
 
 Compression can also be triggered manually by calling the agent's `compress_context()` method. Without arguments, it uses the agent's stored `context_config`; pass a one-off `ContextConfig` to override, or an `instructions` `HintBlock` to guide the summarization:
@@ -91,6 +100,39 @@ await agent.compress_context(
 ```
 
 The method is a no-op when token usage is below `trigger_ratio × context_size`, so it is safe to call between turns or at any custom checkpoint.
+
+## Compress Agentically
+
+Automatic compression fires the moment the threshold is crossed, which often lands in the middle of an unfinished piece of work, so the summary tends to lose the details still in flight. Set `compression_tool_enabled` to `True` and the agent gets a `CompressContext` tool, letting it compress ahead of the hard threshold at the boundary between two pieces of work:
+
+```python Enable agentic compression
+from agentscope.agent import Agent, ContextConfig
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    toolkit=toolkit,
+    context_config=ContextConfig(
+        trigger_ratio=0.8,             # hard threshold: compress automatically once reached
+        context_buffer_ratio=0.2,      # hint the agent 20% earlier, i.e. from 60%
+        compression_tool_enabled=True, # expose the CompressContext tool
+    ),
+)
+```
+
+How it works once enabled:
+
+| Aspect | Behavior |
+|--------|----------|
+| Hint timing | Once the input tokens pass `(trigger_ratio - context_buffer_ratio) × context_size` and no plan task is in progress, [runtime state injection](/versions/2.0.8dev/en/building-blocks/context/environment-awareness) tells the agent it may call `CompressContext` |
+| Compression threshold | The tool itself checks against `trigger_ratio - context_buffer_ratio`, so calling it before the context enters the buffer changes nothing |
+| Permission | The tool is always allowed, bypassing the confirmation flow of the [permission system](/versions/2.0.8dev/en/building-blocks/permission-system/overview) |
+| Failure | When summarization fails, the tool returns an error result and the context stays unchanged, so the agent can carry on |
+
+<Tip>
+Agentic compression coexists with the automatic one: if the agent misses the buffer, the context is still compressed automatically at `trigger_ratio`, so enabling it needs no extra safety net.
+</Tip>
 
 ## Limit Images
 

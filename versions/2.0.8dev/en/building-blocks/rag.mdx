@@ -72,7 +72,7 @@ See the [Embedding Model chapter](/versions/2.0.8dev/en/building-blocks/model/em
 | `ElasticsearchStore` | Elasticsearch-based implementation using dense-vector indexes with approximate kNN search; each knowledge base maps to one index |
 
 <Tip>
-Qdrant support ships with `pip install agentscope[rag]`. The other backends have their own optional extras: `agentscope[milvuslite]`, `agentscope[mongodb]`, and `agentscope[elasticsearch]`.
+`agentscope[rag]` only carries the dependencies needed for document parsing. Each vector database has its own optional extra: `agentscope[vdb-qdrant]`, `agentscope[vdb-milvus]`, `agentscope[vdb-mongodb]`, and `agentscope[vdb-elasticsearch]`.
 </Tip>
 
 ## Using RAG
@@ -248,14 +248,14 @@ Indexing a file goes through three steps — **file parsing → chunking → emb
     ```python Milvus Lite
     from agentscope.rag import MilvusLiteStore
 
-    # Local persistent .db file; requires agentscope[milvuslite]
+    # Local persistent .db file; requires agentscope[vdb-milvus]
     store = MilvusLiteStore(uri="./rag_demo.db")
     ```
 
     ```python MongoDB
     from agentscope.rag import MongoDBStore
 
-    # MongoDB Vector Search (Atlas or self-hosted); requires agentscope[mongodb]
+    # MongoDB Vector Search (Atlas or self-hosted); requires agentscope[vdb-mongodb]
     store = MongoDBStore(
         uri="mongodb+srv://user:pass@cluster.mongodb.net",
         database="agentscope_rag",
@@ -268,7 +268,7 @@ Indexing a file goes through three steps — **file parsing → chunking → emb
     ```python Elasticsearch
     from agentscope.rag import ElasticsearchStore
 
-    # Dense-vector indexes with approximate kNN; requires agentscope[elasticsearch]
+    # Dense-vector indexes with approximate kNN; requires agentscope[vdb-elasticsearch]
     store = ElasticsearchStore(hosts="http://localhost:9200")
     ```
 
@@ -285,7 +285,7 @@ async with store:
     results = await knowledge.search(
         queries=["When do cats sleep?"],
         top_k=3,
-        score_threshold=None,  # only meaningful for cosine / dot-product
+        score_threshold=None,  # minimum score to keep a hit; None keeps everything
     )
     for r in results:
         print(r.score, r.document_id, r.chunk.content)
@@ -299,6 +299,10 @@ async with store:
 4. **Truncation**: results are sorted by descending score and truncated to `top_k`.
 
 The return value is a list of `VectorSearchResult`s; each entry carries `score`, `document_id`, and the matched `chunk`.
+
+<Note>
+A higher `score` always means a better match: stores that use a distance metric (L2, for instance) negate it before returning, so scores from those knowledge bases are negative and `score_threshold` has to be negative too. Scores are comparable only within one knowledge base, never across knowledge bases built on different embedding models or metrics.
+</Note>
 
 ### Document Management
 
@@ -379,7 +383,8 @@ All parameters are wrapped in the nested `RAGMiddleware.Parameters` model:
 |------|--------|------|
 | `mode` | `"agentic"` | Integration mode, see above |
 | `top_k` | `5` | Maximum number of hits returned in one search, deduplicated across knowledge bases and query inputs before truncation |
-| `score_threshold` | `None` | Minimum similarity threshold; only meaningful under cosine / dot-product |
+| `score_threshold` | `None` | Minimum score to keep a hit; `None` keeps everything. A higher score means a better match, and it is negative under a distance metric |
+| `rerank_candidate_k` | `None` | How many candidates the rerank model judges before `top_k` of them are kept; must be no smaller than `top_k`, defaults to twice it, capped at 50. Ignored when no rerank model is configured |
 | `emit_hint_event` | `True` | In `static` mode, whether to additionally emit a `HintBlockEvent` so the frontend can display the matched snippets |
 | `persist_hint` | `False` | In `static` mode, whether the injected block stays persistently in the context (it is removed after reasoning by default, to avoid polluting the next turn) |
 
@@ -394,7 +399,7 @@ from agentscope.middleware import RAGMiddleware
 from agentscope.tool import Toolkit
 
 static_mw = RAGMiddleware(
-    knowledges=[knowledge],            # One or more KnowledgeBase handles
+    knowledge_bases=[knowledge],       # One or more KnowledgeBase handles
     parameters=RAGMiddleware.Parameters(
         mode="static",
         top_k=3,
@@ -416,7 +421,7 @@ from agentscope.middleware import RAGMiddleware
 from agentscope.tool import Toolkit
 
 agentic_mw = RAGMiddleware(
-    knowledges=[knowledge],
+    knowledge_bases=[knowledge],
     parameters=RAGMiddleware.Parameters(mode="agentic", top_k=3),
 )
 
@@ -439,11 +444,11 @@ from agentscope.tool import Toolkit
 # static gives the first turn some background automatically;
 # agentic lets the model fetch more on demand
 static_mw = RAGMiddleware(
-    knowledges=[knowledge],
+    knowledge_bases=[knowledge],
     parameters=RAGMiddleware.Parameters(mode="static", top_k=3),
 )
 agentic_mw = RAGMiddleware(
-    knowledges=[knowledge],
+    knowledge_bases=[knowledge],
     parameters=RAGMiddleware.Parameters(mode="agentic", top_k=3),
 )
 
@@ -460,6 +465,42 @@ agent = Agent(
 ```
 
 </CodeGroup>
+
+### Rerank the Results
+
+Vector retrieval ranks by embedding similarity, so the chunks that answer the question best are not always on top. Pass a `rerank_model` to `RAGMiddleware` and each retrieval first pulls back `rerank_candidate_k` candidates, then lets that model read them and pick the final `top_k`:
+
+```python Configure a rerank model
+from agentscope.middleware import RAGMiddleware
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+rag_mw = RAGMiddleware(
+    knowledge_bases=[knowledge],
+    rerank_model=DashScopeChatModel(       # the chat model that does the reranking
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+    parameters=RAGMiddleware.Parameters(
+        mode="agentic",
+        top_k=3,                # keep 3 hits in the end
+        rerank_candidate_k=10,  # pull 10 candidates for the rerank model first
+    ),
+)
+```
+
+Reranking applies to both modes. What to keep in mind:
+
+| Aspect | Description |
+|--------|-------------|
+| Candidate count | `rerank_candidate_k` must be no smaller than `top_k`, defaults to `2 × top_k`, and is capped at 50; with too few candidates the rerank model can only reorder what vector retrieval already returned |
+| Failure | Reranking is best-effort: a failed model call is logged as a warning and the vector retrieval order is used instead, without interrupting the retrieval |
+| Multimodal candidates | Candidates the rerank model cannot read (a modality it does not support, for example) are pushed to the end or dropped |
+| Prompt | `rerank_prompt` overrides the rerank instruction; it must contain the `{query}` placeholder and may contain `{top_k}`. The framework appends the candidate contents as content blocks after the instruction |
+
+<Warning>
+Reranking costs one extra LLM call per retrieval. The more and the longer the candidates, the higher the latency and cost, so start from the default `2 × top_k` and tune from there.
+</Warning>
 
 ## Custom Extensions
 
