@@ -1,17 +1,20 @@
 ---
 title: "Environment Awareness"
-description: "Keep the agent aware of time, tasks, and context usage as they change"
+description: "Keep the agent aware of time, tasks, context usage, and failing tools as they change"
 ---
 
-An agent stays aware of its changing environment through **runtime state injection**: before each reasoning step, information that changes across turns (current time, plan tasks, context usage) is injected into the context as a `HintBlock`, configured via the `injection_config` parameter of `Agent(...)`.
+An agent stays aware of its changing environment through **runtime state injection**: before each reasoning step, information that changes across turns (current time, plan tasks, context usage, repeated tool failures) is injected into the context as a `HintBlock`, configured via the `injection_config` parameter of `Agent(...)`.
 
-The injection covers three dimensions, each with its own timing rule:
+The injection covers four dimensions, each with its own timing rule:
 
 | Dimension | Injected Content | When It Is Injected |
 |-----------|------------------|---------------------|
 | Time | The current wall-clock time and its timezone | No time is recorded in the context (the first reply, or right after a context compression), or the elapsed time since the recorded one exceeds `time_interval` hours |
 | Plan tasks | The counts of in-progress and pending tasks, with a reminder to call `TaskList` | Uncompleted tasks exist while the context contains neither task-related tool calls (e.g. compressed away) nor a previous tasks injection |
-| Context usage | The current input tokens and the compression threshold | At the first iteration of a reply, when the input tokens come within `context_buffer_ratio` of the compression threshold, letting the agent perceive that a compression is near |
+| Context usage | The current input tokens and the compression threshold; with [agentic compression](/versions/2.0.8dev/en/building-blocks/context/compress-context#compress-agentically) enabled and no task in progress, it also tells the agent it may compress right away | At the first iteration of a reply, when the input tokens come within `context_buffer_ratio` of the compression threshold, letting the agent perceive that a compression is near |
+| Tool failures | A reminder to stop retrying and try another approach | The last `tool_retries_limit` tool results in a row all failed, for the same tool with the same arguments (compared after normalization, so key order does not matter); one success in between resets the count |
+
+The `context_buffer_ratio` behind the context usage dimension lives in the [context config](/versions/2.0.8dev/en/building-blocks/context/compress-context#configure-compression); the other three dimensions are governed by `InjectionConfig`.
 
 ## How Injection Works
 
@@ -22,6 +25,7 @@ Each injected field is wrapped as `<key>value</key>`, and all fields are joined 
 <current-time>2026-07-22T10:30:00</current-time>
 <timezone>Asia/Shanghai</timezone>
 <tasks>You have 1 in-progress tasks and 2 pending tasks. Use `TaskList` to view them if you don't know.</tasks>
+<tool-error>The last 3 calls to 'Bash' with the same arguments all failed. Stop retrying the same call as-is, check the error message and try a different approach.</tool-error>
 </system-reminder>
 ```
 
@@ -64,7 +68,8 @@ The fields of `InjectionConfig`:
 | `timezone` | `"UTC"` | Timezone of the injected time, in the standard timezone database format (e.g. `"Asia/Shanghai"`) |
 | `time_format` | `"%Y-%m-%dT%H:%M:%S"` | Format of the injected time; must carry the date part so the recorded time round-trips as a full timestamp |
 | `time_interval` | `0.5` | Minimum elapsed time in hours from the recorded time to trigger a new time injection |
-| `context_buffer_ratio` | `0.2` | Buffer ahead of the compression threshold; with a trigger ratio of 0.8 and a buffer of 0.2, context usage is injected once the input tokens exceed 60% of the model context size |
+| `tool_retries_limit` | `3` | How many consecutive failures of the same tool call trigger the tool-failure hint; minimum `3` |
+| `tool_retries_hint` | The wording shown in the example above | Template of the tool-failure hint, with two placeholders: `{tool_name}` (the failing tool) and `{count}` (the number of consecutive failures) |
 | `template` | A `<system-reminder>` wrapper | Template around the injected fields; must contain the `{runtime_state}` placeholder |
 | `injection_source` | `{"label": "System", "sublabel": "Runtime State"}` | The `source` of the injected `HintBlock`, used to recognize the agent's own previous injections when scanning the context |
 | `task_tool_names` | `TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate` | Tool names whose calls in the context indicate the agent is already aware of the tasks, suppressing the tasks injection |
@@ -72,7 +77,7 @@ The fields of `InjectionConfig`:
 | `emit_hint_event` | `True` | Whether to emit a `HintBlockEvent` when an injection happens |
 
 <Note>
-`context_buffer_ratio` must be smaller than the `trigger_ratio` of the [context config](/versions/2.0.8dev/en/building-blocks/context/compress-context#configure-compression), so that the context usage is injected before the compression happens. Otherwise the agent constructor raises a `ValueError`.
+`context_buffer_ratio` on `InjectionConfig` is deprecated; use the field of the same name in the [context config](/versions/2.0.8dev/en/building-blocks/context/compress-context#configure-compression) instead. Passing it here still works and overrides the value from the context config, along with a `DeprecationWarning`.
 </Note>
 
 ## Inject Custom Fields
@@ -90,7 +95,7 @@ injection_config = InjectionConfig(
 )
 ```
 
-Extra fields are attached to **every** injection but never trigger one by themselves: they ride along whenever the time, tasks, or context dimension fires.
+Extra fields are attached to **every** injection but never trigger one by themselves: they ride along whenever the time, tasks, context usage, or tool failure dimension fires.
 
 ## Customize the Template
 

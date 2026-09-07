@@ -1,17 +1,20 @@
 ---
 title: "感知环境"
-description: "让智能体持续感知时间、任务与上下文用量的变化"
+description: "让智能体持续感知时间、任务、上下文用量与工具报错的变化"
 ---
 
-智能体通过**运行时状态注入**感知不断变化的环境：在每次推理之前，随对话变化的信息（当前时间、计划任务、上下文用量）会以 `HintBlock` 的形式注入上下文，由 `Agent(...)` 的 `injection_config` 参数控制。
+智能体通过**运行时状态注入**感知不断变化的环境：在每次推理之前，随对话变化的信息（当前时间、计划任务、上下文用量、重复的工具报错）会以 `HintBlock` 的形式注入上下文，由 `Agent(...)` 的 `injection_config` 参数控制。
 
-注入覆盖三个维度，各自有独立的触发时机：
+注入覆盖四个维度，各自有独立的触发时机：
 
 | 维度 | 注入内容 | 触发时机 |
 |------|----------|----------|
 | 时间 | 当前时间与时区 | 上下文中没有时间记录（首次回复，或上下文压缩刚结束），或距上次记录的时间超过 `time_interval` 小时 |
 | 计划任务 | 进行中与待处理任务的数量，并提醒调用 `TaskList` | 存在未完成任务，且上下文中既没有任务相关的工具调用（例如已被压缩掉），也没有此前的任务注入 |
-| 上下文用量 | 当前输入 token 数与压缩阈值 | 回复的第一轮迭代中，输入 token 数进入压缩阈值前 `context_buffer_ratio` 的缓冲区，让智能体预知压缩即将发生 |
+| 上下文用量 | 当前输入 token 数与压缩阈值；开启[自主压缩](/versions/2.0.8dev/zh/building-blocks/context/compress-context#自主压缩)且没有进行中的任务时，还会告知可以立即压缩 | 回复的第一轮迭代中，输入 token 数进入压缩阈值前 `context_buffer_ratio` 的缓冲区，让智能体预知压缩即将发生 |
+| 工具报错 | 提醒停止重试，改换思路 | 最近连续 `tool_retries_limit` 次工具结果都失败，且来自同一个工具、同一份参数（参数规范化后比较，键顺序不同不影响判定）；中间出现一次成功即重新计数 |
+
+其中上下文用量的缓冲区 `context_buffer_ratio` 定义在[上下文配置](/versions/2.0.8dev/zh/building-blocks/context/compress-context#配置压缩)中，其余三个维度由 `InjectionConfig` 控制。
 
 ## 注入机制
 
@@ -22,6 +25,7 @@ description: "让智能体持续感知时间、任务与上下文用量的变化
 <current-time>2026-07-22T10:30:00</current-time>
 <timezone>Asia/Shanghai</timezone>
 <tasks>You have 1 in-progress tasks and 2 pending tasks. Use `TaskList` to view them if you don't know.</tasks>
+<tool-error>The last 3 calls to 'Bash' with the same arguments all failed. Stop retrying the same call as-is, check the error message and try a different approach.</tool-error>
 </system-reminder>
 ```
 
@@ -64,7 +68,8 @@ agent = Agent(
 | `timezone` | `"UTC"` | 注入时间的时区，遵循标准时区数据库格式（如 `"Asia/Shanghai"`） |
 | `time_format` | `"%Y-%m-%dT%H:%M:%S"` | 注入时间的格式；必须包含日期部分，以便记录的时间能还原为完整时间戳 |
 | `time_interval` | `0.5` | 距记录时间的最小间隔（小时），超过后触发新的时间注入 |
-| `context_buffer_ratio` | `0.2` | 压缩阈值前的缓冲区；当触发比例为 0.8、缓冲为 0.2 时，输入 token 数超过模型上下文的 60% 即注入上下文用量 |
+| `tool_retries_limit` | `3` | 同一个工具调用连续失败多少次后注入工具报错提示，最小值为 `3` |
+| `tool_retries_hint` | 上方示例中的文案 | 工具报错提示的模板，支持 `{tool_name}`（失败的工具名）与 `{count}`（连续失败次数）两个占位符 |
 | `template` | `<system-reminder>` 包裹模板 | 包裹注入字段的模板，必须包含 `{runtime_state}` 占位符 |
 | `injection_source` | `{"label": "System", "sublabel": "Runtime State"}` | 注入的 `HintBlock` 的 `source`，用于在扫描上下文时识别智能体此前的注入 |
 | `task_tool_names` | `TaskCreate`、`TaskGet`、`TaskList`、`TaskUpdate` | 任务相关的工具名；它们的调用出现在上下文中，说明智能体已知晓任务，从而抑制任务注入 |
@@ -72,7 +77,7 @@ agent = Agent(
 | `emit_hint_event` | `True` | 注入发生时是否产出 `HintBlockEvent` |
 
 <Note>
-`context_buffer_ratio` 必须小于[上下文配置](/versions/2.0.8dev/zh/building-blocks/context/compress-context#配置压缩)的 `trigger_ratio`，以保证上下文用量在压缩发生之前注入。否则智能体构造函数会抛出 `ValueError`。
+`InjectionConfig` 上的 `context_buffer_ratio` 已废弃，请改用[上下文配置](/versions/2.0.8dev/zh/building-blocks/context/compress-context#配置压缩)中的同名字段。此处仍然可以传入，会覆盖上下文配置中的取值，同时发出 `DeprecationWarning`。
 </Note>
 
 ## 注入自定义字段
@@ -90,7 +95,7 @@ injection_config = InjectionConfig(
 )
 ```
 
-自定义字段会附加到**每一次**注入中，但自身不会触发注入：只有当时间、任务或上下文维度触发时才会一并注入。
+自定义字段会附加到**每一次**注入中，但自身不会触发注入：只有当时间、任务、上下文用量或工具报错维度触发时才会一并注入。
 
 ## 自定义模板
 

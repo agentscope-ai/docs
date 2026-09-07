@@ -216,6 +216,58 @@ These all have default implementations; override them per your platform's capabi
 | `chat_kind()` / `chat_name()` | Return whether a chat is a group or a DM, and its name, to enrich the agent's session context |
 | `list_tools()` | Expose platform-specific tools to the agent (e.g. send a file to a specific user / group) |
 
+## Authorize by QR Code
+
+When a platform lets the operator hand over credentials elsewhere (scanning a QR code, clicking through a consent page), there is no need to make users copy an App Secret by hand. Attach a `credential_binding` to the channel class and the credential form in the management UI gains an "authorize by QR code" tab:
+
+```python Declare a credential binding
+from typing import Any
+
+from agentscope.app.channel import (
+    BindingState,
+    BindingStep,
+    ChannelBase,
+    CredentialBindingBase,
+)
+
+
+class MyCredentialBinding(CredentialBindingBase):
+    async def begin(self) -> BindingStep:
+        """Open an authorization session and return the URL for the operator."""
+        payload = await request_device_code()
+        return BindingStep(
+            verification_url=payload["verification_uri"],  # rendered as a QR code
+            provider_state={"device_code": payload["device_code"]},  # handed back verbatim
+            retry_after_secs=5,                            # polling interval the platform asks for
+            expires_in_secs=600,                           # lifetime of the session
+        )
+
+    async def advance(self, provider_state: dict[str, Any]) -> BindingStep:
+        """Called once per poll: ask the platform whether the operator confirmed."""
+        payload = await poll_device_code(provider_state["device_code"])
+        if payload.get("client_secret"):
+            return BindingStep(
+                state=BindingState.AUTHORIZED,
+                credentials={"token": payload["client_secret"]},  # must match Credentials
+            )
+        # Still waiting: return the provider_state as is and the session continues
+        return BindingStep(provider_state=provider_state)
+
+
+class MyChannel(ChannelBase):
+    channel_type = "my_platform"
+    credential_binding = MyCredentialBinding   # without it, only manual entry is offered
+```
+
+Four constraints to respect when implementing one:
+
+| Constraint | Description |
+|---|---|
+| Stateless | A provider is instantiated once per process, and the two steps of one authorization may well land on different replicas. Anything needed between the steps (device code, PKCE verifier, the domain you were redirected to) goes into the returned `provider_state`, which the next step receives verbatim |
+| Poll-driven | `advance()` is called once per client status query rather than looping on its own, so never wait or retry inside it |
+| Credential fields | The `credentials` returned with `AUTHORIZED` must line up with the channel class's `Credentials` fields; the service creates the channel straight from them |
+| Terminal states | `AUTHORIZED` / `FAILED` / `CANCELLED` are terminal and `advance()` is not called again; on failure put the reason in `error` so the operator sees it in the UI |
+
 ## Enable Channel
 
 Add your channel class to `create_app`'s `channels`, and the service accepts that platform. `channels` declares **which channel types the whole service accepts**; omitting it enables none, so list the built-in types and your custom types together.

@@ -1,0 +1,182 @@
+---
+title: "A2A Protocol"
+description: "Connect to a remote agent behind the A2A protocol and talk to it."
+---
+
+A2A ([Agent2Agent](https://a2a-protocol.org/)) is an agent communication protocol proposed by Google.
+
+AgentScope acts as an A2A client through the `A2AAgent` class. It connects to any remote agent implementing A2A 1.0 or above (when the peer only offers 0.3, the official SDK falls back to a compatible transport), turns the messages, statuses, and artifacts returned by the remote agent into AgentScope messages and events, and sends user input (multimodal data included) to the remote agent.
+
+`A2AAgent` is only a local proxy for the remote agent's logic; it holds no logic of its own. Its interface matches the `Agent` class, with the following differences:
+
+| Capability | `Agent` | `A2AAgent` |
+|------------|---------|------------|
+| `reply()` / `reply_stream()` | ✅ | Sends the input to the remote side and streams the translated response back |
+| `observe()` | ✅ | Buffers the messages and sends them with the next `reply()` |
+| `compress_context()` | ✅ | A no-op; the context is maintained by the remote service |
+| Model, tools, middleware, permissions, structured output | ✅ | Not provided; all decided by the remote service |
+| Interruption and resumption, human-in-the-loop | ✅ | Not provided; a remote agent waiting for input surfaces as an ordinary reply |
+
+<Tip>
+The repository's [`examples/a2a`](https://github.com/agentscope-ai/agentscope/tree/main/examples/a2a) contains a complete two-sided example: an A2A server built from an AgentScope agent, and an `A2AAgent` connecting to it.
+</Tip>
+
+## Quickstart
+
+<Steps>
+  <Step title="Install the dependency">
+    A2A support relies on the official SDK, installed with the `a2a` extra.
+
+    ```bash Install the dependency
+    pip install "agentscope[a2a]"
+    ```
+  </Step>
+
+  <Step title="Fetch the agent card">
+    An agent card is the remote agent's self-description: a JSON document at a well-known address recording its name, summary, capabilities, and the transports and endpoints it offers. `A2AAgent` uses it to identify the peer and pick a transport, so a connection starts by fetching the card.
+
+    ```python Resolve an agent card
+    import httpx
+    from a2a.client import A2ACardResolver
+
+    # The httpx client only serves this one resolution and is closed right after
+    async with httpx.AsyncClient() as httpx_client:
+        card = await A2ACardResolver(
+            httpx_client=httpx_client,
+            base_url="http://127.0.0.1:9999",
+        ).get_agent_card()
+
+    print(card.name)  # this name becomes the name of the A2AAgent
+    ```
+  </Step>
+
+  <Step title="Create an A2AAgent and talk to it">
+    Hand the card to `A2AAgent`. It owns an A2A client of its own and closes it when leaving the context manager, so one instance serves one conversation and cannot be reopened after closing.
+
+    ```python Talk to a remote agent
+    from agentscope.agent import A2AAgent
+    from agentscope.message import UserMsg
+
+    async with A2AAgent(card) as agent:
+        reply = await agent.reply(
+            UserMsg(name="user", content="Plan me a weekend trip to Hangzhou."),
+        )
+        print(reply.get_text_content())
+
+        # The second call automatically reuses the same remote conversation
+        reply = await agent.reply(
+            UserMsg(name="user", content="Make it kid-friendly."),
+        )
+    ```
+  </Step>
+
+  <Step title="(Optional) Hand it to the console">
+    The event stream is identical to a local agent's, so a remote agent can be dropped straight into the [console](/versions/2.0.8dev/en/building-blocks/console) for interactive debugging.
+
+    ```python Talk to a remote agent in the terminal
+    from agentscope.console import launch_console
+
+    async with A2AAgent(card) as agent:
+        await launch_console(agent)
+    ```
+  </Step>
+</Steps>
+
+The constructor takes the following arguments, where `client` and `state` are keyword-only:
+
+| Argument | Description |
+|----------|-------------|
+| `agent_card` | The remote agent card, used to identify the peer and pick a transport |
+| `client` | Optional, a self-configured official SDK client, e.g. one over gRPC or with custom authentication. Without it, a streaming client is built from the card, which requires the peer to offer a `JSONRPC` or `HTTP+JSON` endpoint |
+| `state` | Optional, an existing `A2AAgentState` for resuming an earlier remote conversation |
+
+<Tip>
+Everything worth persisting about a remote conversation lives in `A2AAgentState`; pass it back to the constructor to resume:
+
+```python Resume the same remote conversation
+from agentscope.state import A2AAgentState
+
+agent = A2AAgent(card, state=A2AAgentState(context_id=stored_context_id))
+```
+</Tip>
+
+## Protocol Translation
+
+All `A2AAgent` does is translate A2A concepts into AgentScope concepts, at three levels: conversation identifiers, response payloads, and content parts.
+
+### Conversations and Tasks
+
+A2A organizes a conversation with two identifiers. They do not map one-to-one onto AgentScope concepts, which is the easiest thing to get wrong in practice:
+
+| A2A Identifier | Meaning | On the AgentScope Side |
+|----------------|---------|------------------------|
+| `context_id` | One conversation on the remote side | The equivalent of a `session_id`: several `reply()` calls under the same `context_id` share the remote context, carried automatically by `A2AAgent` with nothing to pass by hand |
+| `task_id` | One unit of execution on the remote side | **Not the same as one `reply()`**: a single `reply()` may span several tasks, or continue a task left over from an earlier `reply()`, depending on the remote implementation |
+
+Both are stored in `A2AAgentState`. That state also carries a local `session_id`, used only to group the events this adapter produces and unrelated to the remote side.
+
+### Response Payloads
+
+Every kind of remote response payload is broken down into content parts for translation; the payload itself only decides which task the content belongs to and how the reply ends:
+
+| A2A Response Payload | How It Is Translated |
+|----------------------|----------------------|
+| `Message` | Its parts become content; this is a direct answer that produces no task, so `task_id` is cleared |
+| `TaskArtifactUpdateEvent` | The artifact's parts become content; the `append` and `last_chunk` markers decide whether text keeps flowing into the same block, so streamed text is not chopped up |
+| `TaskStatusUpdateEvent` | The status message's parts become content, and the status decides `finished_reason` and `task_id` |
+| `Task` | A full snapshot: every artifact is translated first, then the status message |
+
+### Content Parts
+
+Each part becomes a content block of the matching type:
+
+| A2A Part | AgentScope Content Block |
+|----------|--------------------------|
+| Text part | `TextBlock`; consecutive text within one batch flows into the same block |
+| Bytes part (`raw`) | `DataBlock`, with the bytes carried as base64 |
+| URL part (`url`) | `DataBlock`, keeping the original URL |
+| Anything else (a structured data part, for instance) | Unsupported; raises a `ValueError` |
+
+The event stream therefore only carries reply start/end events and text / data block events:
+
+```python Consume the event stream
+from agentscope.event import TextBlockDeltaEvent
+
+async for event in agent.reply_stream(UserMsg(name="user", content="Hi")):
+    if isinstance(event, TextBlockDeltaEvent):
+        print(event.delta, end="", flush=True)
+```
+
+The `metadata["a2a"]` of a block-end event records which A2A object it came from (`task_id`, `artifact_id`, `message_id`), and the `metadata["a2a"]` of the final message records the `context_id`.
+
+<Note>
+Thinking blocks, tool call blocks, hint blocks, and push notifications are out of translation scope: A2A carries the final product, so the remote agent's reasoning and tool calls never show up in the event stream.
+</Note>
+
+### Ending a Reply
+
+A suspended remote task is suspended on the server, with nothing suspended locally, so **every response stream that ends means the reply has ended**. The task status the stream stops at decides the `finished_reason` of that reply:
+
+| Remote Task Status | `finished_reason` | Meaning |
+|--------------------|-------------------|---------|
+| `COMPLETED` | `COMPLETED` | The task finished |
+| `INPUT_REQUIRED`, `AUTH_REQUIRED` | `COMPLETED` | The remote side is waiting for input; its status message comes back as ordinary content, and the next `reply()` answers it |
+| `CANCELED` | `INTERRUPTED` | The task was cancelled |
+| `FAILED`, `REJECTED` | `ERROR` | The task failed or was rejected |
+
+The `task_id` is kept only while the remote side waits for input (`INPUT_REQUIRED` / `AUTH_REQUIRED`), so the next message continues that task; every other status clears it and the next message starts a new task within the same `context_id`. Two edge cases exist: a task the remote side has already forgotten degrades into a new task, and a task still running remotely raises a `RuntimeError` outright, because sending a message would make it run a second time.
+
+<Warning>
+A2A credentials travel outside the protocol, so an `AUTH_REQUIRED` task cannot be authorized through this adapter; follow the instructions in the status message to complete it yourself.
+</Warning>
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Console" icon="terminal" href="/versions/2.0.8dev/en/building-blocks/console" cta="Learn more" arrow>
+    Hand a remote agent to the terminal and start chatting.
+  </Card>
+  <Card title="Message and Event" icon="message-square" href="/versions/2.0.8dev/en/building-blocks/message-and-event" cta="Learn more" arrow>
+    Learn what each event in the stream means.
+  </Card>
+</CardGroup>

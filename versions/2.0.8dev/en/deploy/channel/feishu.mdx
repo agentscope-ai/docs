@@ -10,7 +10,12 @@ The Feishu channel connects over a WebSocket long connection, so it needs no pub
 - **Multimodal input**: receive images, files, and voice messages from users and pass them to the agent;
 - **Markdown**: replies render as Markdown, and overly long content is split automatically.
 
-Connecting takes three steps: create an app on the [Feishu Open Platform](https://open.feishu.cn/) and get its credentials, start an agent service to host the channel, then add the Feishu channel in the management UI.
+Connecting takes three steps: get the credentials of a Feishu app, start an agent service to host the channel, then add the Feishu channel in the management UI. There are two ways to get the credentials:
+
+| Way | When to use it |
+|---|---|
+| Authorize by QR code | Scan and confirm in the management UI, and Feishu hands over the credentials directly, with no app to create by hand |
+| Create manually | Create a custom app on the [Feishu Open Platform](https://open.feishu.cn/) when you need your own permissions, event subscriptions, or app profile |
 
 ## Prerequisites
 
@@ -22,7 +27,7 @@ pip install "agentscope[channel]"
 
 ## Create App
 
-Create and configure the bot on the [Feishu Open Platform](https://open.feishu.cn/); it takes a few minutes.
+Create and configure the bot on the [Feishu Open Platform](https://open.feishu.cn/); it takes a few minutes. If you plan to get the credentials by QR code, skip this section and jump to [Add Channel](#add-channel).
 
 <Steps>
   <Step title="Create a custom app">
@@ -76,7 +81,7 @@ In the management UI (see the sample frontend [`examples/web_ui`](https://github
     On the channel management page, create a channel and choose "Feishu" as the platform type.
   </Step>
   <Step title="Fill in the credentials">
-    Enter the **App ID** and **App Secret** from the previous step into the credential form.
+    The credential form has an "authorize by QR code" tab and a "fill in manually" tab. With **authorize by QR code**, the UI shows a QR code; scan and confirm it in the Feishu app, and Feishu hands over the credentials, which are filled in automatically. With **fill in manually**, enter the **App ID** and **App Secret** you got when creating the app.
   </Step>
   <Step title="Configure routing rules">
     Choose which agent handles messages and how sessions are scoped. See [Message Routing](/versions/2.0.8dev/en/deploy/channel/routing) for what the rules mean.
@@ -87,8 +92,12 @@ In the management UI (see the sample frontend [`examples/web_ui`](https://github
 </Steps>
 
 <Note>
-The management UI maps onto the `/channels` endpoints; call them directly when you need to create channels programmatically. See the [API](/versions/2.0.8dev/en/deploy/openapi.json) part of this chapter for the fields.
+The management UI maps onto the `/channels` endpoints; call them directly when you need to create channels programmatically. See the [API](/versions/2.0.8dev/en/deploy/openapi.json) part of this chapter for the fields. QR code authorization maps onto `POST /channels/bindings` (open an authorization session and return the URL to render), `GET /channels/bindings/{id}` (poll for the result), and `POST /channels/bindings/{id}/cancel` (abandon the session). Once authorized, pass `credential_binding_id` when creating the channel to claim the credentials, with no plaintext credentials in the request body.
 </Note>
+
+<Warning>
+An authorization session belongs to the user who started it, and its credentials can be claimed only once: the session is void afterwards. An expired session, or a different user creating the channel, means scanning again.
+</Warning>
 
 ## Platform Config
 
@@ -109,6 +118,7 @@ If you want the bot to join group discussions freely like any member, turn `only
 - Check the channel status in the management UI, or call `GET /channels/{id}/status` to confirm the long connection is established.
 - If the bot doesn't respond in a group, first check `only_at_reply` and the @-mention behavior, then check that the message-receive permission was requested and published with the version.
 - If the bot never comes online, check the App ID / App Secret and that event subscription is set to the long-connection method.
+- If no credentials arrive after scanning, the QR code has most likely expired; click "regenerate" and scan again.
 
 ## Further Reading
 
