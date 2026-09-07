@@ -53,11 +53,37 @@ AgentScope 通过 `A2AAgent` 类作为 A2A 协议的客户端，可以连接任�
   <Step title="创建 A2AAgent 并对话">
     把卡片交给 `A2AAgent`。它自己持有 A2A 客户端，退出上下文管理器时关闭，因此一个实例服务一段对话，关闭后不能重开。
 
-    ```python 与远端智能体对话
+    对话接口与本地智能体一致：`reply_stream` 实时产出事件，`reply` 在内部消费完事件后返回最终消息。
+
+    <CodeGroup>
+
+    ```python 流式对话
+    from agentscope.agent import A2AAgent
+    from agentscope.event import TextBlockDeltaEvent
+    from agentscope.message import UserMsg
+
+    async with A2AAgent(card) as agent:
+        # 远端产出的文本随生成实时到达
+        async for event in agent.reply_stream(
+            UserMsg(name="user", content="帮我规划一个杭州周末行程。"),
+        ):
+            if isinstance(event, TextBlockDeltaEvent):
+                print(event.delta, end="", flush=True)
+
+        # 第二次调用自动复用同一段远端会话
+        async for event in agent.reply_stream(
+            UserMsg(name="user", content="改成适合带小孩的。"),
+        ):
+            if isinstance(event, TextBlockDeltaEvent):
+                print(event.delta, end="", flush=True)
+    ```
+
+    ```python 一次性对话
     from agentscope.agent import A2AAgent
     from agentscope.message import UserMsg
 
     async with A2AAgent(card) as agent:
+        # 等远端把这一轮说完，只拿最终消息
         reply = await agent.reply(
             UserMsg(name="user", content="帮我规划一个杭州周末行程。"),
         )
@@ -68,6 +94,12 @@ AgentScope 通过 `A2AAgent` 类作为 A2A 协议的客户端，可以连接任�
             UserMsg(name="user", content="改成适合带小孩的。"),
         )
     ```
+
+    </CodeGroup>
+
+    <Note>
+    `A2AAgent.reply_stream` 不支持 `yield_final_msg` 参数：最终消息在流结束后由 `A2AAgent` 自行组装，需要它时请改用 `reply`。
+    </Note>
   </Step>
 
   <Step title="（可选）交给终端 UI">
@@ -137,17 +169,7 @@ A2A 用两个标识组织一段对话，它们与 AgentScope 的概念并不一�
 | URL Part（`url`） | `DataBlock`，保留原始 URL |
 | 其它（如结构化数据 Part） | 不支持，抛出 `ValueError` |
 
-因此事件流中只会出现回复起止事件与文本 / 数据块事件：
-
-```python 消费事件流
-from agentscope.event import TextBlockDeltaEvent
-
-async for event in agent.reply_stream(UserMsg(name="user", content="你好")):
-    if isinstance(event, TextBlockDeltaEvent):
-        print(event.delta, end="", flush=True)
-```
-
-块结束事件的 `metadata["a2a"]` 中记录了它来自哪个 A2A 对象（`task_id`、`artifact_id`、`message_id`），最终消息的 `metadata["a2a"]` 中记录 `context_id`。
+因此事件流中只会出现回复起止事件与文本 / 数据块事件，上面的流式对话示例按 `TextBlockDeltaEvent` 过滤即可覆盖绝大多数文本场景。块结束事件的 `metadata["a2a"]` 中记录了它来自哪个 A2A 对象（`task_id`、`artifact_id`、`message_id`），最终消息的 `metadata["a2a"]` 中记录 `context_id`。
 
 <Note>
 思考块、工具调用块、提示块与推送通知都不在转译范围内：A2A 传递的是最终产物，远端智能体的推理过程与工具调用不会出现在事件流里。

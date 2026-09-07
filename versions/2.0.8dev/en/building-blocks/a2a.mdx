@@ -53,11 +53,37 @@ The repository's [`examples/a2a`](https://github.com/agentscope-ai/agentscope/tr
   <Step title="Create an A2AAgent and talk to it">
     Hand the card to `A2AAgent`. It owns an A2A client of its own and closes it when leaving the context manager, so one instance serves one conversation and cannot be reopened after closing.
 
-    ```python Talk to a remote agent
+    The conversation interface matches a local agent's: `reply_stream` yields events in real time, while `reply` consumes them internally and returns the final message.
+
+    <CodeGroup>
+
+    ```python Streaming
+    from agentscope.agent import A2AAgent
+    from agentscope.event import TextBlockDeltaEvent
+    from agentscope.message import UserMsg
+
+    async with A2AAgent(card) as agent:
+        # The remote text arrives as it is generated
+        async for event in agent.reply_stream(
+            UserMsg(name="user", content="Plan me a weekend trip to Hangzhou."),
+        ):
+            if isinstance(event, TextBlockDeltaEvent):
+                print(event.delta, end="", flush=True)
+
+        # The second call automatically reuses the same remote conversation
+        async for event in agent.reply_stream(
+            UserMsg(name="user", content="Make it kid-friendly."),
+        ):
+            if isinstance(event, TextBlockDeltaEvent):
+                print(event.delta, end="", flush=True)
+    ```
+
+    ```python One-shot
     from agentscope.agent import A2AAgent
     from agentscope.message import UserMsg
 
     async with A2AAgent(card) as agent:
+        # Wait for the remote side to finish this turn and take the final message
         reply = await agent.reply(
             UserMsg(name="user", content="Plan me a weekend trip to Hangzhou."),
         )
@@ -68,6 +94,12 @@ The repository's [`examples/a2a`](https://github.com/agentscope-ai/agentscope/tr
             UserMsg(name="user", content="Make it kid-friendly."),
         )
     ```
+
+    </CodeGroup>
+
+    <Note>
+    `A2AAgent.reply_stream` takes no `yield_final_msg` argument: the final message is assembled by `A2AAgent` after the stream ends, so use `reply` when you need it.
+    </Note>
   </Step>
 
   <Step title="(Optional) Hand it to the console">
@@ -137,17 +169,7 @@ Each part becomes a content block of the matching type:
 | URL part (`url`) | `DataBlock`, keeping the original URL |
 | Anything else (a structured data part, for instance) | Unsupported; raises a `ValueError` |
 
-The event stream therefore only carries reply start/end events and text / data block events:
-
-```python Consume the event stream
-from agentscope.event import TextBlockDeltaEvent
-
-async for event in agent.reply_stream(UserMsg(name="user", content="Hi")):
-    if isinstance(event, TextBlockDeltaEvent):
-        print(event.delta, end="", flush=True)
-```
-
-The `metadata["a2a"]` of a block-end event records which A2A object it came from (`task_id`, `artifact_id`, `message_id`), and the `metadata["a2a"]` of the final message records the `context_id`.
+The event stream therefore only carries reply start/end events and text / data block events, so filtering on `TextBlockDeltaEvent` as the streaming example above does covers almost every text scenario. The `metadata["a2a"]` of a block-end event records which A2A object it came from (`task_id`, `artifact_id`, `message_id`), and the `metadata["a2a"]` of the final message records the `context_id`.
 
 <Note>
 Thinking blocks, tool call blocks, hint blocks, and push notifications are out of translation scope: A2A carries the final product, so the remote agent's reasoning and tool calls never show up in the event stream.
