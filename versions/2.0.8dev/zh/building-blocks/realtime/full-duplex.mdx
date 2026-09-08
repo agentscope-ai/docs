@@ -217,16 +217,10 @@ await agent.interrupt()
 
 ### 调用工具
 
-传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`run()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，开发者在流之外通过 `send()` 送回确认结果：
+传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`run()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
 
-```python 在语音对话中确认工具调用
-import asyncio
-
-from agentscope.event import (
-    ConfirmResult,
-    RequireUserConfirmEvent,
-    UserConfirmResultEvent,
-)
+```python 装配工具并接收确认请求
+from agentscope.event import RequireUserConfirmEvent
 from agentscope.tool import Bash, Read, Toolkit
 
 agent = RealtimeAgent(
@@ -236,12 +230,44 @@ agent = RealtimeAgent(
     toolkit=Toolkit(tools=[Bash(), Read()]),
 )
 
+async with agent, transport:
+    async for event in agent.run(transport):
+        if isinstance(event, RequireUserConfirmEvent):
+            # 把确认请求交给界面，不要在这里阻塞事件流
+            show_confirm_dialog(event)
+```
 
-async def confirm(event: RequireUserConfirmEvent) -> None:
+用户作出选择后，把 `UserConfirmResultEvent` 送回智能体即可，调用位置可以是界面回调、WebSocket 消息处理函数或终端输入。下面的 tab 分别展示两种场景：
+
+<CodeGroup>
+```python 界面回调
+from agentscope.event import ConfirmResult, UserConfirmResultEvent
+
+
+async def on_confirm_clicked(event: RequireUserConfirmEvent, allowed: bool) -> None:
+    # 由按钮点击等界面事件触发，与 run() 的循环无关
+    await agent.send(
+        UserConfirmResultEvent(
+            reply_id=event.reply_id,
+            confirm_results=[
+                ConfirmResult(tool_call=call, confirmed=allowed)
+                for call in event.tool_calls
+            ],
+        ),
+    )
+```
+
+```python 终端输入
+import asyncio
+
+from agentscope.event import ConfirmResult, UserConfirmResultEvent
+
+
+async def confirm_in_terminal(event: RequireUserConfirmEvent) -> None:
     loop = asyncio.get_running_loop()
     results = []
     for call in event.tool_calls:
-        # 终端输入放到线程里执行，确保等待期间音频不停
+        # 终端输入会阻塞线程，放到线程池里执行，等待期间音频不停
         answer = await loop.run_in_executor(
             None, input, f"允许 {call.name}({call.input})? [y/N] ",
         )
@@ -251,13 +277,8 @@ async def confirm(event: RequireUserConfirmEvent) -> None:
     await agent.send(
         UserConfirmResultEvent(reply_id=event.reply_id, confirm_results=results),
     )
-
-
-async with agent, transport:
-    async for event in agent.run(transport):
-        if isinstance(event, RequireUserConfirmEvent):
-            await confirm(event)
 ```
+</CodeGroup>
 
 使用工具时需要注意以下几点：
 
