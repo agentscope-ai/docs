@@ -1,0 +1,449 @@
+---
+title: "实时语音智能体"
+description: "与语音模型进行可随时打断的全双工对话，并在对话中调用工具"
+---
+
+当开发者需要让智能体直接"听"用户说话并用语音回答时，可以使用 `RealtimeAgent` 把一个实时语音模型和一个音频传输连接起来。它对接的是模型 API 的语音到语音（Speech-to-Speech）会话，音频不经过语音识别、大语言模型、语音合成三级串联，因此延迟低，并且能保留语气与情绪。
+
+实时语音智能体目前提供以下能力：
+
+| 能力 | 说明 |
+|------|------|
+| 全双工语音对话 | 麦克风音频持续上行，模型音频持续下行，没有请求与回复的边界 |
+| 回合检测 | 默认由模型 API 判断用户何时说完，也可以传入本地 VAD（语音活动检测）自行判断 |
+| 打断 | 用户开口即打断当前回复，上下文中只保留用户实际听到的部分；也可以由代码主动打断 |
+| 工具调用与用户确认 | 复用 `Toolkit` 与权限系统，需要确认的工具调用会在语音流不停的情况下发出确认事件 |
+| 文本输入 | 在支持文本输入的模型上，可以在语音对话中直接发送文字 |
+| 断线恢复 | 模型 API 因长时间空闲关闭会话后，下一句话自动重连，对话历史保留在 `agent.state` 中 |
+| 回合整理 | 合并被停顿切开的句子，过滤"嗯""好的"等没有实际内容的应答 |
+| 延迟指标 | 每一轮对话记录端点检测、模型首包、播放链路三段延迟 |
+
+<Warning>
+实时语音智能体目前为实验性功能，接口在后续版本中可能调整。当前支持 DashScope 的 Qwen-Omni 与 Qwen-Audio-3.0 实时模型，OpenAI、Gemini 与 xAI 的实时模型即将支持。
+</Warning>
+
+## 安装依赖
+
+实时语音功能依赖 WebSocket 客户端与本地声卡库，通过 `realtime` 可选依赖一并安装：
+
+```bash 安装实时语音依赖
+pip install "agentscope[realtime]"
+```
+
+<Note>
+本地声卡库 `sounddevice` 依赖 PortAudio。macOS 与 Windows 已随包附带；Debian/Ubuntu 需要先执行 `apt install libportaudio2`。
+</Note>
+
+## 快速开始
+
+下面的例子用本地麦克风与 `qwen-audio-3.0-realtime-plus` 对话，并把双方说的话打印到终端。对着麦克风说话即可听到回复，在回复过程中开口即可打断，按 Ctrl+C 退出：
+
+```python 用本地麦克风与智能体对话
+import asyncio
+import os
+
+from agentscope.agent import RealtimeAgent
+from agentscope.credential import DashScopeCredential
+from agentscope.event import (
+    ReplyEndEvent,
+    ReplyStartEvent,
+    TextBlockDeltaEvent,
+    UserInputTranscriptionEvent,
+)
+from agentscope.realtime import DashScopeAudioRealtimeModel, LocalAudioTransport
+
+
+async def main() -> None:
+    # 模型卡片按名称自动匹配，采样率与上下文限制随之确定
+    model = DashScopeAudioRealtimeModel(
+        model_name="qwen-audio-3.0-realtime-plus",
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    )
+    agent = RealtimeAgent(
+        name="Friday",
+        sys_prompt="你是一个中文语音助手，回答尽量简短。",
+        model=model,
+    )
+    # 传输的采样率必须与模型一致，否则 run() 会抛出 ValueError
+    transport = LocalAudioTransport(
+        input_sample_rate=model.input_sample_rate,
+        output_sample_rate=model.output_sample_rate,
+    )
+
+    # 智能体持有模型会话，传输由开发者持有，run() 借用两者直到传输结束
+    async with agent, transport:
+        async for event in agent.run(transport):
+            match event:
+                case UserInputTranscriptionEvent():
+                    print(f"[user] {event.transcript}")
+                case ReplyStartEvent():
+                    print(f"[{agent.name}] ", end="", flush=True)
+                case TextBlockDeltaEvent():
+                    print(event.delta, end="", flush=True)
+                case ReplyEndEvent():
+                    print(f"  ({event.finished_reason})")
+
+
+asyncio.run(main())
+```
+
+上面的代码里有三个生命周期，各自由不同的对象掌控：
+
+| 对象 | 持有者 | 生命周期 |
+|------|--------|----------|
+| 模型会话 | `RealtimeAgent` | `async with agent` 期间，或手动调用 `connect()` 与 `close()` 之间；模型 API 关闭会话后会在下一句话时自动重连 |
+| 音频传输 | 开发者 | `async with transport` 期间；智能体只借用，不会替开发者关闭 |
+| 一次运行 | `agent.run(transport)` | 从传输开始产出音频，到传输的输入结束；期间可以有任意多轮对话 |
+
+三者分开的好处是客户端断开重连时不丢失模型会话，模型会话超时时也不影响传输。同一个智能体可以在传输更换后再次调用 `run()`，对话历史仍在 `agent.state` 中。
+
+`RealtimeAgent` 的构造参数如下：
+
+<ParamField path="name" type="str" required>
+  智能体名称，会写入智能体消息与事件。
+</ParamField>
+
+<ParamField path="sys_prompt" type="str" required>
+  系统提示，在连接模型时一次性发送，工具包中技能的说明会附加在后面。
+</ParamField>
+
+<ParamField path="model" type="RealtimeModelBase" required>
+  实时语音模型，详见[实时语音模型](#实时语音模型)。
+</ParamField>
+
+<ParamField path="toolkit" type="Toolkit | None" default="None">
+  模型可以调用的工具包，工具在智能体侧执行并经过权限检查。
+</ParamField>
+
+<ParamField path="state" type="AgentState | None" default="None">
+  对话历史、权限规则与工具上下文，省略时新建。
+</ParamField>
+
+<ParamField path="vad" type="VADBase | None" default="None">
+  本地语音活动检测。传入后由它决定回合边界，模型 API 自身的回合检测会被关闭，详见[回合检测](#回合检测)。
+</ParamField>
+
+<ParamField path="aggregator" type="TurnAggregator | None" default="None">
+  回合整理器，负责合并被切开的句子与过滤无内容应答，省略时使用默认配置。
+</ParamField>
+
+## 实时语音模型
+
+实时语音模型类封装与模型 API 的 WebSocket 会话，AgentScope 当前提供以下模型类：
+
+| 模型 API | 模型类 | 模型 | 文本输入 | 工具调用 |
+|----------|--------|------|----------|----------|
+| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime、qwen3-omni-flash-realtime、qwen-omni-turbo-realtime | 否 | 仅 qwen3.5 系列 |
+| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | qwen-audio-3.0-realtime-plus、qwen-audio-3.0-realtime-flash | 是 | 是 |
+| OpenAI（Realtime） | 即将支持 | | | |
+| Gemini（Live） | 即将支持 | | | |
+| xAI（Grok Voice） | 即将支持 | | | |
+
+### 创建模型
+
+每个模型类接收凭证、模型名以及可选的 `Parameters` 对象。两类 DashScope 模型的参数略有不同：
+
+<CodeGroup>
+```python Qwen-Audio-3.0
+import os
+from agentscope.credential import DashScopeCredential
+from agentscope.realtime import DashScopeAudioRealtimeModel
+
+model = DashScopeAudioRealtimeModel(
+    model_name="qwen-audio-3.0-realtime-plus",
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    parameters=DashScopeAudioRealtimeModel.Parameters(
+        voice="longanqian",             # 音色
+        turn_detection="smart_turn",    # server_vad、smart_turn 或 none
+        max_history_turns=20,           # 模型 API 侧保留的对话轮数
+    ),
+)
+```
+
+```python Qwen-Omni
+import os
+from agentscope.credential import DashScopeCredential
+from agentscope.realtime import DashScopeRealtimeModel
+
+model = DashScopeRealtimeModel(
+    model_name="qwen3.5-omni-flash-realtime",
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    parameters=DashScopeRealtimeModel.Parameters(
+        voice="Tina",                   # 音色
+        turn_detection="server_vad",    # server_vad、semantic_vad 或 none
+        vad_silence_duration_ms=800,    # 静音多久算用户说完
+        input_audio_transcription=True, # 是否转写用户语音
+    ),
+)
+```
+</CodeGroup>
+
+两类模型的 `Parameters` 字段如下：
+
+| 字段 | Qwen-Omni | Qwen-Audio-3.0 | 说明 |
+|------|-----------|----------------|------|
+| `voice` | 默认 `"Cherry"` | 默认 `"longanqian"` | 音色，可选值见模型卡片 |
+| `turn_detection` | `server_vad`、`semantic_vad`、`none` | `server_vad`、`smart_turn`、`none` | 模型 API 侧的回合检测方式，`none` 表示由调用方决定 |
+| `vad_threshold` | 0 到 1 | -1 到 1 | 判定为语音的能量阈值 |
+| `vad_silence_duration_ms` | 默认 800 | 200 到 6000 | 静音持续多久判定用户说完 |
+| `input_audio_transcription` | 默认 `True` | 不适用 | 是否转写用户语音 |
+| `voiceprint_audio_urls` | 不适用 | 默认空 | 说话人参考音频，仅 `smart_turn` 使用，用于过滤旁人声音 |
+| `max_history_turns` | 不适用 | 1 到 50，默认 20 | 模型 API 侧保留的对话轮数 |
+
+### 模型卡片与限制
+
+每个模型的采样率、输入类型、是否支持工具与上下文限制记录在模型卡片中，构造模型时按名称自动匹配。实时模型的上下文按对话轮数与累计音频时长限制，而不是按 token，超出后模型 API 会静默丢弃最早的轮次：
+
+| 模型 | 工具调用 | 最大轮数 | 最大累计音频 | 会话时长上限 |
+|------|----------|----------|--------------|--------------|
+| qwen3.5-omni-plus-realtime | 是 | 100 | 600 秒 | 120 分钟 |
+| qwen3.5-omni-flash-realtime | 是 | 80 | 480 秒 | 120 分钟 |
+| qwen3-omni-flash-realtime | 否 | 8 | 不限 | 120 分钟 |
+| qwen-omni-turbo-realtime | 否 | 按 32768 token | 不限 | 120 分钟 |
+| qwen-audio-3.0-realtime-plus | 是 | 50 | 300 秒 | 不限 |
+| qwen-audio-3.0-realtime-flash | 是 | 50 | 300 秒 | 不限 |
+
+当一个凭证对应多个模型类时，可以通过凭证列出全部模型卡片，再用卡片上的 `model_type` 字段找回对应的模型类：
+
+```python 从模型卡片找回模型类
+from agentscope.credential import DashScopeCredential
+
+credential = DashScopeCredential(api_key="...")
+
+# 卡片上的 model_type 与模型类的 type 一一对应
+cards = {c.name: c for c in credential.list_realtime_models()}
+classes = {c.type: c for c in credential.get_realtime_model_classes()}
+
+card = cards["qwen3.5-omni-flash-realtime"]
+model = classes[card.model_type](card.name, credential, model_card=card)
+```
+
+## 回合检测
+
+回合检测决定"用户什么时候说完了"，只能由一方负责。默认情况下由模型 API 负责，智能体只响应它上报的说话开始与结束；传入 `vad` 参数后改由智能体本地判断，并自动关闭模型 API 侧的回合检测。两种模式的对比如下：
+
+| 模式 | 配置方式 | 适用场景 |
+|------|----------|----------|
+| 模型 API 检测 | 不传 `vad`，通过 `Parameters.turn_detection` 选择检测方式 | 默认选择，无需额外模型 |
+| 本地检测 | 传入 `VADBase` 实现 | 需要自定义端点策略，或模型 API 不提供回合检测 |
+
+本地检测需要实现 `VADBase`：`push()` 接收传输送来的每一块 PCM16 音频，只在说话开始或结束的那一块返回 `SpeechTransition`，其余时候返回 `None`；`reset()` 在音频流出现间断（例如重连）时清空内部状态：
+
+```python 接入本地 VAD
+from agentscope.realtime import SpeechTransition, VADBase
+
+
+class MyVAD(VADBase):
+    sample_rate = 16000  # 必须与传输的输入采样率一致
+
+    def push(self, pcm: bytes) -> SpeechTransition | None:
+        # 在说话开始的那一块返回 STARTED，结束的那一块返回 ENDED
+        ...
+
+    def reset(self) -> None:
+        ...
+
+
+agent = RealtimeAgent(name="Friday", sys_prompt="...", model=model, vad=MyVAD())
+```
+
+无论哪种模式，模型 API 上报或本地检测到的用户转写都会先经过 `TurnAggregator` 整理，再写入上下文：
+
+```python 配置回合整理
+from agentscope.agent import RealtimeAgent, TurnAggregator
+
+agent = RealtimeAgent(
+    name="Friday",
+    sys_prompt="...",
+    model=model,
+    aggregator=TurnAggregator(
+        merge_window_ms=800,                    # 上一轮结束后 800 毫秒内的转写并入上一轮
+        backchannels=frozenset({"嗯", "好的"}),  # 这些应答不构成一轮
+        min_chars=1,                            # 短于该长度的转写丢弃
+    ),
+)
+```
+
+## 打断
+
+用户在回复播放期间开口，智能体会立即停止播放并取消模型侧的回复。传输会报告实际播放到的位置，智能体据此把上下文中的智能体消息截到用户真正听到的部分，避免模型"以为"用户听完了整句话。开发者也可以在代码中主动打断，例如响应界面上的停止按钮：
+
+```python 主动打断当前回复
+await agent.interrupt()
+```
+
+被打断的回复以 `finished_reason` 为 `interrupted` 的 `ReplyEndEvent` 结束。
+
+<Note>
+上下文截断只发生在智能体侧。DashScope 的实时模型 API 不接受截断指令，模型侧仍保留完整的回复；模型类的 `truncation` 属性标明了各模型 API 的支持程度。
+</Note>
+
+## 调用工具
+
+传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`run()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，开发者在流之外通过 `send()` 送回确认结果：
+
+```python 在语音对话中确认工具调用
+import asyncio
+
+from agentscope.event import (
+    ConfirmResult,
+    RequireUserConfirmEvent,
+    UserConfirmResultEvent,
+)
+from agentscope.tool import Bash, Read, Toolkit
+
+agent = RealtimeAgent(
+    name="Friday",
+    sys_prompt="...",
+    model=model,
+    toolkit=Toolkit(tools=[Bash(), Read()]),
+)
+
+
+async def confirm(event: RequireUserConfirmEvent) -> None:
+    loop = asyncio.get_running_loop()
+    results = []
+    for call in event.tool_calls:
+        # 终端输入放到线程里执行，确保等待期间音频不停
+        answer = await loop.run_in_executor(
+            None, input, f"允许 {call.name}({call.input})? [y/N] ",
+        )
+        results.append(
+            ConfirmResult(tool_call=call, confirmed=answer.lower() == "y"),
+        )
+    await agent.send(
+        UserConfirmResultEvent(reply_id=event.reply_id, confirm_results=results),
+    )
+
+
+async with agent, transport:
+    async for event in agent.run(transport):
+        if isinstance(event, RequireUserConfirmEvent):
+            await confirm(event)
+```
+
+使用工具时需要注意以下几点：
+
+- 工具列表与系统提示在连接模型时一次性发送，会话中途向工具包添加工具或激活工具组不会生效。
+- 只有模型卡片标注 `supports_tools` 的模型才会收到工具列表，见[模型卡片与限制](#模型卡片与限制)。
+- 确认请求超过 5 分钟没有回应，智能体按拒绝处理。
+
+## 发送文本
+
+在支持文本输入的模型上，可以用 `send()` 在语音对话中发送文字。文字会先打断当前回复，再作为一轮用户输入交给模型，回复仍以语音播放：
+
+```python 发送文字输入
+await agent.send("帮我查一下今天的天气")
+```
+
+`send()` 接收的输入类型与 `Agent.reply` 对齐：
+
+| 输入 | 作用 |
+|------|------|
+| `str` 或 `Msg` | 一轮文字输入，仅支持文本输入的模型可用，否则抛出 `NotImplementedError` |
+| `UserConfirmResultEvent` | 工具调用的确认结果 |
+| `UserInterruptEvent` | 打断当前回复，等价于 `interrupt()` |
+
+## 处理事件
+
+`run()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。语音场景新增了两个用户侧事件，模型音频则以数据块事件的形式产出：
+
+| 事件 | 含义 |
+|------|------|
+| `UserInputAudioStartEvent` | 检测到用户开始说话 |
+| `UserInputTranscriptionEvent` | 一轮用户语音的最终转写 |
+| `ReplyStartEvent` / `ReplyEndEvent` | 一次回复的开始与结束，`finished_reason` 为 `completed`、`interrupted` 或 `error` |
+| `TextBlockDeltaEvent` | 回复文本的增量转写 |
+| `DataBlockDeltaEvent` | 回复音频的增量数据，已由传输播放，通常无需处理 |
+| `ToolCallStartEvent` / `ToolCallEndEvent` | 模型发起的工具调用 |
+| `ToolResultStartEvent` / `ToolResultEndEvent` | 工具执行的结果 |
+| `RequireUserConfirmEvent` | 工具调用需要用户确认 |
+
+## 断线恢复
+
+模型 API 会在长时间没有对话时关闭会话，DashScope 的空闲超时约为三分钟。智能体把这视为正常情况：记录一条 INFO 日志，保持传输打开，用户下一次说话时自动重连并补发这期间的音频。对话历史保存在 `agent.state` 中，但模型 API 侧会从空白会话开始，无法把之前的轮次喂回模型。
+
+<Tip>
+长时间静默是安全的，不需要为空闲超时做任何处理。若要在客户端断开后继续同一场对话，保持智能体不关闭，换一个传输再次调用 `run()` 即可。
+</Tip>
+
+## 延迟指标
+
+每一轮回复结束后，可以通过 `last_turn_metrics` 读取这一轮的延迟分解，单位为秒：
+
+| 属性 | 含义 |
+|------|------|
+| `endpointing_delay` | 用户停止说话到回合被提交给模型的时间 |
+| `backend_ttfb` | 回合提交到模型返回第一块音频的时间 |
+| `transport_delay` | 第一块音频到达到实际播放的时间 |
+| `e2e_latency` | 用户停止说话到听见回复的总时间 |
+
+```python 打印每一轮的延迟
+if isinstance(event, ReplyEndEvent):
+    m = agent.last_turn_metrics
+    # 被打断或出错的回合可能缺少某个时间点，对应属性为 None
+    print(f"ttfb={m.backend_ttfb} e2e={m.e2e_latency}")
+```
+
+## 音频传输
+
+音频传输负责"声音从哪里来、到哪里去"，智能体不关心音频来自本地声卡还是浏览器。AgentScope 当前提供以下传输：
+
+| 传输 | 说明 |
+|------|------|
+| `LocalAudioTransport` | 本地麦克风与扬声器，基于 `sounddevice`，适合本机调试 |
+| 浏览器传输 | 即将支持 |
+
+### 本地声卡
+
+`LocalAudioTransport` 支持以下参数：
+
+<ParamField path="input_sample_rate" type="int" default="16000">
+  采集采样率，必须等于模型的 `input_sample_rate`。
+</ParamField>
+
+<ParamField path="output_sample_rate" type="int" default="24000">
+  播放采样率，必须等于模型的 `output_sample_rate`。
+</ParamField>
+
+<ParamField path="input_device" type="int | str | None" default="None">
+  输入设备的编号或名称，省略时使用系统默认设备。
+</ParamField>
+
+<ParamField path="output_device" type="int | str | None" default="None">
+  输出设备的编号或名称，省略时使用系统默认设备。
+</ParamField>
+
+<ParamField path="chunk_ms" type="int" default="100">
+  每块上行音频的时长。
+</ParamField>
+
+<ParamField path="fade_ms" type="int" default="30">
+  打断时对正在播放的音频施加的淡出时长，避免爆音。
+</ParamField>
+
+默认设备不合适时，可以用 `sounddevice` 列出设备并按编号指定：
+
+```bash 列出音频设备
+python -m sounddevice
+```
+
+使用本地声卡时有几点建议：
+
+- **佩戴耳机。** 使用外放时麦克风会录到智能体自己的声音，回合检测把它当成用户开口，智能体会打断自己。`LocalAudioTransport` 不做回声消除。
+- **不要让同一个蓝牙耳机同时负责输入和输出。** macOS 会把 AirPods 等设备切换到免提模式，此时经常没有声音。可以把耳机麦克风与内置扬声器搭配使用，例如 `LocalAudioTransport(input_device=3, output_device=2)`。
+
+### 自定义传输
+
+接入浏览器或其它音频来源时，继承 `TransportBase` 并实现以下方法：
+
+| 方法 | 作用 |
+|------|------|
+| `start()` / `close()` | 打开与关闭音频设备或连接 |
+| `incoming()` | 异步迭代器，产出上行的 `AudioFrame`（PCM16 音频）与 `ControlFrame`（文本、确认等控制帧） |
+| `send_audio(pcm, item_id)` | 播放一块模型音频，`item_id` 标识它属于哪条回复 |
+| `send_event(event)` | 把智能体事件发给客户端，本地传输忽略 |
+| `clear_audio()` | 打断时丢弃未播放的音频，并返回 `PlayoutPosition`，其中 `played_ms` 是这条回复实际播放到的毫秒数 |
+| `playout` | 属性，当前的播放位置 |
+
+`clear_audio()` 返回的播放位置是截断上下文的依据，因此播放进度的统计应尽量靠近扬声器，浏览器中应放在 AudioWorklet 里。
