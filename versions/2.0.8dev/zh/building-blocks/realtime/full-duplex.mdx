@@ -90,18 +90,18 @@ async def main() -> None:
     )
     agent = RealtimeAgent(
         name="Friday",
-        sys_prompt="你是一个中文语音助手，回答尽量简短。",
+        system_prompt="你是一个中文语音助手，回答尽量简短。",
         model=model,
     )
-    # 传输的采样率必须与模型一致，否则 run() 会抛出 ValueError
+    # 传输的采样率必须与模型一致，否则 reply_stream() 会抛出 ValueError
     transport = LocalAudioTransport(
         input_sample_rate=model.input_sample_rate,
         output_sample_rate=model.output_sample_rate,
     )
 
-    # 智能体持有模型会话，传输由开发者持有，run() 借用两者直到传输结束
+    # 智能体持有模型会话，传输由开发者持有，reply_stream() 借用两者直到传输结束
     async with agent, transport:
-        async for event in agent.run(transport):
+        async for event in agent.reply_stream(transport):
             match event:
                 case UserInputTranscriptionEvent():
                     print(f"[user] {event.transcript}")
@@ -122,9 +122,9 @@ asyncio.run(main())
 |------|--------|----------|
 | 模型会话 | `RealtimeAgent` | `async with agent` 期间，或手动调用 `connect()` 与 `close()` 之间；模型 API 关闭会话后会在下一句话时自动重连 |
 | 音频传输 | 开发者 | `async with transport` 期间；智能体只借用，不会替开发者关闭 |
-| 一次运行 | `agent.run(transport)` | 从传输开始产出音频，到传输的输入结束；期间可以有任意多轮对话 |
+| 一次运行 | `agent.reply_stream(transport)` | 从传输开始产出音频，到传输的输入结束；期间可以有任意多轮对话 |
 
-三者分开的好处是客户端断开重连时不丢失模型会话，模型会话超时时也不影响传输。同一个智能体可以在传输更换后再次调用 `run()`，对话历史仍在 `agent.state` 中。
+三者分开的好处是客户端断开重连时不丢失模型会话，模型会话超时时也不影响传输。同一个智能体可以在传输更换后再次调用 `reply_stream()`，对话历史仍在 `agent.state` 中。
 
 ## 使用智能体
 
@@ -134,7 +134,7 @@ asyncio.run(main())
   智能体名称，会写入智能体消息与事件。
 </ParamField>
 
-<ParamField path="sys_prompt" type="str" required>
+<ParamField path="system_prompt" type="str" required>
   系统提示，在连接模型时一次性发送，工具包中技能的说明会附加在后面。
 </ParamField>
 
@@ -163,16 +163,16 @@ asyncio.run(main())
 | 方法 | 作用 |
 |------|------|
 | `connect()` / `close()` | 打开与关闭模型会话，`async with agent` 等价于两者 |
-| `run(transport)` | 借用一个传输，持续泵送音频并产出智能体事件，直到传输结束 |
+| `reply_stream(transport)` | 借用一个传输，持续泵送音频并产出智能体事件，直到传输结束 |
 | `send(inputs)` | 发送音频以外的输入：文字、工具调用的确认结果、打断 |
 | `interrupt()` | 打断当前回复 |
 | `last_turn_metrics` | 最近一轮对话的延迟分解 |
 
 ### 运行并处理事件
 
-`run()` 接收一个已经启动的传输，持续把音频送给模型，并以异步迭代器的形式产出事件，直到传输的输入结束。传输由开发者持有，`run()` 结束时不会关闭它，同一个智能体可以换一个传输再次运行。
+`reply_stream()` 接收一个已经启动的传输，持续把音频送给模型，并以异步迭代器的形式产出事件，直到传输的输入结束。传输由开发者持有，`reply_stream()` 结束时不会关闭它，同一个智能体可以换一个传输再次运行。
 
-`run()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。语音场景新增了两个用户侧事件，模型音频则以数据块事件的形式产出：
+`reply_stream()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。语音场景新增了两个用户侧事件，模型音频则以数据块事件的形式产出：
 
 | 事件 | 含义 |
 |------|------|
@@ -217,7 +217,7 @@ await agent.interrupt()
 
 ### 调用工具
 
-传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`run()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
+传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`reply_stream()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
 
 ```python 装配工具并接收确认请求
 from agentscope.event import RequireUserConfirmEvent
@@ -225,13 +225,13 @@ from agentscope.tool import Bash, Read, Toolkit
 
 agent = RealtimeAgent(
     name="Friday",
-    sys_prompt="...",
+    system_prompt="...",
     model=model,
     toolkit=Toolkit(tools=[Bash(), Read()]),
 )
 
 async with agent, transport:
-    async for event in agent.run(transport):
+    async for event in agent.reply_stream(transport):
         if isinstance(event, RequireUserConfirmEvent):
             # 把确认请求交给界面，不要在这里阻塞事件流
             show_confirm_dialog(event)
@@ -245,7 +245,7 @@ from agentscope.event import ConfirmResult, UserConfirmResultEvent
 
 
 async def on_confirm_clicked(event: RequireUserConfirmEvent, allowed: bool) -> None:
-    # 由按钮点击等界面事件触发，与 run() 的循环无关
+    # 由按钮点击等界面事件触发，与 reply_stream() 的循环无关
     await agent.send(
         UserConfirmResultEvent(
             reply_id=event.reply_id,
@@ -312,7 +312,7 @@ class MyVAD(VADBase):
         ...
 
 
-agent = RealtimeAgent(name="Friday", sys_prompt="...", model=model, vad=MyVAD())
+agent = RealtimeAgent(name="Friday", system_prompt="...", model=model, vad=MyVAD())
 ```
 
 无论哪种模式，模型 API 上报或本地检测到的用户转写都会先经过 `TurnAggregator` 整理，再写入上下文：
@@ -322,7 +322,7 @@ from agentscope.agent import RealtimeAgent, TurnAggregator
 
 agent = RealtimeAgent(
     name="Friday",
-    sys_prompt="...",
+    system_prompt="...",
     model=model,
     aggregator=TurnAggregator(
         merge_window_ms=800,                    # 上一轮结束后 800 毫秒内的转写并入上一轮
@@ -337,7 +337,7 @@ agent = RealtimeAgent(
 模型 API 会在长时间没有对话时关闭会话，DashScope 的空闲超时约为三分钟。智能体把这视为正常情况：记录一条 INFO 日志，保持传输打开，用户下一次说话时自动重连并补发这期间的音频。对话历史保存在 `agent.state` 中，但模型 API 侧会从空白会话开始，无法把之前的轮次喂回模型。
 
 <Tip>
-长时间静默是安全的，不需要为空闲超时做任何处理。若要在客户端断开后继续同一场对话，保持智能体不关闭，换一个传输再次调用 `run()` 即可。
+长时间静默是安全的，不需要为空闲超时做任何处理。若要在客户端断开后继续同一场对话，保持智能体不关闭，换一个传输再次调用 `reply_stream()` 即可。
 </Tip>
 
 ### 延迟指标
@@ -498,7 +498,6 @@ python -m sounddevice
 | `start()` / `close()` | 打开与关闭音频设备或连接 |
 | `incoming()` | 异步迭代器，产出上行的 `AudioFrame`（PCM16 音频）与 `ControlFrame`（文本、确认等控制帧） |
 | `send_audio(pcm, item_id)` | 播放一块模型音频，`item_id` 标识它属于哪条回复 |
-| `send_event(event)` | 把智能体事件发给客户端，本地传输忽略 |
 | `clear_audio()` | 打断时丢弃未播放的音频，并返回 `PlayoutPosition`，其中 `played_ms` 是这条回复实际播放到的毫秒数 |
 | `playout` | 属性，当前的播放位置 |
 
