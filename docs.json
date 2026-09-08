@@ -845,7 +845,8 @@
                         "group": "实时语音智能体",
                         "tag": "NEW",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/voice/realtime"
+                          "versions/2.0.8dev/zh/building-blocks/realtime/overview",
+                          "versions/2.0.8dev/zh/building-blocks/realtime/full-duplex"
                         ]
                       },
                       "versions/2.0.8dev/zh/building-blocks/console",
