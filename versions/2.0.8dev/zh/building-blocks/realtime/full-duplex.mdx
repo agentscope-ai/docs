@@ -1,31 +1,39 @@
 ---
 title: "全双工语音智能体"
-description: "音频直接进出语音到语音模型，实现低延迟、可随时打断的语音对话"
+description: "通过端到端的语音交互模型实现实时语音对话"
 ---
 
-全双工方案是指音频直接进出一个语音到语音（Speech-to-Speech）模型：语音识别、理解与合成都在模型内部完成，用户说话与智能体回答可以同时进行。AgentScope 通过 `RealtimeAgent` 实现该方案，目前已支持以下能力：
+全双工方案是指音频直接进出一个端到端的语音交互模型：语音识别、理解与合成全部在模型内部完成。与基于轮次进行交互的方式相比，它不需要等用户说完再逐级处理，延迟更低，能保留语气与情绪，用户也可以随时打断。
+
+AgentScope 通过 `RealtimeAgent` 实现全双工方案，支持：
 
 - 回合检测：默认由模型 API 判断用户何时说完，也可以传入本地 VAD 自行判断
 - 打断：用户开口即打断当前回复，上下文只保留用户实际听到的部分，也可以由代码主动打断
-- 工具调用与用户确认：复用 `Toolkit` 与权限系统，确认过程中语音流不中断
+- 工具调用与用户确认：支持 `Toolkit` 与权限系统，确认过程中语音流不中断
 - 文本输入：在支持文本输入的模型上，可以在语音对话中直接发送文字
-- 断线恢复：模型 API 因空闲关闭会话后，下一句话自动重连
+- 断线自动恢复：模型 API 因空闲关闭会话后，下一句话自动重连
 - 回合整理：合并被停顿切开的句子，过滤没有实际内容的应答
 - 延迟指标：每一轮记录端点检测、模型首包、播放链路三段延迟
 
 目前支持的模型 API 与模型如下：
 
-| 模型 API | 模型类 | 模型 | 文本输入 | 工具调用 |
-|----------|--------|------|----------|----------|
-| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime、qwen3-omni-flash-realtime、qwen-omni-turbo-realtime | 否 | 仅 qwen3.5 系列 |
-| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | qwen-audio-3.0-realtime-plus、qwen-audio-3.0-realtime-flash | 是 | 是 |
-| OpenAI（Realtime） | 即将支持 | | | |
-| Gemini（Live） | 即将支持 | | | |
-| xAI（Grok Voice） | 即将支持 | | | |
+| 模型 API | 模型类 | 模型 | 工具调用 |
+|----------|--------|------|----------|
+| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime、qwen3-omni-flash-realtime、qwen-omni-turbo-realtime | 仅 qwen3.5 系列 |
+| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | qwen-audio-3.0-realtime-plus、qwen-audio-3.0-realtime-flash | 是 |
+| OpenAI（Realtime） | 即将支持 | | |
+| Gemini（Live） | 即将支持 | | |
+| xAI（Grok Voice） | 即将支持 | | |
 
 ## 核心概念
 
-全双工语音智能体由三个组件组成：音频传输负责声音的来源与去向，实时语音模型负责与模型 API 的会话，`RealtimeAgent` 在两者之间维护对话回合。下图展示了音频与事件在三者之间的流向：
+全双工语音智能体由三个组件组成：
+
+- 音频传输（`TransportBase`）：负责声音的来源与去向，例如本地声卡或浏览器
+- 实时语音模型（`RealtimeModelBase`）：负责与模型 API 的会话，把协议消息翻译成统一的模型事件
+- `RealtimeAgent`：负责在两者之间维护对话回合，处理打断、工具调用与事件产出
+
+下图展示了音频与事件在三者之间的流向：
 
 ```mermaid
 flowchart LR
@@ -37,15 +45,15 @@ flowchart LR
     A -- 智能体事件 --> D([开发者代码])
 ```
 
-三个组件的定位与职责边界如下：
+三个组件的定位与职责如下：
 
-| 组件 | 定位 | 负责 | 不负责 |
-|------|------|------|--------|
-| `RealtimeAgent` | 对话回合的状态机 | 划分回合、打断与上下文截断、工具调用与用户确认、产出智能体事件、模型断线后重连 | 音频的采集与播放、模型 API 的协议细节 |
-| 实时语音模型（`RealtimeModelBase`） | 模型 API 的适配器 | 维护 WebSocket 会话，把协议消息翻译成统一的模型事件，声明采样率与能力 | 回合与上下文的任何决策 |
-| 音频传输（`TransportBase`） | 声音的来源与去向 | 采集与播放、统计播放进度、打断时淡出、把客户端的控制帧转成对智能体的调用 | 任何对话逻辑 |
+| 组件 | 定位 | 负责 |
+|------|------|------|
+| `RealtimeAgent` | 对话回合的状态机 | 划分回合、打断与上下文截断、工具调用与用户确认、产出智能体事件、模型断线后重连 |
+| 实时语音模型（`RealtimeModelBase`） | 模型 API 的适配器 | 维护 WebSocket 会话，把协议消息翻译成统一的模型事件，声明采样率与能力 |
+| 音频传输（`TransportBase`） | 声音的来源与去向 | 采集与播放、统计播放进度、打断时淡出、把客户端的控制帧转成对智能体的调用 |
 
-模型与传输都是抽象，AgentScope 提供 DashScope 的两个模型类与本地声卡传输 `LocalAudioTransport`，开发者也可以实现自己的模型 API 适配器或浏览器传输。
+其中实时语音模型和音频传输模块支持从基类进行拓展，用以适配新的模型 API，或接入浏览器等其它客户端。
 
 ## 快速开始
 
