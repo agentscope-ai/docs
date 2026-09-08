@@ -21,9 +21,7 @@ AgentScope 通过 `RealtimeAgent` 实现全双工方案，支持：
 |----------|--------|------|----------|
 | DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime、qwen3-omni-flash-realtime、qwen-omni-turbo-realtime | 仅 qwen3.5 系列 |
 | DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | qwen-audio-3.0-realtime-plus、qwen-audio-3.0-realtime-flash | 是 |
-| OpenAI（Realtime） | 即将支持 | | |
-| Gemini（Live） | 即将支持 | | |
-| xAI（Grok Voice） | 即将支持 | | |
+| 更多模型 API | 即将上线 | | |
 
 ## 核心概念
 
@@ -45,13 +43,13 @@ flowchart LR
     A -- 智能体事件 --> D([开发者代码])
 ```
 
-三个组件的定位与职责如下：
+三个组件的职责如下：
 
-| 组件 | 定位 | 负责 |
-|------|------|------|
-| `RealtimeAgent` | 对话回合的状态机 | 划分回合、打断与上下文截断、工具调用与用户确认、产出智能体事件、模型断线后重连 |
-| 实时语音模型（`RealtimeModelBase`） | 模型 API 的适配器 | 维护 WebSocket 会话，把协议消息翻译成统一的模型事件，声明采样率与能力 |
-| 音频传输（`TransportBase`） | 声音的来源与去向 | 采集与播放、统计播放进度、打断时淡出、把客户端的控制帧转成对智能体的调用 |
+| 组件 | 负责 |
+|------|------|
+| `RealtimeAgent` | 划分回合、打断与上下文截断、工具调用与用户确认、产出智能体事件、模型断线后重连 |
+| 实时语音模型（`RealtimeModelBase`） | 维护 WebSocket 会话，把协议消息翻译成统一的模型事件，声明采样率与能力 |
+| 音频传输（`TransportBase`） | 采集与播放、统计播放进度、打断时淡出、把客户端的控制帧转成对智能体的调用 |
 
 其中实时语音模型和音频传输模块支持从基类进行拓展，用以适配新的模型 API，或接入浏览器等其它客户端。
 
@@ -429,7 +427,7 @@ model = classes[card.model_type](card.name, credential, model_card=card)
 | 传输 | 说明 |
 |------|------|
 | `LocalAudioTransport` | 本地麦克风与扬声器，基于 `sounddevice`，适合本机调试 |
-| 浏览器传输 | 即将支持 |
+| 浏览器传输 | 即将上线 |
 
 ### 本地声卡
 
