@@ -22,12 +22,13 @@
 - 模型 fallback、TTS、Knowledge Base 等 Session 级配置
 - 连接官方示例 Web UI
 - REST API 的完整流程
+- 健康检查、Session 状态与游标分页
 
 ## 前置要求
 
 - 完成 Tutorial 12
-- 安装服务依赖：`pip install "agentscope[service]==2.0.4" fakeredis httpx`
-- Redis 服务可选；本教程默认用 `fakeredis` 跑内存模式
+- 安装服务依赖：`pip install -e ".[service,storage-sql]" aiosqlite httpx`
+- 本教程默认使用本地 SQLite，无需启动 Redis
 - 如需体验 Web UI：Node.js 20+ 与 `pnpm`
 
 ## 核心概念
@@ -46,11 +47,13 @@
 ```python
 from agentscope.app import create_app
 from agentscope.app.message_bus import InMemoryMessageBus
-from agentscope.app.storage import RedisStorage
+from agentscope.app.storage import AsyncSQLAlchemyStorage
 from agentscope.app.workspace_manager import LocalWorkspaceManager
 
 app = create_app(
-    storage=RedisStorage(host="localhost", port=6379),
+    storage=AsyncSQLAlchemyStorage(
+        "sqlite+aiosqlite:///./agent_service.db",
+    ),
     message_bus=InMemoryMessageBus(),
     workspace_manager=LocalWorkspaceManager(basedir="./workspaces"),
 )
@@ -65,9 +68,14 @@ app = create_app(
 | `/sessions` | 会话管理 |
 | `/chat` | 触发一次对话运行 |
 | `/sessions/{id}/stream` | 订阅会话事件流 |
+| `/health` | 服务存活与就绪状态 |
 | `/schedule` | 定时任务 |
 | `/knowledge_bases` | Knowledge Base / RAG 管理（启用后可用） |
-| `/tts_model` | TTS 模型 schema / 发现 |
+| `/model` / `/embedding-model` | 模型 schema / 发现 |
+| `/tts-model` | TTS 模型 schema / 发现 |
+| `/workspace` | Workspace 文件、MCP 与 Skill 管理 |
+| `/mcp` / `/skill` / `/hub` | 用户能力库与远端 Hub |
+| `/channels` | 钉钉、飞书等消息渠道（注册 Channel 后可用） |
 
 `MessageBus` 是服务里的实时事件通道：`POST /chat/` 只负责触发 run，Agent 产生的事件会写入 bus，再由 `/sessions/{id}/stream` 以 SSE 推给客户端。单进程教程用 `InMemoryMessageBus()`；多进程或多 worker 部署时换成 `RedisMessageBus()`。
 
@@ -110,6 +118,11 @@ Agent（模板）              Session（运行时）
 6. GET  /sessions/{id}/status           ── 查看 running / idle / awaiting 状态
 7. GET  /sessions/{id}/messages         ── 查看会话消息
 ```
+
+`GET /sessions/{id}/status` 返回 `running`、`idle`、
+`awaiting_permission` 或 `awaiting_external_result`，适合刷新页面后恢复 UI 状态。
+消息列表使用 `before=<message-id>` 向前翻页，并通过 `has_more` 告诉客户端是否还有
+更早消息；旧的数值 `offset` 参数已经弃用。
 
 ### Web UI
 
@@ -155,6 +168,8 @@ data: {"type": "REPLY_END", ...}
 服务化之后，模型挂掉/限流就不再是"重跑一次"能解决的事——请求来自真实用户或定时任务，必须**自动**降级或重试。AgentScope 有两层配置：
 
 ```python
+import os
+
 from agentscope.agent import Agent
 from agentscope.agent import ModelConfig
 from agentscope.credential import DashScopeCredential
@@ -174,8 +189,8 @@ agent = Agent(
     system_prompt="...",
     model=primary,
     model_config=ModelConfig(
-        max_retries=2,        # 主模型先重试 2 次
-        fallback_model=backup, # 还失败就切到 backup（backup 也享受 max_retries）
+        max_retries=2,  # 每个模型在初次失败后再重试 2 次
+        fallback_model=backup,  # 主模型耗尽尝试次数后切换
     ),
 )
 ```
@@ -222,7 +237,12 @@ app = create_app(
 )
 ```
 
-这里的 factory 是异步函数，签名为 `(user_id, agent_id, session_id) -> list[ToolBase]`。它会在每次组装服务端 Agent 时执行，因此既可以返回固定工具，也可以按用户、Agent 或 Session 决定可用能力。
+工具 factory 是异步函数，签名为
+`(user_id, agent_id, session_id) -> list[ToolBase]`。Middleware factory 的当前签名
+多一个已解析的 `workspace` 参数：
+`(user_id, agent_id, session_id, workspace) -> list[MiddlewareBase]`；旧的三参数
+Middleware factory 仍兼容。两种 factory 都会在每次组装服务端 Agent 时执行，
+因此可以按用户、Agent、Session 和 Workspace 决定运行期能力。
 
 本教程同时展示两种注入方式：
 
@@ -246,15 +266,15 @@ app = create_app(
 
 Agent 模板只保存名称、系统提示词和运行配置；具体模型在创建 Session 时通过 `chat_model_config` 绑定。Python 工具不要放进 HTTP Agent payload，而是在服务宿主侧通过 `extra_agent_tools` 注入；MCP 和 Skill 则可以通过 Workspace 的 `default_mcps` / `skill_paths` 注入。本期 `main.py` 两种方式都用了：`SalesProfile` / `SalesBreakdown` 来自服务宿主，`report_writer` Skill 来自 Workspace。
 
-> 默认存储用 `fakeredis` 跑内存模式，**无需启动真实 Redis**。实际部署时把 `_make_inmemory_storage()` 换成 `RedisStorage(host=..., port=...)` 即可。
+> 默认存储使用本地 SQLite，**无需启动 Redis**，并且服务重启后数据仍然存在。多实例部署时可换成 PostgreSQL 等共享 SQL 数据库；如果同时需要跨进程事件传输，再把 `InMemoryMessageBus` 换成 `RedisMessageBus`。
 
 ## 运行示例
 
 ```bash
-# 安装零依赖运行所需的两个小包
-pip install fakeredis httpx
+# 在仓库根目录安装服务、SQL 存储和客户端依赖
+pip install -e ".[service,storage-sql]" aiosqlite httpx
 
-# 终端 A：启动服务（默认 8000，无 Redis 依赖）
+# 终端 A：启动服务（默认 8000，数据写入本地 SQLite）
 cd tutorials/13_agent_service
 python main.py
 
@@ -272,6 +292,9 @@ python client.py
 5. `POST /chat/` — 触发一次回复
 6. Agent 调用 `SalesProfile` / `SalesBreakdown`，客户端流式打印工具和文本事件
 7. `GET /sessions/{id}/messages` — 列出已持久化的对话
+
+客户端还会先调用 `/health`，在回复结束后读取 Session status，并用较小的
+`limit` 演示 `before` 游标如何加载更早消息。
 
 如果偏好命令行，仍可用 curl —— `main.py` 的 `print_overview()` 会列出每一步的 endpoint。
 
@@ -293,6 +316,7 @@ Web UI 首次打开时填入 `http://localhost:8000` 和一个用户名即可。
 - 自定义认证中间件替换默认的 `X-User-Id` Header
 - 使用 `extra_credentials` 注册自定义 Credential 类型
 - 使用 `extra_agent_tools` 做按用户/租户的工具注入
+- 在 `extra_agent_middlewares` 的四参数 factory 中按 Workspace 写审计日志
 - 为 Session 配置 `knowledge_config` 或 `tts_model_config`
 
 ## 下一期预告

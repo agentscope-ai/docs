@@ -5,6 +5,7 @@ This tutorial demonstrates:
 - Msg structure and ContentBlock types
 - Event lifecycle (start → delta → end)
 - Building a complete message from an event stream via append_event()
+- Requesting validated structured output with a Pydantic schema
 
 Using OpenAI? Swap the 4 model lines in main() — see T01 README.
 """
@@ -13,11 +14,21 @@ import asyncio
 import os
 from collections import Counter
 
+from pydantic import BaseModel, Field
+
 from agentscope.agent import Agent
 from agentscope.credential import DashScopeCredential
 from agentscope.event import EventType
 from agentscope.message import UserMsg, AssistantMsg
 from agentscope.model import DashScopeChatModel
+
+
+class SalesInsight(BaseModel):
+    """A small machine-readable answer shape."""
+
+    metric: str = Field(description="The metric being reported.")
+    value: float = Field(description="The numeric metric value.")
+    explanation: str = Field(description="A one-sentence explanation.")
 
 
 # =========================================================================
@@ -99,6 +110,27 @@ async def example_reconstruct_msg(agent: Agent) -> None:
     )
 
 
+# =========================================================================
+# Example 4: Validated structured output
+# =========================================================================
+async def example_structured_output(agent: Agent) -> None:
+    print("\n--- Example 4: Structured output ---")
+
+    result = await agent.reply(
+        UserMsg(
+            name="user",
+            content=(
+                "Return one example sales metric. Use 12.5 as the numeric "
+                "value and explain it in one sentence."
+            ),
+        ),
+        structured_schema=SalesInsight,
+    )
+
+    print(f"finished_reason   = {result.finished_reason}")
+    print(f"structured_output = {result.structured_output}")
+
+
 async def main() -> None:
     await example_msg_structure()
 
@@ -115,6 +147,7 @@ async def main() -> None:
 
     await example_event_types(agent)
     await example_reconstruct_msg(agent)
+    await example_structured_output(agent)
 
 
 if __name__ == "__main__":

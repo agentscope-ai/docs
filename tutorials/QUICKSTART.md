@@ -4,7 +4,7 @@
 
 最终应用包含两种运行方式：
 
-- 本地模式：Toolkit 同时装配 Python Tool、filesystem MCP 和报告 Skill，通过事件流展示运行过程，并在写文件前请求审批。
+- 本地模式：Toolkit 同时装配 Python Tool、Time MCP 和报告 Skill，通过事件流展示运行过程，并在写文件前请求审批。
 - 服务模式：同一组能力由 Agent Service 托管，通过 REST 创建 Agent 和 Session，通过 SSE 返回事件和审批请求。
 
 最终项目结构如下：
@@ -38,18 +38,21 @@ AgentScope 2.0 不只是封装一次模型请求，而是提供构建完整 Agen
 开始前准备环境和目录：
 
 ```bash
-conda activate agentscope-tutorial-py312
-pip install -e ".[service]" fakeredis httpx
+conda create -n agentscope-tutorial python=3.12 -y
+conda activate agentscope-tutorial
+pip install -e ".[service,storage-sql]" aiosqlite httpx uv
 export DASHSCOPE_API_KEY="your-key"
 
 mkdir -p tutorials/datamuse_app/skills/report_writer
 cd tutorials/datamuse_app
-npx --version
+uvx --version
 ```
 
 仓库已经包含 `tutorials/data/sales_data.csv`，两种运行方式都会读取这份数据。
 
-filesystem MCP 通过 `npx` 启动，因此需要提前安装 Node.js。第一次运行时，`npx` 会下载 `@modelcontextprotocol/server-filesystem`。
+Time MCP 通过 `uvx` 启动，第一次运行时会下载 `mcp-server-time`。本教程按当前
+仓库版本 `agentscope==2.0.7.post1` 编写；在源码仓库中使用上面的 editable
+install，复制到独立项目时请固定相同版本，避免 API 随依赖升级漂移。
 
 ---
 
@@ -273,7 +276,7 @@ Toolkit 可以同时接收三类能力来源：
 | 来源 | 本例 | 作用 |
 |---|---|---|
 | `tools` | `SalesSummary`、`ReportWriter` | 本地 Python 业务能力 |
-| `mcps` | filesystem MCP | 通过标准协议列目录、读取文件 |
+| `mcps` | Time MCP | 通过标准协议获取带时区的报告时间 |
 | `skills_or_loaders` | `report_writer` | 按需加载报告编写指南 |
 
 MCP 工具会使用 `mcp__{server_name}__{tool_name}` 命名空间，避免多个服务出现同名工具。Skill 存在时，Toolkit 会额外暴露名为 `Skill` 的只读工具。
@@ -302,7 +305,7 @@ from agentscope.skill import LocalSkillLoader
 from agentscope.state import AgentState
 from agentscope.tool import Toolkit
 
-from tools import DATA_DIR, build_tools
+from tools import build_tools
 
 
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
@@ -361,27 +364,26 @@ async def main() -> None:
         model="qwen-plus",
     )
 
-    filesystem_mcp = MCPClient(
-        name="filesystem",
+    time_mcp = MCPClient(
+        name="time",
         is_stateful=True,
         mcp_config=StdioMCPConfig(
-            command="npx",
+            command="uvx",
             args=[
-                "-y",
-                "@modelcontextprotocol/server-filesystem",
-                str(DATA_DIR),
+                "mcp-server-time",
+                "--local-timezone=Asia/Shanghai",
             ],
         ),
-        enable_tools=["list_directory", "read_file"],
+        enable_tools=["get_current_time", "convert_time"],
     )
-    await filesystem_mcp.connect()
+    await time_mcp.connect()
 
     try:
         agent = Agent(
             name="DataMuse",
             system_prompt=(
                 "You are DataMuse, a concise sales-data analyst. "
-                "Use filesystem MCP tools to inspect available data files. "
+                "Use the Time MCP for the report timestamp. "
                 "Use SalesSummary for every sales figure. Before writing "
                 "a report, call Skill with skill='report_writer', follow "
                 "its instructions, then call ReportWriter."
@@ -389,7 +391,7 @@ async def main() -> None:
             model=model,
             toolkit=Toolkit(
                 tools=build_tools(),
-                mcps=[filesystem_mcp],
+                mcps=[time_mcp],
                 skills_or_loaders=[
                     LocalSkillLoader(
                         directory=str(SKILLS_DIR),
@@ -409,14 +411,14 @@ async def main() -> None:
             UserMsg(
                 name="user",
                 content=(
-                    "Use filesystem MCP to list the data directory, "
+                    "Use Time MCP to get the current Asia/Shanghai time, "
                     "summarize revenue by region, then use the "
                     "report_writer skill to write a Markdown report."
                 ),
             ),
         )
     finally:
-        await filesystem_mcp.close()
+        await time_mcp.close()
 
 
 if __name__ == "__main__":
@@ -426,7 +428,7 @@ if __name__ == "__main__":
 运行：
 
 ```bash
-conda activate agentscope-tutorial-py312
+conda activate agentscope-tutorial
 cd tutorials/datamuse_app
 python local_app.py
 ```
@@ -514,56 +516,45 @@ Python 工具不能放进 `POST /agent/` 的 JSON。`extra_agent_tools` 是工�
 
 ```python
 from pathlib import Path
-from typing import Any
 
-import fakeredis.aioredis
 import uvicorn
 
 from agentscope.app import create_app
 from agentscope.app.message_bus import InMemoryMessageBus
-from agentscope.app.storage import RedisStorage
+from agentscope.app.storage import AsyncSQLAlchemyStorage
 from agentscope.app.workspace_manager import LocalWorkspaceManager
 from agentscope.mcp import MCPClient, StdioMCPConfig
 
-from tools import DATA_DIR, build_service_tools
+from tools import build_service_tools
 
 
-WORKDIR = Path(__file__).resolve().parent / "workspaces"
+APP_DIR = Path(__file__).resolve().parent
+WORKDIR = APP_DIR / "workspaces"
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
 
 
-def make_demo_storage() -> Any:
-    """Use RedisStorage's data model with an in-process fakeredis client."""
-    storage = RedisStorage.__new__(RedisStorage)
-    storage._client = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    storage._external_pool = None
-    storage._owned_pool = None
-    storage.key_ttl = None
-    storage.key_config = RedisStorage.KeyConfig()
-    return storage
-
-
-filesystem_mcp = MCPClient(
-    name="filesystem",
+time_mcp = MCPClient(
+    name="time",
     is_stateful=True,
     mcp_config=StdioMCPConfig(
-        command="npx",
+        command="uvx",
         args=[
-            "-y",
-            "@modelcontextprotocol/server-filesystem",
-            str(DATA_DIR),
+            "mcp-server-time",
+            "--local-timezone=Asia/Shanghai",
         ],
     ),
-    enable_tools=["list_directory", "read_file"],
+    enable_tools=["get_current_time", "convert_time"],
 )
 
 
 app = create_app(
-    storage=make_demo_storage(),
+    storage=AsyncSQLAlchemyStorage(
+        f"sqlite+aiosqlite:///{APP_DIR / 'agent_service.db'}",
+    ),
     message_bus=InMemoryMessageBus(),
     workspace_manager=LocalWorkspaceManager(
         basedir=str(WORKDIR),
-        default_mcps=[filesystem_mcp],
+        default_mcps=[time_mcp],
         skill_paths=[str(SKILLS_DIR / "report_writer")],
     ),
     extra_agent_tools=build_service_tools,
@@ -576,12 +567,12 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-先使用 `fakeredis`，可以在不启动外部 Redis 的情况下走通完整 HTTP 流程。`LocalWorkspaceManager` 会初始化 filesystem MCP，并把 `report_writer` Skill 放进新建的 Workspace。需要持久化或多进程部署时，把 `make_demo_storage()` 替换成真实 `RedisStorage(...)`，并把 `InMemoryMessageBus` 换成跨进程 MessageBus。
+本地示例使用 `AsyncSQLAlchemyStorage` 和 SQLite，不需要启动外部数据库，服务重启后数据仍会保存在 `agent_service.db`。`LocalWorkspaceManager` 会初始化 MCP，并把 `report_writer` Skill 放进新建的 Workspace。多实例部署时，把 SQLite 换成 PostgreSQL 等共享 SQL 数据库，并把 `InMemoryMessageBus` 换成跨进程 MessageBus。
 
 启动服务：
 
 ```bash
-conda activate agentscope-tutorial-py312
+conda activate agentscope-tutorial
 cd tutorials/datamuse_app
 python service.py
 ```
@@ -671,8 +662,8 @@ async def main() -> None:
                 "name": "DataMuse",
                 "system_prompt": (
                     "You are DataMuse, a concise sales-data analyst. "
-                    "Use filesystem MCP tools to inspect available data "
-                    "files. Use SalesSummary for every sales figure. "
+                    "Use Time MCP for the report timestamp. Use "
+                    "SalesSummary for every sales figure. "
                     "Before writing a report, call Skill with "
                     "skill='report_writer', follow its instructions, "
                     "then call ReportWriter."
@@ -709,8 +700,9 @@ async def main() -> None:
                     {
                         "type": "text",
                         "text": (
-                            "Use filesystem MCP to list the data directory, "
-                            "summarize revenue by category, then use the "
+                            "Use Time MCP to get the current Asia/Shanghai "
+                            "time, summarize revenue by category, then use "
+                            "the "
                             "report_writer skill to write a Markdown report."
                         ),
                     },
@@ -768,7 +760,7 @@ if __name__ == "__main__":
 保持 `service.py` 运行，在另一个终端执行：
 
 ```bash
-conda activate agentscope-tutorial-py312
+conda activate agentscope-tutorial
 cd tutorials/datamuse_app
 python client.py
 ```
@@ -793,7 +785,7 @@ python client.py
 
 | 当前实现 | 部署时替换为 |
 |---|---|
-| fakeredis | 独立 Redis / 托管 Redis |
+| 本地 SQLite | PostgreSQL 等共享 SQL 数据库 |
 | InMemoryMessageBus | 支持多进程的 MessageBus |
 | LocalWorkspaceManager | Docker、E2B 或 K8s WorkspaceManager |
 | 单一模型配置 | 主模型 + `fallback_chat_model_config` |

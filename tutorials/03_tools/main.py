@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from agentscope.agent import Agent
 from agentscope.credential import DashScopeCredential
 from agentscope.event import EventType
@@ -39,6 +41,15 @@ from agentscope.tool import (
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SALES_CSV = DATA_DIR / "sales_data.csv"
+
+
+class SalesQuery(BaseModel):
+    """Validated input for the query_sales FunctionTool."""
+
+    category: str = ""
+    region: str = ""
+    min_total: float = Field(default=0.0, ge=0)
+    limit: int = Field(default=10, ge=1, le=20)
 
 
 # =========================================================================
@@ -289,7 +300,11 @@ async def main() -> None:
                 Glob(),
                 Grep(),
                 # FunctionTool adapter
-                FunctionTool(query_sales, is_read_only=True),
+                FunctionTool(
+                    query_sales,
+                    input_schema=SalesQuery,
+                    is_read_only=True,
+                ),
                 # Custom ToolBase
                 SalesSummary(),
             ],

@@ -90,7 +90,7 @@ group = ToolGroup(
 
 **调用语义**
 
-- 每次调用 = **最终期望状态**（覆盖式，不是增量）。源码里第一步就是 `activated_groups.clear()`，然后把传 `True` 的组加进去
+- 每次调用 = **最终期望状态**（覆盖式，不是增量）。实现会先校验组名和参数类型；只有校验全部通过，才清空旧状态并写入传 `True` 的组
 - 没显式传 `True` 的组都会被关掉——LLM 想保留某组必须每次都列上
 - `basic` 组不出现在 schema 里，永远激活，关不掉
 - 工具返回值是激活组的 `instructions` 文本（来自 `ToolGroup(instructions=...)`），LLM 收到后才知道这组该怎么用
@@ -102,14 +102,18 @@ LLM 决定要做可视化：
   reset_tools({"visualization": True})
       ↓
   ResetTools.call:
-    1. activated_groups.clear()
-    2. activated_groups = ["visualization"]
-    3. 返回 visualization 组的 instructions 给 LLM
+    1. 校验组名存在、每个值都是 bool
+    2. activated_groups.clear()
+    3. activated_groups = ["visualization"]
+    4. 返回 visualization 组的 instructions 给 LLM
       ↓
   下一轮 LLM 看到的 toolkit schema：
     basic + reset_tools + visualization 组的工具
     （data_io / analysis 已经从 schema 里消失）
 ```
+
+如果组名不存在或值不是布尔值，调用返回 `ERROR`，原来的激活状态保持不变。
+因此一次拼错的 `reset_tools` 不会先把 Agent 正在使用的工具全部关掉。
 
 ### 设计原则
 

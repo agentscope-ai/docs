@@ -2,9 +2,9 @@
 
 > **DataMuse** — 一个从零到可部署的智能数据分析助手
 
-本教程系列以一个**数据分析助手 DataMuse** 为业务主线：学生始终围绕同一份销售数据解决“读取、分析、解释、交付报告”的问题，再逐步学习工具调用、权限控制、人机协作、流式 UI、上下文管理、中间件、服务化、定时任务和多 Agent 协作。
+本教程系列以一个**数据分析助手 DataMuse** 为业务主线：读者始终围绕同一份销售数据解决“读取、分析、解释、交付报告”的问题，再逐步学习工具调用、权限控制、人机协作、流式 UI、上下文管理、中间件、服务化、定时任务和多 Agent 协作。
 
-这里复用的是**业务目标和数据语境**，不是要求 16 章始终运行同一个 Python 进程。随着部署方式和协作方式变化，DataMuse 会出现三种应用形态。
+这里复用的是**业务目标和数据语境**，不是要求 18 章始终运行同一个 Python 进程。随着部署方式和协作方式变化，DataMuse 会出现三种应用形态。
 
 ## DataMuse 的三种应用形态
 
@@ -23,10 +23,8 @@
 ## 前置要求
 
 - Python 3.12
-- AgentScope 2.0.4（`pip install agentscope==2.0.4`）
+- 当前仓库版本 `agentscope==2.0.7.post1`（源码运行使用 `pip install -e .`）
 - 至少一个 LLM API Key（DashScope / OpenAI / Ollama）
-
-本教程按 AgentScope 2.0.4 编写；使用其他版本时，API 可能存在差异。
 
 ## 教程列表
 
@@ -35,8 +33,8 @@
 | # | 主题 | 你将学到 |
 |---|------|----------|
 | [01](01_hello_agentscope/) | **Hello AgentScope** | 核心四要素、reply vs reply_stream、切换模型 |
-| [02](02_message_and_event/) | **Message & Event** | 消息结构、事件生命周期、append_event 重建消息 |
-| [03](03_tools/) | **Tool 系统** | 内置工具、FunctionTool、自定义 ToolBase |
+| [02](02_message_and_event/) | **Message & Event** | 消息/事件、结构化输出、Python/TS 重建消息 |
+| [03](03_tools/) | **Tool 系统** | 内置工具、多模态 Read、FunctionTool schema、自定义 ToolBase |
 
 ### Phase 2: 进阶篇
 
@@ -47,24 +45,26 @@
 | [06](06_skills/) | **Skill** | Markdown 技能定义、`Skill` 工具、按需加载 |
 | [07](07_permissions/) | **Permission 系统** | 五种模式、规则配置、危险路径保护 |
 | [08](08_human_in_the_loop/) | **Human-in-the-Loop** | 用户确认、外部执行、渐进式信任 |
-| [09](09_streaming_ui/) | **流式 UI** | 事件分发、Token 追踪、终端 UI |
-| [10](10_context_management/) | **Context 管理** | 上下文压缩、工具结果截断、Offloader |
+| [09](09_streaming_ui/) | **流式 UI** | 事件分发、结束/错误状态、内置 Console、自定义 UI |
+| [10](10_context_management/) | **Context 管理** | 压缩缓冲、失败回退、工具/图片限制、Offloader |
 
 ### Phase 3: 工程篇
 
 | # | 主题 | 你将学到 |
 |---|------|----------|
-| [11](11_middleware/) | **Middleware** | 执行 Hook、压缩 Hook、TracingMiddleware、计费/日志 |
-| [12](12_workspace/) | **Workspace** | LocalWorkspace、Docker/E2B 隔离、Offloader、MCP/Skill 管理 |
-| [13](13_agent_service/) | **Agent Service** | FastAPI 服务、多租户、Session、Credential、Web UI、**模型 fallback / 自动重试** |
-| [14](14_scheduling/) | **Schedule** | Cron 定时任务、Stateful/Stateless 模式 |
+| [11](11_middleware/) | **Middleware** | 生命周期/权限 Hook、TracingMiddleware、计费/日志 |
+| [12](12_workspace/) | **Workspace** | 多种隔离后端、共享/预热、Offloader、MCP/Skill 管理 |
+| [13](13_agent_service/) | **Agent Service** | SQL Storage、多租户、Session 状态/分页、SSE、模型 fallback |
+| [14](14_scheduling/) | **Schedule** | Cron 校验、Stateful/Stateless、Workspace、调度 owner |
 
 ### Phase 4: 高级篇
 
 | # | 主题 | 你将学到 |
 |---|------|----------|
-| [15](15_multi_agent/) | **Multi-Agent** | 多 Agent 编排、observe()、串行/并行/动态路由 |
+| [15](15_multi_agent/) | **Multi-Agent** | observe()、串行/并行编排、GoalPipeline、Service Team |
 | [16](16_complete_datamuse/) | **Complete DataMuse** | 把本地单 Agent 核心模块收束为命令行与轻量 Web 应用 |
+| [17](17_rag_knowledge_base/) | **RAG 与 Knowledge Base** | 索引、向量检索、LLM rerank、static/agentic RAG |
+| [18](18_service_extensions/) | **Agent Service 扩展** | Knowledge Base、Hub、Channel 与后台 worker 边界 |
 
 ## 示例数据
 
@@ -90,9 +90,9 @@ python generate_sales_data.py
 
 ```bash
 # 准备环境
-conda create -n agentscope-tutorial-py312 python=3.12 -y
-conda activate agentscope-tutorial-py312
-pip install agentscope==2.0.4
+conda create -n agentscope-tutorial python=3.12 -y
+conda activate agentscope-tutorial
+pip install -e .
 
 # 设置 API Key
 export DASHSCOPE_API_KEY="your-key"
@@ -108,13 +108,13 @@ python main.py
 
 ```bash
 # 如果还没有准备环境，先执行：
-conda create -n agentscope-tutorial-py312 python=3.12 -y
-conda activate agentscope-tutorial-py312
-pip install agentscope==2.0.4
+conda create -n agentscope-tutorial python=3.12 -y
+conda activate agentscope-tutorial
+pip install -e .
 export DASHSCOPE_API_KEY="your-key"
 
 cd tutorials/16_complete_datamuse
 python main.py
 ```
 
-它会把 T01-T12 中适合本地应用的关键模块收束成一个最小可用的 DataMuse：读取销售数据、做维度拆解、在写报告前触发确认，并把 Markdown 报告保存到本地 workspace。T13-T15 则分别保留为服务化、调度和团队化的独立扩展路径。
+它会把 T01-T12 中适合本地应用的关键模块收束成一个最小可用的 DataMuse：读取销售数据、做维度拆解、在写报告前触发确认，并把 Markdown 报告保存到本地 workspace。T13-T15 分别保留为服务化、调度和团队化路径，T17-T18 再补充知识库与扩展部署能力。

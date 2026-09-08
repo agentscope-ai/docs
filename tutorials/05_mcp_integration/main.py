@@ -19,7 +19,7 @@ from agentscope.credential import DashScopeCredential
 from agentscope.event import EventType
 from agentscope.mcp import MCPClient, StdioMCPConfig, HttpMCPConfig
 from agentscope.message import UserMsg
-from agentscope.model import DashScopeChatModel
+from agentscope.model import ChatModelBase, DashScopeChatModel
 from agentscope.permission import PermissionContext, PermissionMode
 from agentscope.state import AgentState
 from agentscope.tool import Toolkit, Read, Glob, Grep
@@ -50,88 +50,79 @@ async def stream_reply(agent: Agent, content: str) -> None:
 
 
 # =========================================================================
-# Example 1: Stdio MCP — local filesystem server
+# Example 1: Stdio MCP — time server
 # =========================================================================
-async def example_stdio_mcp(model) -> None:
-    """Connect to a local filesystem MCP server via stdio."""
+async def example_stdio_mcp(model: ChatModelBase) -> None:
+    """Connect to a time MCP server via stdio."""
     print("\n" + "=" * 60)
-    print("Example 1: Stdio MCP (Filesystem Server)")
+    print("Example 1: Stdio MCP (Time Server)")
     print("=" * 60)
 
-    # Check if npx is available
-    if not shutil.which("npx"):
-        print("  [SKIP] npx not found. Install Node.js to try Stdio MCP.")
+    if not shutil.which("uvx"):
+        print("  [SKIP] uvx not found. Install uv to try Stdio MCP.")
         print("  Showing configuration example instead:\n")
         print("  client = MCPClient(")
-        print('      name="filesystem",')
+        print('      name="time",')
         print("      is_stateful=True,")
         print("      mcp_config=StdioMCPConfig(")
-        print('          command="npx",')
-        print(
-            '          args=["-y", "@modelcontextprotocol/server-filesystem",',
-        )
-        print(f'                "{DATA_DIR}"],')
+        print('          command="uvx",')
+        print('          args=["mcp-server-time",')
+        print('                "--local-timezone=Asia/Shanghai"],')
         print("      ),")
-        print('      enable_tools=["read_file", "list_directory"],')
+        print('      enable_tools=["get_current_time", "convert_time"],')
         print("  )")
         return
 
-    # Create a Stdio MCP client for the filesystem server
-    fs_client = MCPClient(
-        name="filesystem",
+    time_client = MCPClient(
+        name="time",
         is_stateful=True,
         mcp_config=StdioMCPConfig(
-            command="npx",
+            command="uvx",
             args=[
-                "-y",
-                "@modelcontextprotocol/server-filesystem",
-                str(DATA_DIR),
+                "mcp-server-time",
+                "--local-timezone=Asia/Shanghai",
             ],
         ),
-        enable_tools=["read_file", "list_directory"],
+        enable_tools=["get_current_time", "convert_time"],
     )
 
-    # Stateful client: must connect before use
-    print("  Connecting to filesystem MCP server...")
-    await fs_client.connect()
+    print("  Connecting to time MCP server...")
+    await time_client.connect()
     print("  Connected!")
+    try:
+        tools = await time_client.list_tools()
+        print(f"  Available tools ({len(tools)}):")
+        for tool in tools:
+            print(f"    - {tool.name}: {tool.description[:60]}...")
 
-    # List available tools
-    tools = await fs_client.list_tools()
-    print(f"  Available tools ({len(tools)}):")
-    for tool in tools:
-        print(f"    - {tool.name}: {tool.description[:60]}...")
-
-    # Create agent with MCP tools + local tools
-    agent = Agent(
-        name="DataMuse",
-        system_prompt=(
-            "You are DataMuse, a data analysis assistant. You have access to "
-            "filesystem tools via MCP and local tools for text search. "
-            "Keep responses concise."
-        ),
-        model=model,
-        toolkit=Toolkit(
-            tools=[Grep()],
-            mcps=[fs_client],
-        ),
-        state=AgentState(
-            permission_context=PermissionContext(
-                mode=PermissionMode.BYPASS,
+        # Create agent with MCP tools + local tools
+        agent = Agent(
+            name="DataMuse",
+            system_prompt=(
+                "You are DataMuse, a data analysis assistant. You have "
+                "access to timezone tools via MCP and local tools for text "
+                "search. Keep responses concise."
             ),
-        ),
-    )
+            model=model,
+            toolkit=Toolkit(
+                tools=[Grep()],
+                mcps=[time_client],
+            ),
+            state=AgentState(
+                permission_context=PermissionContext(
+                    mode=PermissionMode.BYPASS,
+                ),
+            ),
+        )
 
-    # Use the agent with MCP tools
-    await stream_reply(
-        agent,
-        f"List the files in {DATA_DIR} using the filesystem MCP tools, "
-        "then read the first 5 lines of sales_data.csv.",
-    )
-
-    # Clean up
-    await fs_client.close()
-    print("  MCP connection closed.")
+        await stream_reply(
+            agent,
+            "Use the time MCP tools to report the current Asia/Shanghai "
+            "time and convert 09:00 Asia/Shanghai to America/New_York.",
+        )
+    finally:
+        await time_client.close()
+        print("  MCP connection closed.")
 
 
 # =========================================================================
@@ -147,16 +138,14 @@ async def example_mcp_config() -> None:
     print("\n  Pattern 1: Stdio MCP (stateful)")
     print("  ─────────────────────────────────")
     stdio_client = MCPClient(
-        name="sqlite",
+        name="time_local",
         is_stateful=True,
         mcp_config=StdioMCPConfig(
-            command="npx",
+            command="uvx",
             args=[
-                "-y",
-                "@modelcontextprotocol/server-sqlite",
-                "/tmp/demo.db",
+                "mcp-server-time",
+                "--local-timezone=Asia/Shanghai",
             ],
-            env={"NODE_ENV": "production"},
         ),
     )
     print(f"  Name: {stdio_client.name}")
@@ -200,17 +189,17 @@ async def example_mcp_config() -> None:
     print("\n  Pattern 4: Tool Filtering")
     print("  ──────────────────────────")
     filtered_client = MCPClient(
-        name="fs_readonly",
+        name="time_current_only",
         is_stateful=True,
         mcp_config=StdioMCPConfig(
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+            command="uvx",
+            args=["mcp-server-time"],
         ),
-        disable_tools=["write_file", "create_directory", "move_file"],
+        enable_tools=["get_current_time"],
     )
     print(f"  Name: {filtered_client.name}")
-    print(f"  Disabled tools: {filtered_client.disable_tools}")
-    print("  → Only read-only operations will be exposed to the Agent")
+    print(f"  Enabled tools: {filtered_client.enable_tools}")
+    print("  → Only the selected operation will be exposed to the Agent")
 
 
 # =========================================================================
@@ -229,7 +218,7 @@ async def example_mcp_with_tool_groups() -> None:
   toolkit = Toolkit(
       # Basic group (always active): local tools + MCP
       tools=[Read(), Glob(), Grep()],
-      mcps=[filesystem_mcp],
+      mcps=[time_mcp],
 
       tool_groups=[
           # Named group: MCP tools activated on demand
@@ -275,14 +264,13 @@ async def example_naming_convention() -> None:
 
   Examples:
   ────────
-  Server: "filesystem"
-    • read_file    → mcp__filesystem__read_file
-    • write_file   → mcp__filesystem__write_file
-    • list_dir     → mcp__filesystem__list_dir
+  Server: "time"
+    • get_current_time → mcp__time__get_current_time
+    • convert_time     → mcp__time__convert_time
 
-  Server: "sqlite"
-    • query        → mcp__sqlite__query
-    • read_file    → mcp__sqlite__read_file   (no conflict!)
+  Server: "database"
+    • query        → mcp__database__query
+    • list_tables  → mcp__database__list_tables
 
   Server: "browser"
     • navigate     → mcp__browser__navigate
@@ -298,7 +286,7 @@ async def example_naming_convention() -> None:
 # =========================================================================
 # Example 5: Working demo with local tools
 # =========================================================================
-async def example_local_tools_demo(model) -> None:
+async def example_local_tools_demo(model: ChatModelBase) -> None:
     """Demo with local tools showing the same pattern MCP would follow."""
     print("\n" + "=" * 60)
     print("Example 5: Mixed Tools Demo (Local + MCP-ready)")
@@ -349,7 +337,7 @@ async def main() -> None:
         model="qwen-plus",
     )
 
-    # Example 1: Stdio MCP (requires Node.js)
+    # Example 1: Stdio MCP (requires uv / uvx)
     await example_stdio_mcp(model)
 
     # Example 2: Configuration patterns (no server needed)

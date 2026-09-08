@@ -18,7 +18,7 @@ from agentscope.agent import Agent, ContextConfig
 from agentscope.credential import DashScopeCredential
 from agentscope.event import EventType
 from agentscope.message import UserMsg, TextBlock
-from agentscope.model import DashScopeChatModel
+from agentscope.model import ChatModelBase, DashScopeChatModel
 from agentscope.permission import (
     PermissionBehavior,
     PermissionContext,
@@ -159,7 +159,9 @@ async def example_context_config() -> None:
             ContextConfig(
                 trigger_ratio=0.5,
                 reserve_ratio=0.05,
+                context_buffer_ratio=0.1,
                 tool_result_limit=1000,
+                compression_tool_enabled=True,
             ),
         ),
         (
@@ -167,7 +169,10 @@ async def example_context_config() -> None:
             ContextConfig(
                 trigger_ratio=0.85,
                 reserve_ratio=0.2,
+                context_buffer_ratio=0.15,
                 tool_result_limit=5000,
+                compression_fallback_to_truncation=False,
+                max_image_num=10,
             ),
         ),
     ]
@@ -176,13 +181,22 @@ async def example_context_config() -> None:
         print(f"\n  {name}:")
         print(f"    trigger_ratio:    {cfg.trigger_ratio}")
         print(f"    reserve_ratio:    {cfg.reserve_ratio}")
+        print(f"    context_buffer_ratio: {cfg.context_buffer_ratio}")
         print(f"    tool_result_limit: {cfg.tool_result_limit} tokens")
+        print(
+            "    compression_tool_enabled: " f"{cfg.compression_tool_enabled}",
+        )
+        print(
+            "    fallback_to_truncation: "
+            f"{cfg.compression_fallback_to_truncation}",
+        )
+        print(f"    max_image_num: {cfg.max_image_num}")
 
 
 # =========================================================================
 # Example 2: Tool result truncation
 # =========================================================================
-async def example_tool_result_truncation(model) -> None:
+async def example_tool_result_truncation(model: ChatModelBase) -> None:
     """Demonstrate tool result truncation with different limits."""
     print("\n" + "=" * 60)
     print("Example 2: Tool Result Truncation")
@@ -222,7 +236,7 @@ async def example_tool_result_truncation(model) -> None:
 # =========================================================================
 # Example 3: Multi-turn with context growth
 # =========================================================================
-async def example_multi_turn_context(model) -> None:
+async def example_multi_turn_context(model: ChatModelBase) -> None:
     """Show context growth across multiple turns."""
     print("\n" + "=" * 60)
     print("Example 3: Multi-Turn Context Growth")
@@ -245,7 +259,9 @@ async def example_multi_turn_context(model) -> None:
         context_config=ContextConfig(
             trigger_ratio=0.8,
             reserve_ratio=0.1,
+            context_buffer_ratio=0.2,
             tool_result_limit=2000,
+            compression_tool_enabled=True,
         ),
         state=AgentState(
             permission_context=PermissionContext(
@@ -286,6 +302,9 @@ async def example_compression_flow() -> None:
 
   estimate current tokens
       │
+      ├─ tokens enter the context buffer
+      │   └─ inject usage into runtime state; Agent may compress early
+      │
       ├─ tokens < context_size × trigger_ratio
       │   └─ skip (no compression needed)
       │
@@ -315,6 +334,13 @@ async def example_compression_flow() -> None:
       └─ result tokens > tool_result_limit
           └─ truncate to fit limit
               (or offload to workspace if Offloader available)
+
+  Failure and multimodal safeguards:
+  ──────────────────────────────────
+  compression_fallback_to_truncation=True
+      └─ summary failure falls back to dropping oldest context
+  max_image_num=5
+      └─ older images are offloaded when possible, otherwise removed
 
   Manual Compression:
   ──────────────────

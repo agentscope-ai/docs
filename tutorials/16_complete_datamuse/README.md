@@ -1,4 +1,4 @@
-# Tutorial 16: Complete DataMuse — 最终整合
+# Tutorial 16: Complete DataMuse — 本地应用整合
 
 本章把 T01-T12 中适合放进单体应用的核心模块合成一个可运行的 DataMuse：它会读取同一份销售数据，做数据概览和维度拆解，在写入报告前触发确认事件，并把最终 Markdown 报告保存到本地 workspace 中。
 
@@ -31,7 +31,7 @@ T13-T15 是同一业务案例的另外两条扩展路径，不是本章必须嵌
 - 建议完成 Tutorial 01-12
 - T13-T15 可选：用于理解服务化、调度和团队化扩展
 - Python 3.12
-- 安装 AgentScope：`pip install agentscope==2.0.4`
+- 在仓库根目录安装当前版本：`pip install -e ".[service]"`
 - 准备好 `tutorials/data/sales_data.csv`
 - 设置 `DASHSCOPE_API_KEY` 或 `OPENAI_API_KEY`
 
@@ -59,8 +59,8 @@ python main.py
 用浏览器交互，体验流式输出 + 权限确认弹窗。无需 Redis 或 Node.js：
 
 ```bash
+conda activate agentscope-tutorial
 cd tutorials/16_complete_datamuse
-pip install uvicorn fastapi
 python serve.py
 ```
 
@@ -167,14 +167,20 @@ async def chat(req: ChatRequest):
 ├── README.md         ← 你在读的文档
 ├── main.py           ← 模式 A：命令行 Demo
 ├── serve.py          ← 模式 B：FastAPI + SSE 服务
+├── tools.py          ← 两种模式共用的业务工具和 Middleware
 ├── index.html        ← 模式 B：单文件前端
 └── workspace/        ← 运行后生成
     └── reports/
 ```
 
-## 为什么这是最终章
+## 为什么在这里收束本地主线
 
 前面的章节分别讲概念和 API，本章回答"学完以后能不能搭出一个 Data Agent"。它不是新的抽象，也不是把每种架构堆到一起，而是把 DataMuse 收束成一个能跑的最小完整应用：有数据输入、有分析工具、有权限边界、有运行过程、有最终产物。
 
 - **模式 A** 展示所有核心模块如何在一个脚本里协作
 - **模式 B** 展示如何用最少代码（一个 serve.py + 一个 HTML）把 Agent 暴露为 Web 应用
+
+## 后续扩展
+
+- **Tutorial 17: RAG 与 Knowledge Base**：让 DataMuse 检索私有业务口径和报告规范。
+- **Tutorial 18: Agent Service 扩展**：把知识库、能力 Hub、Channel 和后台 worker 接入服务。

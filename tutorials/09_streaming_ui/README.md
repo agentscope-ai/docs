@@ -1,6 +1,8 @@
 # Tutorial 09: 流式 UI — 构建实时交互界面
 
-> **什么时候需要这个？** 你要做真正的实时交互界面（终端 TUI、Web 聊天等），需要把文本、多模态数据、思考过程、工具调用、token 统计和 HITL 确认组织成一套连贯的视觉体验。
+> **什么时候需要这个？** 你要开发自定义 Web UI、TUI 或把事件接入自己的
+> 前端协议时，需要理解事件分发与状态管理。只想在终端快速测试 Agent 时，直接
+> 使用内置 `agentscope.console`，不必自己重写渲染和审批循环。
 
 ## 本章基于前序章节
 
@@ -10,11 +12,12 @@
 
 ## 你将学到
 
-- Event 类型全景及其 start → delta → end 生命周期
+- Event 类型全景及分块事件的 start → delta → end 生命周期
 - `reply_id` 和 `block_id` 的关联关系
 - Token 用量追踪（`ModelCallEndEvent`）
 - 如何用事件分发构建一个功能丰富的终端 UI
 - HITL 事件在 UI 中的整合处理
+- 什么时候使用内置 Console，什么时候自行消费事件流
 
 ## 前置要求
 
@@ -30,7 +33,7 @@ AgentScope 的事件系统涵盖 Agent 执行的每个阶段：
 ```
 Reply 级别
 ├─ REPLY_START          ── 回复开始（包含 session_id, reply_id, name）
-└─ REPLY_END            ── 回复结束
+└─ REPLY_END            ── 回复结束（finished_reason, error）
 
 Model 调用
 ├─ MODEL_CALL_START     ── 模型调用开始（model_name）
@@ -72,12 +75,16 @@ HITL 事件
 ├─ EXTERNAL_EXECUTION_RESULT   ── 外部执行结果
 └─ USER_INTERRUPT              ── 用户中止一个等待恢复的回复
 
-其他
-├─ EXCEED_MAX_ITERS    ── 超过最大迭代次数
+扩展
 └─ CUSTOM              ── 服务或应用自定义的扩展事件
 ```
 
 `USER_CONFIRM_RESULT`、`EXTERNAL_EXECUTION_RESULT` 和 `USER_INTERRUPT` 通常是 UI 传回 `reply_stream()`、用于恢复或中止 parked reply 的输入事件，不一定会出现在一次普通回复的输出流里。UI 仍应认识它们，并对未知 `CUSTOM.name` 或未来新增事件做安全降级。
+
+回复是否正常完成统一看 `REPLY_END.finished_reason`，可能值为 `completed`、
+`interrupted`、`exceed_max_iters` 或 `error`。当值为 `error` 时，读取
+`REPLY_END.error.type` 和 `error.message`。`EXCEED_MAX_ITERS` 事件只为旧客户端
+兼容而保留，新 UI 不应依赖它。
 
 ### Token 用量追踪
 
@@ -115,8 +122,38 @@ async for event in agent.reply_stream(msg):
             total_input_tokens += event.input_tokens
             total_output_tokens += event.output_tokens
         case EventType.REPLY_END:
+            if event.finished_reason != "completed":
+                # 显示中断、迭代耗尽或结构化错误
+                render_reply_status(event.finished_reason, event.error)
             # 显示最终统计
+            render_final_stats(total_input_tokens, total_output_tokens)
 ```
+
+### 内置 Console 与自定义 UI
+
+新版本提供 `agentscope.console`。快速调试时，`launch_console()` 已经处理流式
+渲染、工具审批和 `Ctrl+C` 中断：
+
+```python
+from agentscope.console import launch_console
+
+await launch_console(agent, verbosity="debug")
+```
+
+如果输入循环由你的应用负责，但仍想复用终端渲染，可以只使用
+`ConsoleRenderer`：
+
+```python
+from agentscope.console import ConsoleRenderer
+
+renderer = ConsoleRenderer()
+async for event in agent.reply_stream(msg):
+    renderer.render(event)
+final_msg = renderer.last_msg
+```
+
+本章继续手写事件分发，是为了展示自定义 UI 需要维护的状态；实际项目若只需要
+命令行调试，应优先选择 `launch_console()`。
 
 ## 示例：终端流式 UI
 
@@ -138,7 +175,7 @@ python main.py
 
 ## 进一步探索
 
-- 用 `rich` 库替换 print，实现彩色输出和进度条
+- 比较 `ConsoleRenderer` 与本章手写分发器对同一事件流的呈现
 - 添加工具结果的折叠/展开功能
 - 统计每次模型调用的耗时（利用 `MODEL_CALL_START` 和 `MODEL_CALL_END` 的时间差）
 - 将 HITL 事件集成到 UI 中，实现交互式确认

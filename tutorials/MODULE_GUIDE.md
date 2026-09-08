@@ -7,18 +7,17 @@ DataMuse 销售分析应用。
 
 ## 环境准备
 
-本文固定使用以下环境，避免 Python 或 AgentScope 版本差异影响示例：
-
-- Python 3.12
-- AgentScope 2.0.4
-- Node.js 20+（通过 `npx` 启动示例中的 MCP Server）
+在本仓库中运行示例时使用 Python 3.12 环境：
 
 ```bash
-conda create -n agentscope-tutorial-py312 python=3.12 -y
-conda activate agentscope-tutorial-py312
-pip install "agentscope[service]==2.0.4"
+conda create -n agentscope-tutorial python=3.12 -y
+conda activate agentscope-tutorial
+pip install -e ".[service,storage-sql,rag,vdb-qdrant]" aiosqlite uv
 export DASHSCOPE_API_KEY="your-api-key"
 ```
+
+本文按当前仓库版本 `agentscope==2.0.7.post1` 编写。源码仓库使用 editable
+install；把示例复制到独立项目时，应固定相同版本。
 
 本文代码以 DashScope 为例。使用其他模型时，只需要替换 Credential 和 Model，
 Agent、Tool、Permission、Middleware 等上层模块不需要改写。
@@ -64,8 +63,8 @@ flowchart LR
 | Agent | `agentscope.agent` | 执行 reasoning-acting 循环 | 所有 Agent 应用 |
 | State | `agentscope.state` | 保存会话、上下文、权限、任务和 middleware 状态 | 多轮对话、恢复执行、持久化 |
 | Tool | `agentscope.tool` | 把 Python 或系统能力暴露给 Agent | Agent 需要读取、计算或执行操作时 |
-| MCP | `agentscope.mcp` | 连接标准化外部工具服务器 | 需要接入 MCP Server 提供的工具或服务时 |
-| Skill | `agentscope.skill` | 按需加载可复用的操作指南 | 需要按 Skill 中的规则、顺序或 SOP 组合工具时 |
+| MCP | `agentscope.mcp` | 连接标准化外部工具服务器 | 能力由独立服务提供或需要跨框架复用时 |
+| Skill | `agentscope.skill` | 按需加载可复用的操作指南 | 流程复杂但不需要新增可执行接口时 |
 | Permission | `agentscope.permission` | 对每次工具调用做 ALLOW、ASK 或 DENY 决策 | Agent 能产生真实副作用时 |
 | Middleware | `agentscope.middleware` | 横切扩展 Agent 生命周期 | tracing、RAG、记忆、预算、TTS、审计 |
 | Workspace | `agentscope.workspace` | 提供隔离工作目录、工具、MCP、Skill 和 Offloader | 文件操作、沙箱执行、服务化隔离 |
@@ -161,6 +160,7 @@ model = DashScopeChatModel(
 - 只要最终答案：使用 `await agent.reply(...)`，得到完整 `Msg`。
 - 构建终端、Web UI、SSE 或审批流程：使用 `agent.reply_stream(...)` 处理事件。
 - 传递图片、音频或结构化内容：使用 `DataBlock`，不要把数据硬塞进字符串。
+- 让下游代码消费固定字段：给 `reply()` 传 `structured_schema`。
 
 ### 消息与流式事件
 
@@ -182,14 +182,29 @@ async for event in agent.reply_stream(message):
     elif event.type == EventType.TOOL_RESULT_END:
         print(f"[tool result] {event.state}")
     elif event.type == EventType.REPLY_END:
-        print()
+        print(f"\nfinished: {event.finished_reason}")
+        if event.error:
+            print(f"error: {event.error.type}: {event.error.message}")
 ```
 
 事件流是 Agent 与界面的稳定边界。UI 不需要知道 Agent 内部如何推理，只需要处理
 文本、工具、数据、确认和结束事件。
 
 `AssistantMsg.append_event(event)` 可以把事件流重新聚合为完整消息，适合网关或
-自定义客户端保存最终结果。
+自定义客户端保存最终结果。前端可使用 TypeScript 包
+`@agentscope-ai/agentscope` 中的 `appendEvent` 完成同样的聚合。
+
+文本、数据、思考和工具内容使用 start → delta → end；`HINT_BLOCK`、HITL、
+中断和 `CUSTOM` 是一次性事件。回复结果统一读取
+`REPLY_END.finished_reason`，不要依赖兼容保留的 `EXCEED_MAX_ITERS` 事件。
+
+```python
+result = await agent.reply(message, structured_schema=SalesInsight)
+print(result.structured_output)
+```
+
+流式时设置 `yield_final_msg=True`，即可在事件之后拿到带
+`structured_output` 的最终 `Msg`。
 
 ---
 
@@ -224,7 +239,11 @@ agent = Agent(
     context_config=ContextConfig(
         trigger_ratio=0.8,
         reserve_ratio=0.1,
+        context_buffer_ratio=0.2,
         tool_result_limit=2000,
+        compression_tool_enabled=True,
+        compression_fallback_to_truncation=True,
+        max_image_num=5,
     ),
     react_config=ReActConfig(
         max_iters=12,
@@ -258,15 +277,13 @@ agent = Agent(
 
 ### 是什么
 
-Tool 是模型可以调用的可执行接口；Toolkit 是 Agent 的能力注册表。Toolkit 可以
-同时接收四类能力来源：
+Tool 是模型可以调用的可执行接口；Toolkit 是 Agent 的能力注册表。构造器接收
+四类来源：
 
-1. 内置 Tool，例如 `Read`、`Write`、`Bash`、`Grep`。
-2. `FunctionTool` 包装的 Python 函数。
-3. 自定义 `ToolBase` 子类。
-4. MCP Client 暴露的远程 Tool。
-
-Skill 也由 Toolkit 管理，但它提供的是操作指南，不是新的执行接口。
+1. `tools`：内置 Tool、`FunctionTool` 和自定义 `ToolBase` 实例。
+2. `mcps`：MCP Client 暴露的外部 Tool。
+3. `skills_or_loaders`：Skill 或 SkillLoader 提供的操作指南。
+4. `tool_groups`：按需激活的 Tool / MCP / Skill 组合。
 
 ### FunctionTool
 
@@ -289,8 +306,9 @@ toolkit = Toolkit(
 )
 ```
 
-`FunctionTool` 会从函数签名和 docstring 生成 JSON Schema。它适合快速包装已有
-函数；需要精细控制输入 Schema、流式结果或权限时，使用 `ToolBase`。
+`FunctionTool` 默认从函数签名和 docstring 生成 JSON Schema，也可以通过
+`input_schema=` 传入 JSON Schema 字典或 Pydantic `BaseModel`。它适合快速包装已有
+函数；需要流式结果或完全控制权限时，使用 `ToolBase`。
 
 ### 自定义 ToolBase
 
@@ -374,8 +392,8 @@ toolkit = Toolkit(
 
 ### 是什么
 
-MCP 把外部工具服务器转换成 AgentScope Tool。它适合连接数据库、浏览器、
-知识图谱或其他独立服务，并保持能力协议与 Agent 实现解耦。
+MCP 把外部工具服务器转换成 AgentScope Tool。它适合连接时间、数据库、
+浏览器或其他独立服务，并保持能力协议与 Agent 实现解耦。
 
 ### 什么时候用
 
@@ -392,33 +410,25 @@ from agentscope.mcp import MCPClient, StdioMCPConfig
 from agentscope.tool import Toolkit
 
 
-memory = MCPClient(
-    name="memory",
+time_mcp = MCPClient(
+    name="time",
     is_stateful=True,
     mcp_config=StdioMCPConfig(
-        command="npx",
+        command="uvx",
         args=[
-            "-y",
-            "@modelcontextprotocol/server-memory",
+            "mcp-server-time",
+            "--local-timezone=Asia/Shanghai",
         ],
     ),
-    enable_tools=[
-        "create_entities",
-        "add_observations",
-        "search_nodes",
-    ],
+    enable_tools=["get_current_time", "convert_time"],
 )
 
-await memory.connect()
+await time_mcp.connect()
 try:
-    toolkit = Toolkit(mcps=[memory])
+    toolkit = Toolkit(mcps=[time_mcp])
 finally:
-    await memory.close()
+    await time_mcp.close()
 ```
-
-这里使用 Memory MCP 来保存和检索结构化信息。在后面的 Workspace 场景中，
-`basic` 工具已经提供 `Read`、`Write`、`Edit`、`Glob` 和 `Grep`，因此不再额外
-接入功能重复的 filesystem MCP。
 
 HTTP MCP 使用 `HttpMCPConfig(url=..., headers=...)`。MCP 工具名会被命名空间化为
 `mcp__{server_name}__{tool_name}`，避免不同 Server 的同名工具冲突。
@@ -604,7 +614,11 @@ from agentscope.message import HintBlock
 config = ContextConfig(
     trigger_ratio=0.8,
     reserve_ratio=0.1,
+    context_buffer_ratio=0.2,
     tool_result_limit=2000,
+    compression_tool_enabled=True,
+    compression_fallback_to_truncation=True,
+    max_image_num=5,
 )
 
 await agent.compress_context(
@@ -618,6 +632,10 @@ await agent.compress_context(
 `tool_result_limit` 限制的是进入上下文的工具结果，不等于工具不能产生更大输出。
 给 Agent 配置 `offloader=workspace` 后，被截断内容可以卸载到 Workspace，而不是
 直接丢失。
+
+`context_buffer_ratio` 决定在硬阈值前多久提醒 Agent；开启
+`compression_tool_enabled` 后 Agent 可主动压缩。摘要失败时默认回退到截断，
+`max_image_num` 则限制长期上下文里保留的图片数量。
 
 ---
 
@@ -634,6 +652,7 @@ Middleware 在不修改 Agent 主流程的前提下拦截生命周期。适合 t
 |---|---|
 | `on_reply` | 一次完整回复，包括 HITL 暂停与恢复 |
 | `on_reasoning` | 一轮 reasoning |
+| `on_check_permission` | 参数校验后、工具执行前的权限决策 |
 | `on_acting` | 已完成校验和权限判断后的纯工具执行 |
 | `on_model_call` | 原始模型 API 调用 |
 | `on_compress_context` | 上下文压缩 |
@@ -667,8 +686,9 @@ agent = Agent(
 )
 ```
 
-`on_acting` 看不到权限判断过程，因为它只包裹已经允许执行的 Tool 调用。需要记录
-完整审批流程时，应在 `on_reply` 观察事件流。
+`on_acting` 看不到权限判断过程，因为它只包裹已经允许执行的 Tool 调用。需要审计
+最终 ALLOW / ASK / DENY 时，实现 `on_check_permission` 并在调用
+`next_handler(**input_kwargs)` 后记录返回值；审批 UI 事件仍在 `on_reply` 中观察。
 
 ### 内置 Middleware
 
@@ -696,7 +716,7 @@ Workspace 是 Agent 的统一工作环境。它同时提供：
 - MCP 与 Skill 的生命周期和持久化
 - system prompt 中的工作目录说明
 - Context 和大结果的 Offloader
-- 本地目录、Docker、E2B 或 Kubernetes 隔离
+- Local、Docker、E2B、K8s、OpenSandbox、Daytona、Bubblewrap 或 Apple Container 隔离
 
 ### 什么时候用
 
@@ -712,7 +732,7 @@ from agentscope.workspace import LocalWorkspace
 
 async with LocalWorkspace(
     workdir="./workspace",
-    default_mcps=[memory_mcp],
+    default_mcps=[time_mcp],
     skill_paths=["./skills/report_writer"],
 ) as workspace:
     workspace_tools = await workspace.list_tools()
@@ -737,6 +757,10 @@ async with LocalWorkspace(
 
 库模式要显式把 Workspace 暴露的能力装进 Toolkit。Agent Service 的
 WorkspaceManager 会在每次组装 Agent 时完成这一步。
+
+服务端还可用 `IsolationPolicy` 选择 per-session / per-agent / per-user 边界，或在
+创建 Session 时显式传 `workspace_id` 共享环境。昂贵的沙箱 Manager 支持
+`PrewarmConfig` 提前创建实例；Skill 在 Workspace 内按 `agent_id` 分区。
 
 ---
 
@@ -788,8 +812,10 @@ async with store:
         filename="definitions.md",
     )
     chunks = await ApproxTokenChunker(
-        chunk_size=256,
-        overlap=32,
+        parameters=ApproxTokenChunker.Parameters(
+            chunk_size=256,
+            overlap=32,
+        ),
     ).chunk(sections)
     await knowledge.insert_document(
         chunks,
@@ -801,7 +827,9 @@ async with store:
         parameters=RAGMiddleware.Parameters(
             mode="agentic",
             top_k=3,
+            rerank_candidate_k=6,
         ),
+        rerank_model=primary,
     )
 
     agent = Agent(
@@ -815,7 +843,8 @@ async with store:
 
 `mode="static"` 会在每个新输入上自动检索并注入 Hint；`mode="agentic"` 会提供
 `search_knowledge` Tool，让模型决定何时搜索。上例显式把 `rag.list_tools()`
-加入 Toolkit，这是库模式的必要接线。
+加入 Toolkit，这是库模式的必要接线。`rerank_model` 会从更多向量候选中挑出最终
+`top_k`；它增加一次模型调用，失败时自动回退到原向量顺序。
 
 ---
 
@@ -892,7 +921,6 @@ app = create_app(
     message_bus=RedisMessageBus(host="localhost", port=6379),
     workspace_manager=LocalWorkspaceManager(
         basedir="./workspaces",
-        default_mcps=[memory_mcp],
         skill_paths=["./skills/report_writer"],
     ),
     extra_agent_tools=tool_factory,
@@ -901,8 +929,9 @@ app = create_app(
 ```
 
 `POST /agent/` 创建的是可序列化模板，不能在 JSON 里塞 Python `ToolBase` 对象。
-`extra_agent_tools` 和 `extra_agent_middlewares` 才是服务端运行期能力的注入点，
-并且可以按 `user_id`、`agent_id`、`session_id` 返回不同能力。
+`extra_agent_tools` 和 `extra_agent_middlewares` 才是服务端运行期能力的注入点。
+工具 factory 接收 `user_id`、`agent_id`、`session_id`；Middleware factory 还会
+接收已解析的 `workspace`，便于把记忆或审计数据放进正确的工作环境。
 
 ### 一次服务调用的顺序
 
@@ -963,6 +992,8 @@ response.raise_for_status()
 - 默认 `DONT_ASK`：ASK 会被拒绝，避免无人值守任务永久等待确认。
 
 定时任务应配合可重试模型、fallback 和可观测性，而不是依赖人工重跑。
+服务端会在持久化前校验 cron 和 timezone，并为触发出的 Session 分配真实
+Workspace。多副本部署只能让一个进程设置 `enable_scheduler=True`。
 
 ---
 
@@ -1005,8 +1036,10 @@ region_result, category_result = await asyncio.gather(
 )
 ```
 
-`observe()` 只共享上下文，不会让接收方立刻推理。库模式下 Python 代码就是最直接
-的编排层；服务模式需要持久化团队关系或动态 Worker 时，再使用 Team 能力。
+`observe()` 只共享上下文，不会让接收方立刻推理。固定串并行流程直接用 Python
+最清楚；执行者需要根据验证者反馈循环改进时使用 `GoalPipeline`；服务模式需要
+持久化团队关系或动态 Worker 时，再使用 Team 能力。每个 Agent 必须使用独立的
+`AgentState`，不能为了复用权限配置而共享同一个 State 实例。
 
 ---
 
@@ -1015,7 +1048,7 @@ region_result, category_result = await asyncio.gather(
 下面把核心模块组装为一个本地应用。它会：
 
 1. 使用主模型、自动重试和备用模型。
-2. 通过 MCP 查看数据目录。
+2. 通过 Time MCP 获取带时区的报告时间。
 3. 使用只读 Tool 计算销售指标。
 4. 按需加载报告 Skill。
 5. 在写报告前触发 Permission 和 HITL。
@@ -1104,25 +1137,19 @@ SALES_CSV = DATA_DIR / "sales_data.csv"
 SKILL_DIR = ROOT / "skills" / "report_writer"
 WORKSPACE_DIR = ROOT / "workspace"
 REPORTS_DIR = WORKSPACE_DIR / "reports"
-MEMORY_FILE = WORKSPACE_DIR / "memory.jsonl"
 
 
-memory_mcp = MCPClient(
-    name="memory",
+time_mcp = MCPClient(
+    name="time",
     is_stateful=True,
     mcp_config=StdioMCPConfig(
-        command="npx",
+        command="uvx",
         args=[
-            "-y",
-            "@modelcontextprotocol/server-memory",
+            "mcp-server-time",
+            "--local-timezone=Asia/Shanghai",
         ],
-        env={"MEMORY_FILE_PATH": str(MEMORY_FILE)},
     ),
-    enable_tools=[
-        "create_entities",
-        "add_observations",
-        "search_nodes",
-    ],
+    enable_tools=["get_current_time", "convert_time"],
 )
 
 
@@ -1285,7 +1312,7 @@ async def main() -> None:
 
     async with LocalWorkspace(
         workdir=str(WORKSPACE_DIR),
-        default_mcps=[memory_mcp],
+        default_mcps=[time_mcp],
         skill_paths=[str(SKILL_DIR)],
     ) as workspace:
         workspace_tools = await workspace.list_tools()
@@ -1297,9 +1324,7 @@ async def main() -> None:
             name="DataMuse",
             system_prompt=(
                 "You are DataMuse, a careful sales analyst. "
-                "Search the memory MCP for reporting preferences before "
-                "analysis, and store any new preference the user asks you "
-                "to remember. "
+                "Use Time MCP for the report timestamp. "
                 "Use SalesSummary for every numeric claim. Before writing, "
                 "load report_writer with the Skill tool, then call "
                 "WriteReport. Mention the saved path in the final answer.\n"
@@ -1333,9 +1358,9 @@ async def main() -> None:
         task = UserMsg(
             name="user",
             content=(
-                "Remember that my reports should lead with category "
-                "performance. Compare revenue by category and region, "
-                "then write datamuse_report.md."
+                "Get the current Asia/Shanghai time, inspect the data "
+                "directory, compare revenue by category and region, then "
+                "write datamuse_report.md."
             ),
         )
         await process_events(agent, agent.reply_stream(task))
@@ -1348,14 +1373,14 @@ if __name__ == "__main__":
 ### 运行
 
 ```bash
-conda activate agentscope-tutorial-py312
+conda activate agentscope-tutorial
 cd datamuse_demo
 python main.py
 ```
 
-首次运行 Memory MCP 时，`npx` 可能需要下载对应 Server 包。运行过程中，
-DataMuse 会通过 MCP 保存报告偏好，`SalesSummary` 会计算指标；`WriteReport`
-会产生确认事件，批准后才会在 `workspace/reports/` 写入 Markdown 文件。
+首次运行 Time MCP 时，`uvx` 可能需要下载 `mcp-server-time`。运行过程中
+`SalesSummary` 会直接执行；`WriteReport` 会产生确认事件，批准后才会在
+`workspace/reports/` 写入 Markdown 文件。
 
 ### 将同一组能力装入 Agent Service
 
@@ -1368,8 +1393,8 @@ from pathlib import Path
 import uvicorn
 
 from agentscope.app import create_app
-from agentscope.app.message_bus import RedisMessageBus
-from agentscope.app.storage import RedisStorage
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.storage import AsyncSQLAlchemyStorage
 from agentscope.app.workspace_manager import LocalWorkspaceManager
 from agentscope.mcp import MCPClient, StdioMCPConfig
 
@@ -1377,24 +1402,18 @@ from main import SKILL_DIR, SalesSummary, WriteReport
 
 
 SERVICE_WORKSPACES = Path("./service_workspaces").resolve()
-SERVICE_MEMORY_FILE = SERVICE_WORKSPACES / "memory.jsonl"
 
-memory_mcp = MCPClient(
-    name="memory",
+time_mcp = MCPClient(
+    name="time",
     is_stateful=True,
     mcp_config=StdioMCPConfig(
-        command="npx",
+        command="uvx",
         args=[
-            "-y",
-            "@modelcontextprotocol/server-memory",
+            "mcp-server-time",
+            "--local-timezone=Asia/Shanghai",
         ],
-        env={"MEMORY_FILE_PATH": str(SERVICE_MEMORY_FILE)},
     ),
-    enable_tools=[
-        "create_entities",
-        "add_observations",
-        "search_nodes",
-    ],
+    enable_tools=["get_current_time", "convert_time"],
 )
 
 
@@ -1405,11 +1424,13 @@ async def datamuse_tools(user_id, agent_id, session_id):
 
 
 app = create_app(
-    storage=RedisStorage(host="localhost", port=6379),
-    message_bus=RedisMessageBus(host="localhost", port=6379),
+    storage=AsyncSQLAlchemyStorage(
+        "sqlite+aiosqlite:///./agent_service.db",
+    ),
+    message_bus=InMemoryMessageBus(),
     workspace_manager=LocalWorkspaceManager(
         basedir=str(SERVICE_WORKSPACES),
-        default_mcps=[memory_mcp],
+        default_mcps=[time_mcp],
         skill_paths=[str(SKILL_DIR)],
     ),
     extra_agent_tools=datamuse_tools,

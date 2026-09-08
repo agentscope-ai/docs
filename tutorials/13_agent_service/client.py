@@ -2,7 +2,7 @@
 """Tutorial 13: Python client walkthrough of the Agent Service.
 
 Runs against the FastAPI service started by `python main.py` in another
-terminal. Walks the canonical 5-step flow:
+terminal. Walks the canonical service flow:
 
     POST /credential/   →  POST /agent/   →  POST /sessions/
         →  GET /sessions/{id}/stream + POST /chat/
@@ -83,6 +83,13 @@ async def step_1_create_credential(
     credential_id = resp.json()["credential_id"]
     print(f"[1] credential_id = {credential_id}")
     return credential_id, model_type, model_name
+
+
+async def check_health(client: httpx.AsyncClient) -> None:
+    """Fail early when the service has not completed startup."""
+    resp = await client.get("/health", headers=HEADERS)
+    resp.raise_for_status()
+    print(f"[0] health        = {resp.json()}")
 
 
 async def step_2_create_agent(client: httpx.AsyncClient) -> str:
@@ -184,6 +191,9 @@ async def step_4_chat(
                     flush=True,
                 )
             elif etype == "REPLY_END":
+                reason = event.get("finished_reason", "unknown")
+                if reason != "completed":
+                    print(f"\n  >> reply ended: {reason} {event.get('error')}")
                 print()
                 break
     print("-" * 60)
@@ -196,13 +206,16 @@ async def step_5_list_messages(
 ) -> None:
     resp = await client.get(
         f"/sessions/{session_id}/messages",
-        params={"agent_id": agent_id},
+        params={"agent_id": agent_id, "limit": 2},
         headers=HEADERS,
     )
     resp.raise_for_status()
     data = resp.json()
     msgs = data.get("messages", [])
-    print(f"\n[5] persisted messages: {len(msgs)}")
+    print(
+        f"\n[5] latest message page: {len(msgs)} "
+        f"(has_more={data.get('has_more')})",
+    )
     for msg in msgs:
         role = msg.get("role")
         content = msg.get("content")
@@ -213,11 +226,44 @@ async def step_5_list_messages(
         snippet = str(content)[:160].replace("\n", " ")
         print(f"    [{role}] {snippet}")
 
+    if data.get("has_more") and msgs:
+        older_resp = await client.get(
+            f"/sessions/{session_id}/messages",
+            params={
+                "agent_id": agent_id,
+                "limit": 2,
+                "before": msgs[0]["id"],
+            },
+            headers=HEADERS,
+        )
+        older_resp.raise_for_status()
+        older = older_resp.json()
+        print(
+            f"    older page via before=: {len(older['messages'])} "
+            f"(has_more={older['has_more']})",
+        )
+
+
+async def show_session_status(
+    client: httpx.AsyncClient,
+    agent_id: str,
+    session_id: str,
+) -> None:
+    """Read the unified status used by reconnecting clients."""
+    resp = await client.get(
+        f"/sessions/{session_id}/status",
+        params={"agent_id": agent_id},
+        headers=HEADERS,
+    )
+    resp.raise_for_status()
+    print(f"[status] {resp.json()}")
+
 
 async def main() -> None:
     print(f"Talking to {BASE_URL} as user {USER_ID!r}")
 
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=30.0) as client:
+        await check_health(client)
         cred_id, model_type, model_name = await step_1_create_credential(
             client,
         )
@@ -236,6 +282,7 @@ async def main() -> None:
             "Use SalesProfile to list the dataset columns and row count, "
             "then use SalesBreakdown to summarize revenue by category.",
         )
+        await show_session_status(client, agent_id, session_id)
         await step_5_list_messages(client, agent_id, session_id)
 
 

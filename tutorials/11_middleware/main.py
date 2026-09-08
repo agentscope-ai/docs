@@ -23,7 +23,7 @@ from agentscope.credential import DashScopeCredential
 from agentscope.event import EventType
 from agentscope.message import UserMsg, TextBlock, HintBlock
 from agentscope.middleware import MiddlewareBase
-from agentscope.model import DashScopeChatModel
+from agentscope.model import ChatModelBase, DashScopeChatModel
 from agentscope.permission import (
     PermissionBehavior,
     PermissionContext,
@@ -154,6 +154,24 @@ class LoggingMiddleware(MiddlewareBase):
         print(f"  [LOG] Reply ended for '{agent.name}' ({elapsed:.1f}s)")
 
 
+class PermissionAuditMiddleware(MiddlewareBase):
+    """Log the final permission decision for every validated tool call."""
+
+    async def on_check_permission(
+        self,
+        agent: Agent,
+        input_kwargs: dict,
+        next_handler: Callable[..., Awaitable[PermissionDecision]],
+    ) -> PermissionDecision:
+        decision = await next_handler(**input_kwargs)
+        tool = input_kwargs["tool"]
+        print(
+            f"  [PERMISSION] {agent.name}.{tool.name} -> "
+            f"{decision.behavior}",
+        )
+        return decision
+
+
 class TimingMiddleware(MiddlewareBase):
     """Measures model call duration."""
 
@@ -162,7 +180,7 @@ class TimingMiddleware(MiddlewareBase):
         agent: Agent,
         input_kwargs: dict,
         next_handler: Callable[..., Awaitable],
-    ):
+    ) -> Any:
         start = time.time()
         result = await next_handler(**input_kwargs)
         elapsed = time.time() - start
@@ -173,7 +191,7 @@ class TimingMiddleware(MiddlewareBase):
 class CostTrackerMiddleware(MiddlewareBase):
     """Tracks cumulative token usage across replies."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.call_count = 0
@@ -263,7 +281,7 @@ async def stream_reply(agent: Agent, content: str) -> None:
 # =========================================================================
 # Example 1: Onion pattern middlewares
 # =========================================================================
-async def example_onion_middlewares(model) -> None:
+async def example_onion_middlewares(model: ChatModelBase) -> None:
     """Demonstrate the onion pattern with logging and timing."""
     print("\n" + "=" * 60)
     print("Example 1: Onion Pattern (Logging + Timing)")
@@ -284,6 +302,7 @@ async def example_onion_middlewares(model) -> None:
         ),
         middlewares=[
             LoggingMiddleware(),
+            PermissionAuditMiddleware(),
             TimingMiddleware(),
         ],
         state=AgentState(
@@ -302,7 +321,7 @@ async def example_onion_middlewares(model) -> None:
 # =========================================================================
 # Example 2: Cost tracking middleware
 # =========================================================================
-async def example_cost_tracking(model) -> None:
+async def example_cost_tracking(model: ChatModelBase) -> None:
     """Track token costs across multiple replies."""
     print("\n" + "=" * 60)
     print("Example 2: Cost Tracking Middleware")
@@ -341,7 +360,7 @@ async def example_cost_tracking(model) -> None:
 # =========================================================================
 # Example 3: Dynamic prompt middleware
 # =========================================================================
-async def example_dynamic_prompt(model) -> None:
+async def example_dynamic_prompt(model: ChatModelBase) -> None:
     """Inject dynamic information into the system prompt, then act on it."""
     print("\n" + "=" * 60)
     print("Example 3: Dynamic Prompt Middleware (on_system_prompt)")
@@ -382,7 +401,7 @@ async def example_dynamic_prompt(model) -> None:
 # =========================================================================
 # Example 4: Compression hook
 # =========================================================================
-async def example_compression_hook(model) -> None:
+async def example_compression_hook(model: ChatModelBase) -> None:
     """Show how middleware can intercept manual context compression."""
     print("\n" + "=" * 60)
     print("Example 4: Compression Hook (on_compress_context)")

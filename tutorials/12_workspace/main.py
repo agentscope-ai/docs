@@ -263,6 +263,9 @@ async def example_architecture() -> None:
   └─────────────┘      └─────────────┘      └─────────────┘    └──────────┘
   本地目录              容器隔离              云端隔离            K8s 隔离
 
+  Other managers: OpenSandbox, Daytona, Bubblewrap, AppleContainer
+  Expensive sandboxes can use PrewarmConfig(size=2, max_creating=2).
+
   Workspace in Agent Construction
   ────────────────────────────────
 
@@ -287,7 +290,7 @@ async def example_architecture() -> None:
   # WorkspaceManager creates per-session workspaces
   from agentscope.app import create_app
   from agentscope.app.message_bus import InMemoryMessageBus
-  from agentscope.app.storage import RedisStorage
+  from agentscope.app.storage import AsyncSQLAlchemyStorage
   from agentscope.app.workspace_manager import LocalWorkspaceManager
 
   manager = LocalWorkspaceManager(
@@ -297,7 +300,9 @@ async def example_architecture() -> None:
   )
 
   app = create_app(
-      storage=RedisStorage(...),
+      storage=AsyncSQLAlchemyStorage(
+          "sqlite+aiosqlite:///./agent_service.db",
+      ),
       message_bus=InMemoryMessageBus(),
       workspace_manager=manager,
   )

@@ -11,8 +11,8 @@
 
 ## 前置要求
 
-- Python 3.11+
-- 安装 AgentScope：`pip install agentscope==2.0.4`
+- Python 3.12
+- 在仓库根目录安装当前版本：`pip install -e .`
 - 至少一个 LLM API Key（DashScope / OpenAI / Ollama 等）
 
 ## 核心概念
@@ -157,7 +157,7 @@ cd tutorials/01_hello_agentscope
 python main.py
 ```
 
-> 想用 OpenAI？按 [main.py](main.py) 顶部 docstring 的提示替换 `main()` 里的 4 行 model 配置即可。后续章节会用一个 `create_model()` helper 自动切换 provider，这里先保持最简结构。
+> 想用 OpenAI？按 [main.py](main.py) 顶部 docstring 的提示替换 `main()` 里的 4 行 model 配置即可。这里不封装 `create_model()`，让第一个示例只保留创建 Agent 和发起对话所需的代码。
 
 ## 进一步探索
 

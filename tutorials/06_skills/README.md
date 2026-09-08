@@ -1,6 +1,6 @@
 # Tutorial 06: Skill — 用 Markdown 扩展 Agent 能力
 
-> **什么时候需要这个？** 某个任务需要按照固定规则、顺序或 SOP 组合多个工具（比如：先采样数据 → 决定图表类型 → matplotlib 画图 → 保存）。你想把这套流程用 Markdown 沉淀下来，让 Agent 按需加载，而不是把它塞进 system prompt 让模型每次重新摸索。
+> **什么时候需要这个？** 某个任务需要"按一套套路组合多个工具"（比如：先采样数据 → 决定图表类型 → matplotlib 画图 → 保存）。你想把这套套路用 Markdown 沉淀下来，让 Agent 按需加载，而不是把它塞进 system prompt 让模型每次重新摸索。
 
 ## 本章基于前序章节
 

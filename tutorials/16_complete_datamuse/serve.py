@@ -7,7 +7,7 @@ Tools and middleware are imported from tools.py so this server stays in lock
 step with main.py.
 
 No Redis, no Node.js — just:
-    pip install agentscope uvicorn fastapi
+    pip install -e ".[service]"
     python serve.py
 
 Then open http://localhost:8000 in a browser.
@@ -16,6 +16,7 @@ Then open http://localhost:8000 in a browser.
 # pylint: disable=wrong-import-order
 import asyncio
 import json
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
@@ -102,7 +103,7 @@ app = FastAPI(title="DataMuse Demo")
 
 
 @app.get("/")
-async def index():
+async def index() -> FileResponse:
     return FileResponse(TUTORIAL_DIR / "index.html")
 
 
@@ -117,11 +118,11 @@ class ConfirmRequest(BaseModel):
 
 
 @app.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest) -> StreamingResponse:
     """Stream agent events as SSE."""
     ag = await get_agent()
 
-    async def event_stream():
+    async def event_stream() -> AsyncGenerator[str, None]:
         global _pending_confirm, _confirm_result
 
         msg = UserMsg(name="user", content=req.message)
@@ -156,7 +157,7 @@ async def chat(req: ChatRequest):
 
 
 @app.post("/confirm")
-async def confirm(req: ConfirmRequest):
+async def confirm(req: ConfirmRequest) -> dict[str, str]:
     """Receive user confirmation for pending tool calls."""
     global _confirm_result
 

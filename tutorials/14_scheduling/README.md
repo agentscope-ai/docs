@@ -15,13 +15,14 @@
 - Stateful vs Stateless 模式
 - 定时任务的权限模式
 - 定时任务触发后如何查看 Session 和运行状态
+- Cron 创建前校验、Workspace 绑定与多副本 owner
 - 通过 API 管理定时任务
 
 ## 前置要求
 
 - 完成 Tutorial 13
 - Agent Service 正常运行
-- `pip install "agentscope[service]==2.0.4" fakeredis httpx`
+- `pip install -e ".[service,storage-sql]" aiosqlite httpx`
 
 ## 核心概念
 
@@ -52,6 +53,31 @@ GET /sessions/{session_id}/status?agent_id=...
 GET /sessions/{session_id}/stream?agent_id=...
 GET /sessions/{session_id}/messages?agent_id=...
 ```
+
+服务端会先校验 cron 的 5 个字段、IANA timezone 和生效窗口，全部通过后才写入
+Storage；非法请求返回 422，不会留下无法触发的记录。本章代码会先发送一次故意
+错误的 cron，验证这条行为。
+
+每次计划触发时，Scheduler 会通过 `WorkspaceManager` 为自动创建的 Session 分配
+真实 `workspace_id`。因此 T13 注入的工具、MCP、Skill 和文件隔离规则同样适用于
+后台任务，而不是在一个没有 Workspace 的特殊执行路径里运行。
+
+### 多副本部署
+
+APScheduler 的 timer 在进程内运行。如果多个 API 副本都使用默认
+`enable_scheduler=True`，同一个任务会在每个副本各触发一次。部署时只让一个
+进程持有 timer：
+
+```python
+# scheduler owner
+app = create_app(..., enable_scheduler=True)
+
+# 其余 API replicas
+app = create_app(..., enable_scheduler=False)
+```
+
+关闭 timer 不会关闭 `/schedule` API；其他副本仍能保存任务，并通过 MessageBus
+通知 owner 更新调度状态。
 
 ### 创建定时任务
 
@@ -157,7 +183,7 @@ Agent：已创建定时任务 "Daily Report"，每天 9:00 自动执行。
 
 ## 运行示例
 
-本期的 `main.py` 是一段真实 httpx 客户端代码，不再只是打印说明。直接依赖 T13 的服务（默认走 `fakeredis` 内存模式，**无需 Redis**）：
+本期的 `main.py` 是一段真实 httpx 客户端代码，不再只是打印说明。直接依赖 T13 的服务（默认使用本地 SQLite，**无需 Redis**）：
 
 ```bash
 # 终端 A：启动服务
@@ -168,11 +194,12 @@ cd tutorials/14_scheduling && python main.py
 ```
 
 执行后会顺序：
-1. 注册 Credential + DataMuse Agent 模板（如果已有则复用）
-2. `POST /schedule/` 创建一条 Stateless 任务（默认 cron `*/5 * * * *`）
-3. `POST /schedule/` 创建一条 Stateful 任务（默认 cron `*/10 * * * *`）
-4. `GET /schedule/` 列出所有任务
-5. `GET /schedule/{id}/sessions` 查看每个任务触发的会话
+1. 注册 Credential + DataMuse Agent 模板
+2. 用无效 cron 验证服务返回 422 且不持久化
+3. `POST /schedule/` 创建一条 Stateless 任务（默认 cron `*/5 * * * *`）
+4. `POST /schedule/` 创建一条 Stateful 任务（默认 cron `*/10 * * * *`）
+5. `GET /schedule/` 列出所有任务
+6. `GET /schedule/{id}/sessions` 查看每个任务触发的会话
 
 默认会在结尾 `DELETE` 清掉两条任务方便重复实验；想保留并等真正触发，加 `CLEANUP=0 python main.py`，几分钟后再访问 `GET /schedule/{id}/sessions` 就能看到自动执行的会话。
 

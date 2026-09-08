@@ -3,12 +3,13 @@
 
 This tutorial demonstrates:
 - Using create_app() to build a FastAPI service
-- Zero-dep storage via fakeredis (swap to real Redis when deployed)
+- Local persistence via AsyncSQLAlchemyStorage and SQLite
 - InMemoryMessageBus for local event delivery
 - extra_agent_tools for injecting server-side DataMuse tools
 - LocalWorkspaceManager with skill_paths to inject T06 skills
 - The complete API flow: Credential → Agent → Session → Stream + Chat
 - SSE streaming from the Session stream endpoint
+- Health, session status, and cursor-paginated message APIs
 
 Two ways to drive the service:
   - terminal A: python main.py            (this file — starts the service)
@@ -17,8 +18,7 @@ Two ways to drive the service:
 Or use the companion Web UI in examples/web_ui.
 
 Prerequisites:
-- pip install "agentscope[service]" httpx
-- pip install fakeredis            # zero-dep in-memory storage
+- pip install -e ".[service,storage-sql]" aiosqlite httpx
 - DASHSCOPE_API_KEY (or OPENAI_API_KEY) in env
 """
 # pylint: disable=import-outside-toplevel
@@ -163,35 +163,6 @@ async def datamuse_tools(
     return [SalesProfile(), SalesBreakdown()]
 
 
-def _make_inmemory_storage() -> Any:
-    """Build a RedisStorage backed by an in-process fakeredis client.
-
-    Same pattern AgentScope's own RedisStorage unit tests use — no Redis
-    server required, no extra StorageBase implementation to maintain.
-    """
-    try:
-        import fakeredis.aioredis
-    except ImportError as missing:
-        raise ImportError(
-            "Tutorial 13 defaults to an in-memory store backed by fakeredis. "
-            "Install it with: pip install fakeredis\n"
-            "Or edit main.py to use RedisStorage(host=..., port=...).",
-        ) from missing
-
-    from agentscope.app.storage import RedisStorage
-
-    # pylint: disable=protected-access
-    # Mirrors the pattern in tests/storage_redis_test.py — we deliberately
-    # construct a bare RedisStorage and swap its backing client for fakeredis.
-    storage = RedisStorage.__new__(RedisStorage)
-    storage._client = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    storage._external_pool = None
-    storage._owned_pool = None
-    storage.key_ttl = None
-    storage.key_config = RedisStorage.KeyConfig()
-    return storage
-
-
 def create_service() -> tuple[Any, Any]:
     """Create the AgentScope service application."""
     import uvicorn
@@ -200,6 +171,7 @@ def create_service() -> tuple[Any, Any]:
 
     from agentscope.app import create_app
     from agentscope.app.message_bus import InMemoryMessageBus
+    from agentscope.app.storage import AsyncSQLAlchemyStorage
     from agentscope.app.workspace_manager import LocalWorkspaceManager
 
     basedir = str(TUTORIAL_DIR / "workspaces")
@@ -213,7 +185,9 @@ def create_service() -> tuple[Any, Any]:
     ]
 
     app = create_app(
-        storage=_make_inmemory_storage(),
+        storage=AsyncSQLAlchemyStorage(
+            f"sqlite+aiosqlite:///{TUTORIAL_DIR / 'agent_service.db'}",
+        ),
         message_bus=InMemoryMessageBus(),
         workspace_manager=LocalWorkspaceManager(
             basedir=basedir,
@@ -241,7 +215,7 @@ def print_overview() -> None:
         """
 Tutorial 13: Agent Service
 ============================================================
-Storage : fakeredis (in-memory)        — swap RedisStorage for deployment
+Storage : SQLite (persistent locally)  — use PostgreSQL/Redis when deployed
 Bus     : InMemoryMessageBus           — swap RedisMessageBus for workers
 Skills  : tutorials/06_skills/skills/report_writer injected
 Tools   : SalesProfile + SalesBreakdown injected by extra_agent_tools
@@ -257,6 +231,7 @@ Or with curl:
   Step 4  GET  /sessions/{id}/stream?agent_id=...
   Step 5  POST /chat/               Trigger a reply
   Step 6  GET  /sessions/{id}/messages?agent_id=...
+  Status  GET  /sessions/{id}/status?agent_id=...
 
 Or with the official Web UI:
   cd examples/web_ui && pnpm install && pnpm dev

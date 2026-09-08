@@ -39,7 +39,8 @@ Agent.reply()
 │   │   │
 │   │   └─ on_model_call ── 拦截原始模型 API 调用
 │   │
-│   └─ on_acting     ── 拦截工具执行
+│   ├─ on_check_permission ── 拦截单次工具权限决策
+│   └─ on_acting            ── 拦截已获准的工具执行
 │
 └─ on_system_prompt  ── 变换系统提示（独立管线）
 
@@ -55,6 +56,7 @@ Middleware.list_tools()
 |------|------|------|
 | `on_reply` | 洋葱 | 拦截整个回复，包含所有 ReAct 循环 |
 | `on_reasoning` | 洋葱 | 拦截推理阶段（每个 ReAct 迭代） |
+| `on_check_permission` | 洋葱 | 在参数校验后、执行前审计或改写权限决策 |
 | `on_acting` | 洋葱 | 拦截工具执行 |
 | `on_model_call` | 洋葱 | 拦截模型 API 调用 |
 | `on_compress_context` | 洋葱 | 拦截 `compress_context()`，适合补压缩提示、记录压缩日志 |
@@ -63,7 +65,8 @@ Middleware.list_tools()
 
 ### 洋葱模型 vs 变换器模型
 
-**洋葱模型**（on_reply, on_reasoning, on_acting, on_model_call, on_compress_context）：
+**洋葱模型**（`on_reply`、`on_reasoning`、`on_check_permission`、
+`on_acting`、`on_model_call`、`on_compress_context`）：
 
 ```python
 class MyMiddleware(MiddlewareBase):
@@ -138,6 +141,29 @@ agent = Agent(
 
 当未配置 tracing 时，`TracingMiddleware` 零开销直通。
 
+### 权限检查 Hook
+
+`on_check_permission` 收到已经完成 schema 校验的 `tool_call`、`tool` 和
+`tool_input`。最常见的做法是先调用下一层，再记录最终决策：
+
+```python
+class PermissionAuditMiddleware(MiddlewareBase):
+    async def on_check_permission(
+        self,
+        agent,
+        input_kwargs,
+        next_handler,
+    ):
+        decision = await next_handler(**input_kwargs)
+        tool = input_kwargs["tool"]
+        print(f"{agent.name}: {tool.name} -> {decision.behavior}")
+        return decision
+```
+
+不调用 `next_handler` 而直接返回决定，会绕过工具自身和 PermissionEngine 的正常
+判定，应该只用于明确的集中策略。这个 Hook 只决定“能不能执行”；真正的工具结果
+缓存、计时或转换仍放在 `on_acting`。
+
 ### 常见内置 Middleware
 
 | Middleware | 什么时候用 |
@@ -150,13 +176,14 @@ agent = Agent(
 
 ## 示例：为 DataMuse 添加中间件
 
-本期实现四个自定义中间件：
+本期实现六个自定义中间件：
 
 1. **LoggingMiddleware** — 记录 reply 开始/结束
 2. **TimingMiddleware** — 测量模型调用耗时
 3. **CostTrackerMiddleware** — 累计 token 消费
 4. **DynamicPromptMiddleware** — 注入当前时间到系统提示
 5. **CompressionHintMiddleware** — 在上下文压缩前补充保留提示
+6. **PermissionAuditMiddleware** — 记录每次工具调用的最终权限决策
 
 ## 运行示例
 

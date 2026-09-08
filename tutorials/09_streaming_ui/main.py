@@ -37,6 +37,7 @@ from agentscope.tool import (
     Glob,
     Grep,
 )
+from agentscope.types import ReplyFinishedReason
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SALES_CSV = DATA_DIR / "sales_data.csv"
@@ -166,6 +167,16 @@ async def streaming_ui(agent: Agent, content: str) -> dict:
                 print(f"\n  [{event.name}]:", end="", flush=True)
 
             case EventType.REPLY_END:
+                if event.finished_reason != ReplyFinishedReason.COMPLETED:
+                    print(
+                        f"\n  [reply ended: {event.finished_reason}]",
+                        end="",
+                    )
+                    if event.error is not None:
+                        print(
+                            f" {event.error.type}: {event.error.message}",
+                            end="",
+                        )
                 print()
 
             # --- Model calls ---
@@ -303,10 +314,6 @@ async def streaming_ui(agent: Agent, content: str) -> dict:
                     flush=True,
                 )
 
-            # --- Max iterations ---
-            case EventType.EXCEED_MAX_ITERS:
-                print("\n  [warn] Max iterations exceeded!")
-
             case _:
                 print(f"\n  [event] {event.type}", end="", flush=True)
 
@@ -400,17 +407,18 @@ async def example_event_catalog() -> None:
   └─ THINKING_..._END    └─ TOOL_CALL_END      ├─ TOOL_RESULT_DATA_DELTA
                                                 └─ TOOL_RESULT_END
 
-  Data Blocks            HITL Events           Other
-  ├─ DATA_BLOCK_START    ├─ REQUIRE_USER_      └─ EXCEED_MAX_ITERS
+  Data Blocks            HITL Events           One-shot / Extension
+  ├─ DATA_BLOCK_START    ├─ REQUIRE_USER_      ├─ HINT_BLOCK
   ├─ DATA_BLOCK_DELTA    │  CONFIRM
-  └─ DATA_BLOCK_END      ├─ REQUIRE_EXTERNAL_
+  └─ DATA_BLOCK_END      ├─ REQUIRE_EXTERNAL_  ├─ USER_INTERRUPT
                           │  EXECUTION
                           ├─ USER_CONFIRM_
                           │  RESULT
                           └─ EXTERNAL_EXECUTION_
-                             RESULT
+                             RESULT             └─ CUSTOM
 
-  Lifecycle pattern: START → DELTA(s) → END
+  Content-block lifecycle: START → DELTA(s) → END
+  Reply outcome: REPLY_END.finished_reason (+ error when it failed)
   Each event has: id, created_at, type, reply_id
   ModelCallEnd adds: input_tokens, output_tokens
   ToolResultEnd adds: state (success/error/denied/interrupted)

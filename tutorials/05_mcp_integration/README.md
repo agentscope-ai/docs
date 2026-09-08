@@ -1,6 +1,6 @@
 # Tutorial 05: MCP 集成 — 连接外部工具服务器
 
-> **什么时候需要这个？** 你需要的能力别人已经做成了 MCP server——数据库、浏览器、文件系统、各种 API——与其自己重新写一遍 `ToolBase`，不如直接接进来。MCP 让 Agent 一次性接入整个外部工具生态。
+> **什么时候需要这个？** 你需要的能力别人已经做成了 MCP server——数据库、浏览器、时间服务、各种 API——与其自己重新写一遍 `ToolBase`，不如直接接进来。MCP 让 Agent 一次性接入整个外部工具生态。
 
 ## 本章基于前序章节
 
@@ -19,8 +19,8 @@
 ## 前置要求
 
 - 完成 Tutorial 04
-- MCP 客户端依赖已包含在基础安装中；如需运行示例里的 Stdio MCP 服务器，请安装 Node.js / `npx`
-- （可选）安装 Node.js 以使用 Stdio MCP 服务器
+- MCP 客户端依赖已包含在基础安装中
+- 运行 Stdio 示例需要 `uvx`：`pip install uv`
 
 ## 核心概念
 
@@ -39,11 +39,11 @@ from agentscope.mcp import MCPClient, StdioMCPConfig, HttpMCPConfig
 
 # 方式 1: Stdio — 本地进程通信
 client = MCPClient(
-    name="filesystem",
+    name="time",
     is_stateful=True,         # Stdio 必须是 stateful
     mcp_config=StdioMCPConfig(
-        command="npx",
-        args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        command="uvx",
+        args=["mcp-server-time", "--local-timezone=Asia/Shanghai"],
     ),
 )
 
@@ -79,7 +79,7 @@ MCP 工具在注册后会自动加上命名空间前缀：
 mcp__{server_name}__{tool_name}
 ```
 
-例如，名为 `filesystem` 的 MCP 服务器提供的 `read_file` 工具，注册后名称变为 `mcp__filesystem__read_file`。这样可以避免不同 MCP 服务器之间的工具名冲突。
+例如，名为 `time` 的 MCP 服务器提供的 `get_current_time` 工具，注册后名称变为 `mcp__time__get_current_time`。这样可以避免不同 MCP 服务器之间的工具名冲突。
 
 ### 工具过滤
 
@@ -88,18 +88,18 @@ mcp__{server_name}__{tool_name}
 ```python
 # 只启用特定工具
 client = MCPClient(
-    name="filesystem",
+    name="time",
     is_stateful=True,
     mcp_config=StdioMCPConfig(...),
-    enable_tools=["read_file", "list_directory"],  # 仅这两个工具可用
+    enable_tools=["get_current_time"],  # 仅这个工具可用
 )
 
 # 禁用特定工具
 client = MCPClient(
-    name="filesystem",
+    name="database",
     is_stateful=True,
     mcp_config=StdioMCPConfig(...),
-    disable_tools=["write_file", "delete_file"],  # 排除危险操作
+    disable_tools=["drop_table", "delete_rows"],  # 排除危险操作
 )
 ```
 
@@ -111,8 +111,8 @@ MCP 工具和本地工具可以自由组合在 `Toolkit` 中：
 
 ```python
 toolkit = Toolkit(
-    tools=[Read(), Glob()],           # 本地工具（basic 组）
-    mcps=[filesystem_client],         # MCP 工具（basic 组）
+    tools=[Read(), Glob()],           # 本地文件工具（basic 组）
+    mcps=[time_client],               # MCP 时间工具（basic 组）
     tool_groups=[
         ToolGroup(
             name="analysis",
@@ -145,10 +145,12 @@ await client.close()
 
 本期展示两种 MCP 接入方式：
 
-1. **Stdio MCP**：连接本地文件系统 MCP 服务器，让 DataMuse 通过 MCP 浏览文件
+1. **Stdio MCP**：连接 Time MCP，让 DataMuse 获取并转换带时区的报告时间
 2. **模拟 MCP**：展示如何配置 HTTP MCP 以及工具过滤的使用方式
 
-由于 MCP 服务器需要外部依赖（Node.js），示例中提供了优雅的降级处理——当 MCP 不可用时，自动切换到本地工具演示。
+Time MCP 提供的是本地 `Read` / `Write` 没有的能力，更容易看清“本地工具”和
+“外部协议工具”的边界。示例也提供降级处理：没有 `uvx` 时跳过真实连接，继续
+展示配置和本地工具。
 
 ## 运行示例
 
@@ -157,16 +159,16 @@ cd tutorials/05_mcp_integration
 python main.py
 ```
 
-如需体验 Stdio MCP（需要 Node.js）：
+如需体验 Stdio MCP：
 
 ```bash
-npm install -g @modelcontextprotocol/server-filesystem
+pip install uv
 python main.py
 ```
 
 ## 进一步探索
 
-- 连接一个数据库 MCP 服务器（如 `@modelcontextprotocol/server-sqlite`）
+- 连接一个数据库或浏览器 MCP 服务器
 - 将 MCP 客户端放入 ToolGroup，观察激活/停用行为
 - 使用 `enable_tools` 和 `disable_tools` 实现最小权限暴露
 - 比较 stateful 和 stateless HTTP MCP 的性能差异

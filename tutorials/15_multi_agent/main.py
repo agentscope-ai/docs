@@ -6,6 +6,7 @@ This tutorial demonstrates:
 - observe() for context injection without triggering reasoning
 - Sequential pipeline pattern (Collector → Analyst → Writer)
 - Parallel branch pattern with asyncio.gather
+- GoalPipeline for executor-verifier iteration
 - Message passing between agents
 """
 # pylint: disable=missing-function-docstring,unused-argument
@@ -19,13 +20,14 @@ from agentscope.agent import Agent
 from agentscope.credential import DashScopeCredential
 from agentscope.event import EventType
 from agentscope.message import UserMsg, AssistantMsg, TextBlock
-from agentscope.model import DashScopeChatModel
+from agentscope.model import ChatModelBase, DashScopeChatModel
 from agentscope.permission import (
     PermissionBehavior,
     PermissionContext,
     PermissionDecision,
     PermissionMode,
 )
+from agentscope.pipeline import GoalPipeline
 from agentscope.state import AgentState
 from agentscope.tool import (
     Toolkit,
@@ -40,6 +42,15 @@ from agentscope.tool import (
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SALES_CSV = DATA_DIR / "sales_data.csv"
+
+
+def new_bypass_state() -> AgentState:
+    """Create independent state for one team member."""
+    return AgentState(
+        permission_context=PermissionContext(
+            mode=PermissionMode.BYPASS,
+        ),
+    )
 
 
 # =========================================================================
@@ -173,14 +184,10 @@ async def agent_reply(agent: Agent, content: str) -> str:
 # =========================================================================
 # Agent factory
 # =========================================================================
-def create_agents(model):
+def create_agents(
+    model: ChatModelBase,
+) -> tuple[Agent, Agent, Agent]:
     """Create the three-agent DataMuse team."""
-    bypass = AgentState(
-        permission_context=PermissionContext(
-            mode=PermissionMode.BYPASS,
-        ),
-    )
-
     collector = Agent(
         name="DataMuse_Collector",
         system_prompt=(
@@ -200,7 +207,7 @@ def create_agents(model):
                 FunctionTool(query_sales, is_read_only=True),
             ],
         ),
-        state=bypass,
+        state=new_bypass_state(),
     )
 
     analyst = Agent(
@@ -217,7 +224,7 @@ def create_agents(model):
         toolkit=Toolkit(
             tools=[SalesSummary(), Bash()],
         ),
-        state=bypass,
+        state=new_bypass_state(),
     )
 
     writer = Agent(
@@ -231,7 +238,7 @@ def create_agents(model):
         ),
         model=model,
         toolkit=Toolkit(tools=[]),
-        state=bypass,
+        state=new_bypass_state(),
     )
 
     return collector, analyst, writer
@@ -240,7 +247,7 @@ def create_agents(model):
 # =========================================================================
 # Example 1: Sequential pipeline
 # =========================================================================
-async def example_sequential_pipeline(model) -> None:
+async def example_sequential_pipeline(model: ChatModelBase) -> None:
     """Three agents in a sequential pipeline."""
     print("\n" + "=" * 60)
     print("Example 1: Sequential Pipeline")
@@ -298,7 +305,7 @@ async def example_sequential_pipeline(model) -> None:
 # =========================================================================
 # Example 2: Parallel branches
 # =========================================================================
-async def example_parallel_branches(model) -> None:
+async def example_parallel_branches(model: ChatModelBase) -> None:
     """Two analysts work in parallel, then results are merged."""
     print("\n" + "=" * 60)
     print("Example 2: Parallel Branches")
@@ -308,12 +315,6 @@ async def example_parallel_branches(model) -> None:
     collector, _, writer = create_agents(model)
 
     # Create two specialized analysts
-    bypass = AgentState(
-        permission_context=PermissionContext(
-            mode=PermissionMode.BYPASS,
-        ),
-    )
-
     region_analyst = Agent(
         name="DataMuse_RegionAnalyst",
         system_prompt=(
@@ -325,7 +326,7 @@ async def example_parallel_branches(model) -> None:
         ),
         model=model,
         toolkit=Toolkit(tools=[SalesSummary()]),
-        state=bypass,
+        state=new_bypass_state(),
     )
 
     category_analyst = Agent(
@@ -339,7 +340,7 @@ async def example_parallel_branches(model) -> None:
         ),
         model=model,
         toolkit=Toolkit(tools=[SalesSummary()]),
-        state=bypass,
+        state=new_bypass_state(),
     )
 
     # Step 1: Collect data
@@ -391,12 +392,66 @@ async def example_parallel_branches(model) -> None:
 
 
 # =========================================================================
-# Example 3: Architecture overview
+# Example 3: Executor-verifier GoalPipeline
+# =========================================================================
+async def example_goal_pipeline(model: ChatModelBase) -> None:
+    """Iterate until a reviewer accepts a concise sales report."""
+    print("\n" + "=" * 60)
+    print("Example 3: GoalPipeline (Executor + Verifier)")
+    print("=" * 60)
+
+    executor = Agent(
+        name="DataMuse_ReportExecutor",
+        system_prompt=(
+            "Create a concise sales report that satisfies the user's goal. "
+            "Use SalesSummary for all figures and include the evidence in "
+            "your completion report."
+        ),
+        model=model,
+        toolkit=Toolkit(tools=[SalesSummary()]),
+        state=new_bypass_state(),
+    )
+    verifier = Agent(
+        name="DataMuse_ReportVerifier",
+        system_prompt=(
+            "Verify that the report uses tool-backed figures, names the top "
+            "category, and gives one actionable recommendation. Fail it "
+            "with concrete feedback if any requirement is missing."
+        ),
+        model=model,
+        state=new_bypass_state(),
+    )
+    pipeline = GoalPipeline(
+        executor=executor,
+        verifier=verifier,
+        max_iters=2,
+        max_retries=2,
+    )
+
+    async for event in pipeline.reply_stream(
+        UserMsg(
+            name="user",
+            content=(
+                "Produce a report under 150 words with revenue by category, "
+                "the top category, and one recommendation."
+            ),
+        ),
+    ):
+        if not hasattr(event, "type"):
+            continue
+        if event.type == EventType.TEXT_BLOCK_DELTA:
+            print(event.delta, end="", flush=True)
+        elif event.type == EventType.REPLY_END:
+            print(f"\n  [reply: {event.finished_reason}]")
+
+
+# =========================================================================
+# Example 4: Architecture overview
 # =========================================================================
 async def example_architecture() -> None:
     """Display multi-agent architecture patterns."""
     print("\n" + "=" * 60)
-    print("Example 3: Multi-Agent Architecture Patterns")
+    print("Example 4: Multi-Agent Architecture Patterns")
     print("=" * 60)
 
     print(
@@ -446,7 +501,7 @@ async def example_architecture() -> None:
   ──────────────────
   • Each agent has a focused role and minimal tools
   • Use observe() for context sharing (no unnecessary reasoning)
-  • Python code IS the orchestration (no framework needed)
+  • Use Python for explicit flows; use GoalPipeline for verify-and-retry
   • Parallel branches with asyncio.gather for speed
 """,
     )
@@ -477,7 +532,10 @@ async def main() -> None:
     # Example 2: Parallel branches
     await example_parallel_branches(model)
 
-    # Example 3: Architecture overview
+    # Example 3: Executor-verifier loop
+    await example_goal_pipeline(model)
+
+    # Example 4: Architecture overview
     await example_architecture()
 
     print("\n" + "=" * 60)

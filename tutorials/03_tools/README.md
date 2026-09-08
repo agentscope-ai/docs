@@ -84,12 +84,39 @@ def query_sales(category: str, min_total: float = 0.0) -> str:
 tool = FunctionTool(query_sales, is_read_only=True)
 ```
 
-`FunctionTool` 自动从函数签名和 docstring 提取：
+默认情况下，`FunctionTool` 从函数签名和 docstring 提取：
 - `name` ← 函数名
 - `description` ← docstring 摘要
 - `input_schema` ← 参数类型注解和 Args 描述
 
 普通函数可以直接返回 `str` / `dict` / list，`FunctionTool` 会自动转换为 Agent 能消费的 `ToolChunk`。只有需要流式输出、多模态结果或精细状态时，才手动返回 `ToolChunk`。
+
+当参数还需要枚举、范围或字符串长度等约束时，可以显式传入 JSON Schema，或
+直接传一个 Pydantic 模型：
+
+```python
+from pydantic import BaseModel, Field
+
+class SalesQuery(BaseModel):
+    category: str = ""
+    min_total: float = Field(default=0.0, ge=0)
+    limit: int = Field(default=10, ge=1, le=20)
+
+tool = FunctionTool(
+    query_sales,
+    input_schema=SalesQuery,
+    is_read_only=True,
+)
+```
+
+这样约束会进入工具 schema，并在真正执行函数前完成校验。
+
+`Read` 也支持模型可消费的图片和 PDF。为多模态模型显式声明输入类型后，读取
+这些文件会返回 `DataBlock`，而不是把二进制内容塞进文本：
+
+```python
+read = Read(model_input_types=["image/*", "application/pdf"])
+```
 
 ### 自定义 ToolBase
 

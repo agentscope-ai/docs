@@ -4,8 +4,9 @@
 Walks the full CRUD for the Schedule router that ships with
 ``agentscope.app.create_app``:
 
-    POST   /credential/             — register a Credential (idempotent)
-    POST   /agent/                  — register a DataMuse Agent (idempotent)
+    POST   /credential/             — register a Credential
+    POST   /agent/                  — register a DataMuse Agent
+    POST   /schedule/               — reject an invalid cron before storage
     POST   /schedule/               — create a Stateless schedule
     POST   /schedule/               — create a Stateful schedule
     GET    /schedule/               — list schedules
@@ -15,7 +16,7 @@ Walks the full CRUD for the Schedule router that ships with
 Prerequisites
 -------------
 * Terminal A:   ``cd tutorials/13_agent_service && python main.py``
-                  (fakeredis-backed service on http://localhost:8000)
+                  (SQLite-backed service on http://localhost:8000)
 * Terminal B:   ``python main.py``      (this file)
 * DASHSCOPE_API_KEY or OPENAI_API_KEY in env
 
@@ -98,6 +99,34 @@ async def _ensure_agent(client: httpx.AsyncClient) -> str:
     agent_id = resp.json()["agent_id"]
     print(f"  agent_id      = {agent_id}")
     return agent_id
+
+
+async def verify_cron_validation(
+    client: httpx.AsyncClient,
+    agent_id: str,
+    credential_id: str,
+    model_type: str,
+    model_name: str,
+) -> None:
+    """Show that an invalid cron is rejected before it is persisted."""
+    body = {
+        "name": "Invalid schedule (not persisted)",
+        "cron_expression": "not a cron",
+        "agent_id": agent_id,
+        "chat_model_config": {
+            "type": model_type,
+            "credential_id": credential_id,
+            "model": model_name,
+            "parameters": {},
+        },
+    }
+    resp = await client.post("/schedule/", json=body, headers=HEADERS)
+    if resp.status_code != 422:
+        raise RuntimeError(
+            "Expected invalid cron to return 422, got "
+            f"{resp.status_code}: {resp.text}",
+        )
+    print("  invalid cron -> 422 (record was not persisted)")
 
 
 async def create_stateless_schedule(
@@ -211,11 +240,20 @@ async def main() -> None:
     print(f"Talking to {BASE_URL} as user {USER_ID!r}")
 
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=30.0) as client:
-        print("\n[1/5] ensure credential + agent")
+        print("\n[1/6] create credential + agent")
         cred_id, model_type, model_name = await _ensure_credential(client)
         agent_id = await _ensure_agent(client)
 
-        print("\n[2/5] create a stateless schedule")
+        print("\n[2/6] verify cron validation")
+        await verify_cron_validation(
+            client,
+            agent_id,
+            cred_id,
+            model_type,
+            model_name,
+        )
+
+        print("\n[3/6] create a stateless schedule")
         stateless_id = await create_stateless_schedule(
             client,
             agent_id,
@@ -224,7 +262,7 @@ async def main() -> None:
             model_name,
         )
 
-        print("\n[3/5] create a stateful schedule")
+        print("\n[4/6] create a stateful schedule")
         stateful_id = await create_stateful_schedule(
             client,
             agent_id,
@@ -233,10 +271,10 @@ async def main() -> None:
             model_name,
         )
 
-        print("\n[4/5] list every schedule we own")
+        print("\n[5/6] list every schedule we own")
         await list_schedules(client)
 
-        print("\n[5/5] peek at triggered sessions for each schedule")
+        print("\n[6/6] peek at triggered sessions for each schedule")
         await list_sessions_for_schedule(client, stateless_id)
         await list_sessions_for_schedule(client, stateful_id)
 

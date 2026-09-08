@@ -11,7 +11,7 @@
 ## 你将学到
 
 - 上下文窗口的挑战及其解决方案
-- `ContextConfig` 的三个关键参数
+- `ContextConfig` 的阈值、缓冲区、回退和多模态参数
 - 自动压缩流程：分割 → 摘要 → 保留近期
 - 工具结果截断：超长结果自动裁剪
 - `compress_context()` 手动触发压缩，并用 `instructions` 给压缩器提示
@@ -42,9 +42,13 @@ from agentscope.agent import ContextConfig
 agent = Agent(
     ...,
     context_config=ContextConfig(
-        trigger_ratio=0.8,       # 触发压缩的阈值（占最大上下文比例）
-        reserve_ratio=0.1,       # 压缩后保留的最近消息比例
-        tool_result_limit=50000, # 单个工具结果的最大 token 数
+        trigger_ratio=0.8,
+        reserve_ratio=0.1,
+        context_buffer_ratio=0.2,
+        tool_result_limit=50000,
+        compression_tool_enabled=True,
+        compression_fallback_to_truncation=True,
+        max_image_num=5,
     ),
 )
 ```
@@ -53,7 +57,20 @@ agent = Agent(
 |------|--------|------|
 | `trigger_ratio` | 0.8 | 当 token 数超过 `context_size × trigger_ratio` 时触发压缩 |
 | `reserve_ratio` | 0.1 | 压缩后保留最近的消息（占总上下文的比例） |
+| `context_buffer_ratio` | 0.2 | 距触发阈值还有这段比例时，把上下文用量注入运行时提示 |
 | `tool_result_limit` | 50000 | 单个工具结果超过此 token 数时自动截断 |
+| `compression_tool_enabled` | `False` | 是否给 Agent 暴露主动压缩上下文的工具 |
+| `compression_fallback_to_truncation` | `True` | 摘要失败时是否退化为截断旧上下文 |
+| `max_image_num` | 5 | 上下文中保留的图片上限，超出的旧图片会卸载或移除 |
+
+例如 `trigger_ratio=0.8`、`context_buffer_ratio=0.2` 时，上下文超过模型窗口
+的 60% 后，运行时状态就会提醒 Agent 正在接近压缩阈值。如果同时开启
+`compression_tool_enabled`，Agent 可以在两个任务之间主动压缩，而不必等到 80%
+的硬触发点。该提示依赖默认开启的 `InjectionConfig.inject_runtime_state`。
+
+`compression_fallback_to_truncation=True` 更适合长期运行的服务：摘要模型临时失败
+时仍能继续。对不能接受信息静默丢失的审计场景，可以设为 `False`，让错误显式
+暴露并保留原上下文。
 
 ### 自动压缩流程
 
@@ -144,6 +161,8 @@ python main.py
 - 降低 `tool_result_limit`，观察大工具结果的截断行为
 - 进行 20+ 轮对话，触发自动压缩
 - 自定义 `compression_prompt` 和 `summary_template`
+- 开启 `compression_tool_enabled`，观察 Agent 是否会在达到硬阈值前主动压缩
+- 传入多张图片，比较 `max_image_num` 有无 Workspace Offloader 时的行为
 - 写一个 Middleware 实现 `on_compress_context`，在压缩前自动补充业务保留规则
 
 ## 下一期预告

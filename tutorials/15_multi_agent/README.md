@@ -5,7 +5,7 @@
 ## 本章基于前序章节
 
 - **T01 — Agent / `reply` / `reply_stream`**：每个角色都是一个独立 Agent 实例。
-- **T03 — 工具系统**：不同角色配不同工具集（Collector 配 `query_sales`，Writer 配 `Bash` 写文件等）。
+- **T03 — 工具系统**：不同角色配不同工具集（Collector 配 `query_sales`，Analyst 配 `SalesSummary` 和 `Bash`，Writer 不配工具）。
 - **T02 — `Msg`**：Agent 之间通过传递消息接力，`observe()` 用来注入背景但不触发推理。
 
 ## 你将学到
@@ -13,6 +13,7 @@
 - AgentScope 2.0 的多 Agent 设计思路
 - `observe()` 方法：无推理的消息注入
 - 多 Agent 编排模式：串行、并行、动态路由
+- `GoalPipeline`：执行者与验证者循环改进结果
 - Agent 间的消息传递和结果接力
 - Python 编排与 Agent Service Team tools 的边界
 
@@ -44,7 +45,9 @@
 
 ### AgentScope 的多 Agent 设计
 
-AgentScope 2.0 的库模式不强制你使用某个"编排框架"——它提供**消息传递原语**，让你用 Python 代码实现编排：
+AgentScope 2.0 的库模式既提供 `reply()` / `observe()` 等**消息传递原语**，让你
+用 Python 明确控制流程，也提供 `GoalPipeline` 处理“执行、验证、不通过再改进”
+这一类稳定模式：
 
 ```python
 # Agent 之间通过消息传递协作
@@ -69,7 +72,30 @@ final = await agent_b.reply(follow_up_msg)    # B 基于上下文推理
 | Python 编排 | `reply()` / `observe()` / `asyncio.gather()` | 单脚本、Notebook、你希望业务代码明确控制流程 |
 | Agent Service Team | `TeamCreate` / `AgentCreate` / `AgentInvite` / `TeamSay` | 多用户服务、需要 leader agent 动态创建或邀请 worker |
 
-本章主线仍然使用 Python 编排，因为它最透明，方便学生看清 Agent 之间怎么传递上下文。T13 的 Agent Service 已经内置 Team tools；如果你把多 Agent 放到服务端，leader session 会拿到 `TeamCreate`、`AgentCreate`、`TeamSay` 等工具，worker 通过 `TeamSay` 汇报结果。
+本章主线仍然使用 Python 编排，因为它最透明，方便读者看清 Agent 之间怎么传递上下文。T13 的 Agent Service 已经内置 Team tools；如果你把多 Agent 放到服务端，leader session 会拿到 `TeamCreate`、`AgentCreate`、`TeamSay` 等工具，worker 通过 `TeamSay` 汇报结果。
+
+### GoalPipeline
+
+当任务不是固定的 A → B → C，而是需要一个 Agent 执行、另一个 Agent 按目标验收，
+不通过后带反馈重试时，使用 `GoalPipeline`：
+
+```python
+from agentscope.pipeline import GoalPipeline
+
+pipeline = GoalPipeline(
+    executor=report_writer,
+    verifier=report_reviewer,
+    max_iters=2,
+    max_retries=2,
+)
+
+async for event in pipeline.reply_stream(goal_msg):
+    render(event)
+```
+
+Pipeline 内部用结构化输出传递执行报告与验证结论，并保留 HITL 事件。它适合目标
+明确、验收标准可描述的任务；普通问答或固定流水线仍直接用 `reply()`、
+`observe()` 和 `asyncio.gather()` 更清楚。
 
 ### 三种编排模式
 
@@ -134,9 +160,13 @@ elif route == "complex":
 
 1. **DataMuse_Collector** — 数据采集员，配备 Read、Glob、query_sales 工具
 2. **DataMuse_Analyst** — 数据分析师，配备 SalesSummary 和 Bash 工具
-3. **DataMuse_Writer** — 报告撰写员，配备 Bash 工具（用于写文件）
+3. **DataMuse_Writer** — 报告撰写员，不配工具，只把分析结果整理成最终文本
 
 编排流程：用户提出分析需求 → Collector 采集 → Analyst 分析 → Writer 出报告
+
+每个角色必须拥有独立的 `AgentState`。共享模型实例通常没问题，但共享 State 会把
+对话上下文、权限和工具组状态混在一起，本章代码通过 `new_bypass_state()` 为每个
+Agent 分别创建状态。
 
 ## 运行示例
 
@@ -147,9 +177,9 @@ python main.py
 
 ## 进一步探索
 
-- 实现并行分析：让 RegionAnalyst 和 CategoryAnalyst 同时工作
 - 添加动态路由：根据用户请求复杂度选择不同的处理流程
-- 创建一个"审核员" Agent，检查报告质量并决定是否需要重新分析
+- 调整 `GoalPipeline` 的审核条件、`max_iters` 和 `max_retries`
+- 比较手写审核循环与本章 `GoalPipeline` 的事件流和停止条件
 - 用 Middleware 实现 Agent 间通信的日志追踪
 - 在 Agent Service 中用 `TeamCreate` + `AgentCreate` 复刻本章流水线
 
