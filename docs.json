@@ -114,7 +114,6 @@
                       "versions/2.0.8dev/en/deploy/workspace-manager",
                       {
                         "group": "MCP & Skill Hub",
-                        "tag": "NEW",
                         "pages": [
                           "versions/2.0.8dev/en/deploy/hub/overview",
                           "versions/2.0.8dev/en/deploy/hub/mcp-hub",
@@ -123,7 +122,6 @@
                       },
                       {
                         "group": "Channel",
-                        "tag": "NEW",
                         "pages": [
                           "versions/2.0.8dev/en/deploy/channel/overview",
                           "versions/2.0.8dev/en/deploy/channel/routing",
@@ -844,7 +842,8 @@
                         ]
                       },
                       {
-                        "group": "语音智能体",
+                        "group": "实时语音智能体",
+                        "tag": "NEW",
                         "pages": [
                           "versions/2.0.8dev/zh/building-blocks/voice/realtime"
                         ]
@@ -863,7 +862,6 @@
                       "versions/2.0.8dev/zh/deploy/workspace-manager",
                       {
                         "group": "MCP 与技能中心",
-                        "tag": "NEW",
                         "pages": [
                           "versions/2.0.8dev/zh/deploy/hub/overview",
                           "versions/2.0.8dev/zh/deploy/hub/mcp-hub",
@@ -872,7 +870,6 @@
                       },
                       {
                         "group": "消息渠道",
-                        "tag": "NEW",
                         "pages": [
                           "versions/2.0.8dev/zh/deploy/channel/overview",
                           "versions/2.0.8dev/zh/deploy/channel/routing",
