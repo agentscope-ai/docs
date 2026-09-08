@@ -170,11 +170,12 @@ asyncio.run(main())
 
 `reply_stream()` 接收一个已经启动的传输，持续把音频送给模型，并以异步迭代器的形式产出事件，直到传输的输入结束。传输由开发者持有，`reply_stream()` 结束时不会关闭它，同一个智能体可以换一个传输再次运行。
 
-`reply_stream()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。语音场景新增了两个用户侧事件，模型音频则以数据块事件的形式产出：
+`reply_stream()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。语音场景新增了三个用户侧事件，模型音频则以数据块事件的形式产出：
 
 | 事件 | 含义 |
 |------|------|
 | `UserInputAudioStartEvent` | 检测到用户开始说话 |
+| `UserInputAudioEndEvent` | 检测到用户说完，回合交给模型 |
 | `UserInputTranscriptionEvent` | 一轮用户语音的最终转写 |
 | `ReplyStartEvent` / `ReplyEndEvent` | 一次回复的开始与结束，`finished_reason` 为 `completed`、`interrupted` 或 `error` |
 | `TextBlockDeltaEvent` | 回复文本的增量转写 |
