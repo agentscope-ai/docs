@@ -13,7 +13,6 @@ AgentScope 通过 `RealtimeAgent` 实现全双工方案，支持：
 - **文本输入**：支持在语音对话中直接发送文字（需模型支持文本输入）
 - **断线自动恢复**：模型 API 因空闲关闭会话后，用户再次输入时自动重连并恢复会话
 - **回合整理**：支持合并被停顿切开的句子，过滤没有实际内容的应答
-- **延迟指标**：每一轮记录端点检测、模型首包、播放链路三段延迟
 
 目前支持的模型 API 与模型如下：
 
@@ -166,7 +165,6 @@ asyncio.run(main())
 | `reply_stream(transport)` | 借用一个传输，持续泵送音频并产出智能体事件，直到传输结束 |
 | `send(inputs)` | 发送音频以外的输入：文字、工具调用的确认结果、打断 |
 | `interrupt()` | 打断当前回复 |
-| `last_turn_metrics` | 最近一轮对话的延迟分解 |
 
 ### 运行并处理事件
 
@@ -342,107 +340,6 @@ agent = RealtimeAgent(
 <Tip>
 长时间静默是安全的，不需要为空闲超时做任何处理。若要在客户端断开后继续同一场对话，保持智能体不关闭，换一个传输再次调用 `reply_stream()` 即可。
 </Tip>
-
-### 延迟指标
-
-每一轮回复结束后，可以通过 `last_turn_metrics` 读取这一轮的延迟分解，单位为秒：
-
-| 属性 | 含义 |
-|------|------|
-| `endpointing_delay` | 用户停止说话到回合被提交给模型的时间 |
-| `backend_ttfb` | 回合提交到模型返回第一块音频的时间 |
-| `transport_delay` | 第一块音频到达到实际播放的时间 |
-| `e2e_latency` | 用户停止说话到听见回复的总时间 |
-
-```python 打印每一轮的延迟
-if isinstance(event, ReplyEndEvent):
-    m = agent.last_turn_metrics
-    # 被打断或出错的回合可能缺少某个时间点，对应属性为 None
-    print(f"ttfb={m.backend_ttfb} e2e={m.e2e_latency}")
-```
-
-## 实时语音模型
-
-实时语音模型类封装与模型 API 的 WebSocket 会话，支持的模型见页首的模型表。
-
-### 创建模型
-
-每个模型类接收凭证、模型名以及可选的 `Parameters` 对象。两类 DashScope 模型的参数略有不同：
-
-<CodeGroup>
-```python Qwen-Audio-3.0
-import os
-from agentscope.credential import DashScopeCredential
-from agentscope.realtime import DashScopeAudioRealtimeModel
-
-model = DashScopeAudioRealtimeModel(
-    model_name="qwen-audio-3.0-realtime-plus",
-    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
-    parameters=DashScopeAudioRealtimeModel.Parameters(
-        voice="longanqian",             # 音色
-        turn_detection="smart_turn",    # server_vad、smart_turn 或 none
-        max_history_turns=20,           # 模型 API 侧保留的对话轮数
-    ),
-)
-```
-
-```python Qwen-Omni
-import os
-from agentscope.credential import DashScopeCredential
-from agentscope.realtime import DashScopeRealtimeModel
-
-model = DashScopeRealtimeModel(
-    model_name="qwen3.5-omni-flash-realtime",
-    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
-    parameters=DashScopeRealtimeModel.Parameters(
-        voice="Tina",                   # 音色
-        turn_detection="server_vad",    # server_vad、semantic_vad 或 none
-        vad_silence_duration_ms=800,    # 静音多久算用户说完
-        input_audio_transcription=True, # 是否转写用户语音
-    ),
-)
-```
-</CodeGroup>
-
-两类模型的 `Parameters` 字段如下：
-
-| 字段 | Qwen-Omni | Qwen-Audio-3.0 | 说明 |
-|------|-----------|----------------|------|
-| `voice` | 默认 `"Cherry"` | 默认 `"longanqian"` | 音色，可选值见模型卡片 |
-| `turn_detection` | `server_vad`、`semantic_vad`、`none` | `server_vad`、`smart_turn`、`none` | 模型 API 侧的回合检测方式，`none` 表示由调用方决定 |
-| `vad_threshold` | 0 到 1 | -1 到 1 | 判定为语音的能量阈值 |
-| `vad_silence_duration_ms` | 默认 800 | 200 到 6000 | 静音持续多久判定用户说完 |
-| `input_audio_transcription` | 默认 `True` | 不适用 | 是否转写用户语音 |
-| `voiceprint_audio_urls` | 不适用 | 默认空 | 说话人参考音频，仅 `smart_turn` 使用，用于过滤旁人声音 |
-| `max_history_turns` | 不适用 | 1 到 50，默认 20 | 模型 API 侧保留的对话轮数 |
-
-### 模型卡片与限制
-
-每个模型的采样率、输入类型、是否支持工具与上下文限制记录在模型卡片中，构造模型时按名称自动匹配。实时模型的上下文按对话轮数与累计音频时长限制，而不是按 token，超出后模型 API 会静默丢弃最早的轮次：
-
-| 模型 | 工具调用 | 最大轮数 | 最大累计音频 | 会话时长上限 |
-|------|----------|----------|--------------|--------------|
-| qwen3.5-omni-plus-realtime | 是 | 100 | 600 秒 | 120 分钟 |
-| qwen3.5-omni-flash-realtime | 是 | 80 | 480 秒 | 120 分钟 |
-| qwen3-omni-flash-realtime | 否 | 8 | 不限 | 120 分钟 |
-| qwen-omni-turbo-realtime | 否 | 按 32768 token | 不限 | 120 分钟 |
-| qwen-audio-3.0-realtime-plus | 是 | 50 | 300 秒 | 不限 |
-| qwen-audio-3.0-realtime-flash | 是 | 50 | 300 秒 | 不限 |
-
-当一个凭证对应多个模型类时，可以通过凭证列出全部模型卡片，再用卡片上的 `model_type` 字段找回对应的模型类：
-
-```python 从模型卡片找回模型类
-from agentscope.credential import DashScopeCredential
-
-credential = DashScopeCredential(api_key="...")
-
-# 卡片上的 model_type 与模型类的 type 一一对应
-cards = {c.name: c for c in credential.list_realtime_models()}
-classes = {c.type: c for c in credential.get_realtime_model_classes()}
-
-card = cards["qwen3.5-omni-flash-realtime"]
-model = classes[card.model_type](card.name, credential, model_card=card)
-```
 
 ## 音频传输
 
