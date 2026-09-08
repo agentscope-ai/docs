@@ -843,7 +843,7 @@
                       },
                       {
                         "group": "实时语音智能体",
-                        "tag": "NEW",
+                        "tag": "EXP",
                         "pages": [
                           "versions/2.0.8dev/zh/building-blocks/realtime/overview",
                           "versions/2.0.8dev/zh/building-blocks/realtime/full-duplex"
