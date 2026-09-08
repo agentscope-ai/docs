@@ -205,7 +205,7 @@ await agent.send("帮我查一下今天的天气")
 await agent.interrupt()
 ```
 
-被打断的回复以 `finished_reason` 为 `interrupted` 的 `ReplyEndEvent` 结束。由于文本增量比音频先到，前端此时已经收到了多于用户实际听到的文字，因此该文本块的 `TextBlockEndEvent` 会带上 `text` 字段给出最终文本，用 `Msg.apply_event` 拼消息时会自动覆盖，自行拼接的前端需要用它替换该块的内容。
+被打断的回复以 `finished_reason` 为 `interrupted` 的 `ReplyEndEvent` 结束。由于文本增量比音频先到，前端此时已经收到了多于用户实际听到的文字，因此该文本块的 `TextBlockEndEvent` 会带上 `text` 字段给出最终文本，用 `Msg.append_event` 拼消息时会自动覆盖，自行拼接的前端需要用它替换该块的内容。
 
 <Note>
 上下文截断只发生在智能体侧。DashScope 的实时模型 API 不接受截断指令，模型侧仍保留完整的回复；模型类的 `truncation` 属性标明了各模型 API 的支持程度。
