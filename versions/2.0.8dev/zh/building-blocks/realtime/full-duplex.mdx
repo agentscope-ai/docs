@@ -72,12 +72,7 @@ import os
 
 from agentscope.agent import RealtimeAgent
 from agentscope.credential import DashScopeCredential
-from agentscope.event import (
-    ReplyEndEvent,
-    ReplyStartEvent,
-    TextBlockDeltaEvent,
-    UserInputTranscriptionEvent,
-)
+from agentscope.event import ReplyEndEvent, ReplyStartEvent, TextBlockDeltaEvent
 from agentscope.realtime import DashScopeAudioRealtimeModel, LocalAudioTransport
 
 
@@ -98,17 +93,22 @@ async def main() -> None:
         output_sample_rate=model.output_sample_rate,
     )
 
+    # 用户说话同样以一次回复的形式产出事件，role 为 "user"，
+    # 转写确定后通过文本块事件送出
+    user_turns: set[str] = set()
     # 智能体持有模型会话，传输由开发者持有，reply_stream() 借用两者直到传输结束
     async with agent, transport:
         async for event in agent.reply_stream(transport):
             match event:
-                case UserInputTranscriptionEvent():
-                    print(f"[user] {event.transcript}")
+                case ReplyStartEvent(role="user"):
+                    user_turns.add(event.reply_id)
                 case ReplyStartEvent():
                     print(f"[{agent.name}] ", end="", flush=True)
+                case TextBlockDeltaEvent() if event.reply_id in user_turns:
+                    print(f"[user] {event.delta}")
                 case TextBlockDeltaEvent():
                     print(event.delta, end="", flush=True)
-                case ReplyEndEvent():
+                case ReplyEndEvent() if event.reply_id not in user_turns:
                     print(f"  ({event.finished_reason})")
 
 
@@ -170,15 +170,12 @@ asyncio.run(main())
 
 `reply_stream()` 接收一个已经启动的传输，持续把音频送给模型，并以异步迭代器的形式产出事件，直到传输的输入结束。传输由开发者持有，`reply_stream()` 结束时不会关闭它，同一个智能体可以换一个传输再次运行。
 
-`reply_stream()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。语音场景新增了三个用户侧事件，模型音频则以数据块事件的形式产出：
+`reply_stream()` 产出的是与 `Agent.reply_stream` 相同的[智能体事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)，因此为文字智能体编写的事件处理逻辑可以直接复用。用户说话也被当作一次回复来报告：开口时发出 `role` 为 `"user"` 的 `ReplyStartEvent`，说完时发出 `ReplyEndEvent`，转写确定后再以文本块事件送出，因此外层可以用同一套逻辑把用户和智能体的事件各自拼成消息。模型音频则以数据块事件的形式产出：
 
 | 事件 | 含义 |
 |------|------|
-| `UserInputAudioStartEvent` | 检测到用户开始说话 |
-| `UserInputAudioEndEvent` | 检测到用户说完，回合交给模型 |
-| `UserInputTranscriptionEvent` | 一轮用户语音的最终转写 |
-| `ReplyStartEvent` / `ReplyEndEvent` | 一次回复的开始与结束，`finished_reason` 为 `completed`、`interrupted` 或 `error` |
-| `TextBlockDeltaEvent` | 回复文本的增量转写 |
+| `ReplyStartEvent` / `ReplyEndEvent` | 一次回复的开始与结束。`role` 为 `"user"` 时表示用户开口与说完；智能体回复的 `finished_reason` 为 `completed`、`interrupted` 或 `error` |
+| `TextBlockDeltaEvent` | 文本增量：智能体回复的转写，或用户这一轮说话的转写 |
 | `DataBlockDeltaEvent` | 回复音频的增量数据，已由传输播放，通常无需处理 |
 | `ToolCallStartEvent` / `ToolCallEndEvent` | 模型发起的工具调用 |
 | `ToolResultStartEvent` / `ToolResultEndEvent` | 工具执行的结果 |
