@@ -79,7 +79,7 @@ from agentscope.realtime import DashScopeAudioRealtimeModel, LocalAudioTransport
 async def main() -> None:
     # 模型卡片按名称自动匹配，采样率与上下文限制随之确定
     model = DashScopeAudioRealtimeModel(
-        model_name="qwen-audio-3.0-realtime-plus",
+        model="qwen-audio-3.0-realtime-plus",
         credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
     )
     agent = RealtimeAgent(
