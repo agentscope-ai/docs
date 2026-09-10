@@ -12,7 +12,7 @@ The two projects share one site but keep separate content and release models:
 
 | Project | Documentation scope | Live documentation | Update model |
 |---|---|---|---|
-| AgentScope | Building, operating, and deploying agent applications | [AgentScope docs](https://docs.agentscope.io/latest/en/index) | Immutable version directories |
+| AgentScope | Building, operating, and deploying agent applications | [AgentScope docs](https://docs.agentscope.io/stable/en/index) | Immutable version directories |
 | ReMe | File-native agent memory, workflows, integrations, and stable contracts | [ReMe docs](https://docs.agentscope.io/reme/latest/en/overview) | One continuously updated `latest` version |
 
 ## ReMe Documentation
@@ -98,7 +98,9 @@ AgentScope release:
 1. Copy the latest relevant version into a new project version directory.
 2. Update every version-specific internal link in the copied pages.
 3. Add the version under the matching project tab for both languages in `docs.json`.
-4. Point the relevant `latest` or `stable` redirect at the new version.
+4. Point the relevant `latest` or `stable` redirect at the new version. Make a new
+   stable release the default in both languages; development versions keep the
+   existing stable default.
 5. Run `mint validate` before submitting the change.
 
 AgentScope versions can be created with `scripts/create-version.sh`.
@@ -132,3 +134,9 @@ mint validate
 - [ReMe English documentation](https://docs.agentscope.io/reme/latest/en/overview)
 - [ReMe 中文文档](https://docs.agentscope.io/reme/latest/zh/overview)
 - [Mintlify Documentation](https://mintlify.com/docs)
+
+## AI Documentation Index
+
+Mintlify generates `llms.txt` and Markdown exports automatically. Maintain version
+selection guidance in `docs.json` under `markdown.instructions`; do not duplicate
+the generated index in a manually maintained file.
