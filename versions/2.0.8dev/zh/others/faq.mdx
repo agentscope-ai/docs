@@ -1,39 +1,40 @@
 ---
 title: "常见问题"
-description: "AgentScope 2.0 常见问题"
+description: "解答使用 AgentScope 2.0 时的常见问题。"
 ---
+
+以下问答涵盖版本兼容、执行环境、前端接入、检索与记忆，以及不同语言的实现。
 
 <AccordionGroup>
 
   <Accordion title="AgentScope 2.0 与 1.0 兼容吗？">
-    不兼容。AgentScope 2.0 是一次破坏性更新，重新设计了 agent 抽象，并新增了事件系统、workspace、权限系统等大量新特性。API 与 1.0 源码不兼容，也不提供自动迁移路径。
+    不兼容。AgentScope 2.0 调整了智能体、消息、事件、工具和状态接口，已有应用需要修改代码，不能仅通过升级安装包完成迁移。
 
-    对所有新项目，我们建议直接采用 2.0，以获得新版能力；1.0 的文档仍会保留供存量用户参考。
+    新项目建议使用 2.0。已有应用可参考 [1.x 到 2.x 的变更说明](/versions/2.0.8dev/zh/others/change-log)进行迁移；继续使用 1.x 时，请查阅与安装版本对应的文档。
   </Accordion>
 
-  <Accordion title="AgentScope 是否支持沙箱化执行？">
-    支持。**Workspace** 是 AgentScope 为 agent 提供的执行环境抽象，内置三种实现 —— `LocalWorkspace`（宿主文件系统）、`DockerWorkspace`（容器）、`E2BWorkspace`（E2B 云沙箱），共享同一份接口，因此同一份 agent 代码可以无差别地在任意后端上运行。Workspace 同时负责管理 MCP server 生命周期、skill 与上下文 offload。
+  <Accordion title="AgentScope 是否支持沙箱执行？">
+    支持。沙箱工作区后端包括 Docker、Bubblewrap、Apple Container、Kubernetes、E2B、Daytona、OpenSandbox 等。`LocalWorkspace` 直接使用宿主机，不提供沙箱隔离。
 
-    完整介绍见 [Workspace](/versions/2.0.8dev/zh/building-blocks/workspace/overview)，包括如何把 workspace 接入 `Agent`，以及多租户场景下的 `WorkspaceManager`。
+    工作区管理执行环境、MCP 服务器生命周期、技能和上下文卸载。选择后端请参考[工作区](/versions/2.0.8dev/zh/building-blocks/workspace/overview)；按用户、智能体或会话分配工作区请参考[工作区管理](/versions/2.0.8dev/zh/deploy/workspace-manager)。
   </Accordion>
 
-  <Accordion title="AgentScope 2.0 有配套的前端吗？">
-    有，分两个层次：
+  <Accordion title="AgentScope 2.0 有配套前端吗？">
+    有。Python 仓库内置了智能体服务及配套 Web 界面。开发者可以运行同一代码版本中的[后端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/agent_service)和[前端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)，体验完整应用。
 
-    - **TypeScript SDK** —— 通过 `pnpm install @agentscope-ai/agentscope` 安装，对齐 Python 端的 `Msg` 与 `Event` 类型，前端无需重写协议即可消费 agent 的流式输出。
-    - **前端 UI** —— 面向 [Agent Service](/versions/2.0.8dev/zh/deploy/agent-service) 的开箱即用 Web 应用，开发者无需自行编写 UI 即可直接体验已部署的 agent。
+    环境准备和启动命令见[智能体服务指南](/versions/2.0.8dev/zh/deploy/agent-service#快速上手)。也可以通过服务的 HTTP 接口和事件流接入自己的前端。
   </Accordion>
 
-  <Accordion title="2.0 还会提供 RAG 和 long-term memory 吗？">
-    会。两个模块正在从 1.0 向 2.0 架构迁移，会在后续版本中陆续上线，具体进度请关注 changelog 与 GitHub 发版。
+  <Accordion title="AgentScope 2.0 是否支持 RAG 和长期记忆？">
+    支持。[RAG](/versions/2.0.8dev/zh/building-blocks/rag)提供文档解析、分块、嵌入和向量检索；[知识库服务](/versions/2.0.8dev/zh/deploy/rag)提供面向服务部署的文档管理和索引能力。
+
+    [长期记忆](/versions/2.0.8dev/zh/building-blocks/long-term-memory)通过中间件支持基于文件的智能体记忆、ReMe 和 Mem0。RAG 用于检索知识，长期记忆用于跨会话保留信息，两者可以组合使用。
   </Accordion>
 
-  <Accordion title="除了 Python 还有其他语言版本吗？">
-    有。AgentScope 目前提供三种语言实现，各自独立仓库：
+  <Accordion title="除了 Python，还有其他语言实现吗？">
+    有。AgentScope 还提供 [TypeScript](https://github.com/agentscope-ai/agentscope-typescript) 和 [Java](https://github.com/agentscope-ai/agentscope-java) 实现，各自维护独立仓库和发布版本。
 
-    - **Python** —— [`agentscope-ai/agentscope`](https://github.com/agentscope-ai/agentscope)（即本文档对应仓库）
-    - **TypeScript** —— [`agentscope-ai/agentscope-typescript`](https://github.com/agentscope-ai/agentscope-typescript)
-    - **Java** —— [`agentscope-ai/agentscope-java`](https://github.com/agentscope-ai/agentscope-java)
+    请使用对应实现的文档和样例，不同语言的接口不能直接互换；本文档介绍的是 Python SDK。
   </Accordion>
 
 </AccordionGroup>
