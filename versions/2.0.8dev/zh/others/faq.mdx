@@ -3,7 +3,7 @@ title: "常见问题"
 description: "解答使用 AgentScope 2.0 时的常见问题。"
 ---
 
-以下问答涵盖版本兼容、执行环境、前端接入、检索与记忆，以及不同语言的实现。
+以下问答提供 AgentScope 开发、功能接入和服务部署的配置指引。
 
 <AccordionGroup>
 
@@ -19,8 +19,8 @@ description: "解答使用 AgentScope 2.0 时的常见问题。"
     工作区管理执行环境、MCP 服务器生命周期、技能和上下文卸载。选择后端请参考[工作区](/versions/2.0.8dev/zh/building-blocks/workspace/overview)；按用户、智能体或会话分配工作区请参考[工作区管理](/versions/2.0.8dev/zh/deploy/workspace-manager)。
   </Accordion>
 
-  <Accordion title="AgentScope 2.0 有配套前端吗？">
-    有。Python 仓库内置了智能体服务及配套 Web 界面。开发者可以运行同一代码版本中的[后端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/agent_service)和[前端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)，体验完整应用。
+  <Accordion title="如何将智能体部署成服务并接入 Web 界面？">
+    使用内置的智能体服务及配套 Web 界面。开发者可以运行同一代码版本中的[后端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/agent_service)和[前端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)，体验完整应用。
 
     环境准备和启动命令见[智能体服务指南](/versions/2.0.8dev/zh/deploy/agent-service#快速上手)。也可以通过服务的 HTTP 接口和事件流接入自己的前端。
   </Accordion>
@@ -29,6 +29,48 @@ description: "解答使用 AgentScope 2.0 时的常见问题。"
     支持。[RAG](/versions/2.0.8dev/zh/building-blocks/rag)提供文档解析、分块、嵌入和向量检索；[知识库服务](/versions/2.0.8dev/zh/deploy/rag)提供面向服务部署的文档管理和索引能力。
 
     [长期记忆](/versions/2.0.8dev/zh/building-blocks/long-term-memory)通过中间件支持基于文件的智能体记忆、ReMe 和 Mem0。RAG 用于检索知识，长期记忆用于跨会话保留信息，两者可以组合使用。
+  </Accordion>
+
+  <Accordion title="是否必须使用 Qwen 或 DashScope？">
+    不需要。AgentScope 支持 OpenAI、Anthropic、Gemini、DashScope、Ollama 等模型 API，开发者可以选择对应的模型类和凭据；可用功能取决于所选模型和 API。
+
+    配置方式见[模型配置](/versions/2.0.8dev/zh/building-blocks/agent/configure-agent)和[对话模型](/versions/2.0.8dev/zh/building-blocks/model/llm)。
+  </Accordion>
+
+  <Accordion title="AgentScope 是否支持 MCP 和技能？">
+    支持。MCP（Model Context Protocol）通过 STDIO 或 HTTP 连接外部工具；技能通过 `SKILL.md` 提供指令，由智能体读取后使用已有工具执行。
+
+    开发者可以通过工具包注册，也可以通过工作区管理，具体见 [MCP](/versions/2.0.8dev/zh/building-blocks/tool/mcp)和[技能](/versions/2.0.8dev/zh/building-blocks/tool/skill)。
+  </Accordion>
+
+  <Accordion title="如何构建多智能体应用？">
+    可以在 Python 中自行组合智能体，也可以使用[智能体团队](/versions/2.0.8dev/zh/deploy/agent-team)实现服务中的协作：主智能体创建工作智能体、分配任务并交换消息，每个工作智能体在独立会话中运行。
+
+    任务需要分工或独立上下文时，可以使用团队；一个模型和工具包就能完成任务时，使用单个智能体即可。
+  </Accordion>
+
+  <Accordion title="如何构建多租户、多会话服务？">
+    使用 `agentscope.app` 下的智能体服务管理用户所属资源和持久化会话。存储后端支持 Redis，以及通过 SQLAlchemy 接入的 PostgreSQL、MySQL、SQLite 等数据库；工作区可以按用户、智能体或会话分配。
+
+    用户身份需要接入应用自己的认证系统，配置方式见[智能体服务](/versions/2.0.8dev/zh/deploy/agent-service)和[工作区管理](/versions/2.0.8dev/zh/deploy/workspace-manager)。
+  </Accordion>
+
+  <Accordion title="AgentScope 是否支持 A2A？">
+    从 2.0.8 起支持。`A2AAgent` 连接远程 A2A 智能体，并将回复转换为 AgentScope 消息和事件；远程智能体的模型和工具由其服务管理。
+
+    接入方式见 [A2A 指南](/versions/2.0.8dev/zh/building-blocks/a2a)和[客户端与服务端样例](https://github.com/agentscope-ai/agentscope/tree/main/examples/a2a)。
+  </Accordion>
+
+  <Accordion title="如何审批工具调用或中断智能体？">
+    通过[权限系统](/versions/2.0.8dev/zh/building-blocks/permission-system/overview)配置允许、拒绝或请求确认的规则。需要确认时，应用向用户展示请求，再通过[人工介入事件](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)传回用户决定。
+
+    停止正在进行的执行请使用独立的[中断流程](/versions/2.0.8dev/zh/building-blocks/agent/interrupt-agent)。
+  </Accordion>
+
+  <Accordion title="如何配合 AI 编码助手开发？">
+    安装官方 [agentscope-skill](https://github.com/agentscope-ai/skills/tree/main/skills/agentscope-skill)，为编码助手提供 AgentScope 使用指引、接口资料和样例。告知助手已安装的 SDK 版本，并通过[文档索引](/llms.txt)查找对应页面。
+
+    要求助手按该版本核对接口名称，并运行生成的样例。
   </Accordion>
 
   <Accordion title="除了 Python，还有其他语言实现吗？">
