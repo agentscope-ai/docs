@@ -143,6 +143,14 @@ for lang_entry in languages:
         # Deep-copy, update version field, then rewrite all internal paths
         new_entry = copy.deepcopy(versions[source_idx])
         new_entry["version"] = new_version
+        new_entry.pop("default", None)
+        new_entry.pop("tag", None)
+        if new_version.endswith("dev"):
+            new_entry["tag"] = "Development"
+        else:
+            for entry in versions:
+                entry.pop("default", None)
+            new_entry["default"] = True
         new_entry = update_paths(new_entry)
 
         # Insert right BEFORE the source version so newer versions appear higher
