@@ -1,0 +1,132 @@
+---
+title: "Feishu"
+description: "Chat with your service's agents inside Feishu."
+---
+
+The Feishu channel connects over a WebSocket long connection, so it needs no public callback URL and works from a local or intranet deployment. The Feishu channel currently supports:
+
+- **Interactive card approval**: when an agent calls a tool that needs approval, it asks for confirmation as a card in Feishu; click a button to allow or deny;
+- **Streaming replies**: the agent's answer updates within a single message as it is generated;
+- **Multimodal input**: receive images, files, and voice messages from users and pass them to the agent;
+- **Markdown**: replies render as Markdown, and overly long content is split automatically.
+
+Connecting takes three steps: get the credentials of a Feishu app, start an agent service to host the channel, then add the Feishu channel in the management UI. There are two ways to get the credentials:
+
+| Way | When to use it |
+|---|---|
+| Authorize by QR code | Scan and confirm in the management UI, and Feishu hands over the credentials directly, with no app to create by hand |
+| Create manually | Create a custom app on the [Feishu Open Platform](https://open.feishu.cn/) when you need your own permissions, event subscriptions, or app profile |
+
+## Prerequisites
+
+The Feishu channel depends on `lark-oapi`, installed with the `channel` extra:
+
+```bash Install the dependency
+pip install "agentscope[channel]"
+```
+
+## Create App
+
+Create and configure the bot on the [Feishu Open Platform](https://open.feishu.cn/); it takes a few minutes. If you plan to get the credentials by QR code, skip this section and jump to [Add Channel](#add-channel).
+
+<Steps>
+  <Step title="Create a custom app">
+    In the developer console, create a "custom app" and fill in its name and icon.
+  </Step>
+  <Step title="Record the App ID and App Secret">
+    On the "Credentials & Basic Info" page, copy the **App ID** and **App Secret** to fill into the channel config later. The App Secret is a secret; keep it safe.
+  </Step>
+  <Step title="Enable the bot capability">
+    Under "Add features", enable "Bot" so the app can send and receive messages.
+  </Step>
+  <Step title="Subscribe to events (long connection)">
+    On the "Events & callbacks" page, set the delivery method to **long connection**, with no callback URL. Subscribe to the "receive message" event `im.message.receive_v1`; card approval also needs the card callback event `card.action.trigger`.
+  </Step>
+  <Step title="Request permissions">
+    Under "Permissions & Scopes", request the message permissions: receive messages, and send messages as the app (both DMs and groups). If you want to list the bot's groups while configuring routing, also request the group-list permission. Refer to the [Feishu docs](https://open.feishu.cn/document/) for the exact scopes.
+  </Step>
+  <Step title="Publish a version">
+    Create and publish an app version so it becomes available in your organization. You can then add the bot to a group or DM it directly.
+  </Step>
+</Steps>
+
+## Start Agent Service
+
+A channel runs on top of an [agent service](/versions/2.0.8/en/deploy/agent-service). Start the service with `create_app` and declare the accepted channel types via `channels`. Channels depend on a message bus (`message_bus`); use `InMemoryMessageBus` for single-machine development, and switch to `RedisMessageBus` for multi-process or multi-node deployment.
+
+```python Start an agent service that hosts the channel
+from agentscope.app import create_app
+from agentscope.app.channel import FeishuChannel
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.storage import RedisStorage
+from agentscope.app.workspace_manager import LocalWorkspaceManager
+
+app = create_app(
+    storage=RedisStorage(host="localhost", port=6379),
+    # In-memory bus for single-machine dev; switch to RedisMessageBus for multi-node
+    message_bus=InMemoryMessageBus(),
+    workspace_manager=LocalWorkspaceManager(basedir="./workspaces"),
+    channels=[FeishuChannel],   # channel types this service accepts
+)
+# After starting with uvicorn, the channel feature is ready
+# uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+## Add Channel
+
+In the management UI (see the sample frontend [`examples/web_ui`](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)), add a channel through a visual form, with no config to write by hand.
+
+<Steps>
+  <Step title="Create a channel and pick Feishu">
+    On the channel management page, create a channel and choose "Feishu" as the platform type.
+  </Step>
+  <Step title="Fill in the credentials">
+    The credential form has an "authorize by QR code" tab and a "fill in manually" tab. With **authorize by QR code**, the UI shows a QR code; scan and confirm it in the Feishu app, and Feishu hands over the credentials, which are filled in automatically. With **fill in manually**, enter the **App ID** and **App Secret** you got when creating the app.
+  </Step>
+  <Step title="Configure routing rules">
+    Choose which agent handles messages and how sessions are scoped. See [Message Routing](/versions/2.0.8/en/deploy/channel/routing) for what the rules mean.
+  </Step>
+  <Step title="Save and enable">
+    Save and enable the channel; the service opens the Feishu long connection immediately and the bot comes online. Add it to a group or start a DM to begin.
+  </Step>
+</Steps>
+
+<Note>
+The management UI maps onto the `/channels` endpoints; call them directly when you need to create channels programmatically. See the [API](/versions/2.0.8/en/deploy/openapi.json) part of this chapter for the fields. QR code authorization maps onto `POST /channels/bindings` (open an authorization session and return the URL to render), `GET /channels/bindings/{id}` (poll for the result), and `POST /channels/bindings/{id}/cancel` (abandon the session). Once authorized, pass `credential_binding_id` when creating the channel to claim the credentials, with no plaintext credentials in the request body.
+</Note>
+
+<Warning>
+An authorization session belongs to the user who started it, and its credentials can be claimed only once: the session is void afterwards. An expired session, or a different user creating the channel, means scanning again.
+</Warning>
+
+## Platform Config
+
+The Feishu channel has a few platform-specific switches:
+
+| Field | Description | Default |
+|---|---|---|
+| `only_at_reply` | In group chats, reply only when the bot is @mentioned. DMs are unaffected and always answered | `true` |
+| `show_thinking` | Include the model's reasoning in the reply | `false` |
+| `show_tool_process` | Include tool calls and results in the reply | `false` |
+
+<Tip>
+If you want the bot to join group discussions freely like any member, turn `only_at_reply` off; leaving it on (the default) keeps the bot from being too active in groups.
+</Tip>
+
+## Verify and Troubleshoot
+
+- Check the channel status in the management UI, or call `GET /channels/{id}/status` to confirm the long connection is established.
+- If the bot doesn't respond in a group, first check `only_at_reply` and the @-mention behavior, then check that the message-receive permission was requested and published with the version.
+- If the bot never comes online, check the App ID / App Secret and that event subscription is set to the long-connection method.
+- If no credentials arrive after scanning, the QR code has most likely expired; click "regenerate" and scan again.
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Message Routing" icon="route" href="/versions/2.0.8/en/deploy/channel/routing" cta="Learn more" arrow>
+    Route different groups to different agents.
+  </Card>
+  <Card title="Discord" icon="discord" href="/versions/2.0.8/en/deploy/channel/discord" cta="Learn more" arrow>
+    Connect Discord with the same flow.
+  </Card>
+</CardGroup>

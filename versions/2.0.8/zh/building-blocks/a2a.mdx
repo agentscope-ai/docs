@@ -1,0 +1,207 @@
+---
+title: "A2A 协议"
+description: "连接并与 A2A 协议后的智能体进行对话"
+---
+
+A2A（[Agent2Agent](https://a2a-protocol.org/)）是 Google 提出的智能体通信协议。
+
+AgentScope 通过 `A2AAgent` 类作为 A2A 协议的客户端，可以连接任意实现了 A2A 1.0 及以上协议的远端智能体（对方只提供 0.3 时，官方 SDK 回退到兼容传输），将远端智能体返回的消息、状态与制品（Artifact）转换成 AgentScope 中的消息与事件；同时将用户输入（包括多模态数据）发送给远端智能体。
+
+`A2AAgent` 仅仅是远端智能体运行逻辑的本地代理，本身不代表实际的运行逻辑。与 `Agent` 类相比，两者在接口上保持一致，但有以下区别：
+
+| 能力 | `Agent` | `A2AAgent` |
+|------|---------|------------|
+| `reply()` / `reply_stream()` | ✅ | 把输入发给远端，流式转译对方的响应 |
+| `observe()` | ✅ | 缓存消息，随下一次 `reply()` 一并发出 |
+| `compress_context()` | ✅ | 空操作，上下文由远端服务维护 |
+| 模型、工具、中间件、权限、结构化输出 | ✅ | 不提供，全部由远端服务决定 |
+| 中断与恢复、人类介入 | ✅ | 不提供，远端等待输入时以普通回复呈现 |
+
+<Tip>
+仓库中的 [`examples/a2a`](https://github.com/agentscope-ai/agentscope/tree/main/examples/a2a) 提供了完整的双端示例：用 AgentScope 智能体搭起 A2A 服务端，再用 `A2AAgent` 连上去对话。
+</Tip>
+
+## 快速开始
+
+<Steps>
+  <Step title="安装依赖">
+    A2A 支持依赖官方 SDK，随 `a2a` 可选依赖安装。
+
+    ```bash 安装依赖
+    pip install "agentscope[a2a]"
+    ```
+  </Step>
+
+  <Step title="取回 Agent Card">
+    Agent Card 是远端智能体的自我描述文件，一份放在固定地址上的 JSON，记录它的名称、简介、能力，以及可用的传输方式与接口地址。`A2AAgent` 用它识别对方并选择传输方式，因此连接从取回这张卡片开始。
+
+    ```python 解析 Agent Card
+    import httpx
+    from a2a.client import A2ACardResolver
+
+    # httpx 客户端只服务于这一次解析，用完即关
+    async with httpx.AsyncClient() as httpx_client:
+        card = await A2ACardResolver(
+            httpx_client=httpx_client,
+            base_url="http://127.0.0.1:9999",
+        ).get_agent_card()
+
+    print(card.name)  # 该名称会成为 A2AAgent 的 name
+    ```
+  </Step>
+
+  <Step title="创建 A2AAgent 并对话">
+    把卡片交给 `A2AAgent`。它自己持有 A2A 客户端，退出上下文管理器时关闭，因此一个实例服务一段对话，关闭后不能重开。
+
+    对话接口与本地智能体一致：`reply_stream` 实时产出事件，`reply` 在内部消费完事件后返回最终消息。事件流可以直接交给[终端 UI](/versions/2.0.8/zh/building-blocks/console) 的 `ConsoleRenderer` 打印，不必自己分发事件类型。
+
+    <CodeGroup>
+
+    ```python 流式对话
+    from agentscope.agent import A2AAgent
+    from agentscope.console import ConsoleRenderer
+    from agentscope.message import UserMsg
+
+    renderer = ConsoleRenderer()
+
+    async with A2AAgent(card) as agent:
+        # 远端产出的文本随生成实时打印
+        async for event in agent.reply_stream(
+            UserMsg(name="user", content="帮我规划一个杭州周末行程。"),
+        ):
+            renderer.render(event)
+
+        # 第二次调用自动复用同一段远端会话
+        async for event in agent.reply_stream(
+            UserMsg(name="user", content="改成适合带小孩的。"),
+        ):
+            renderer.render(event)
+
+        # 渲染器把事件累积回一条完整的回复消息
+        print(renderer.last_msg.get_text_content())
+    ```
+
+    ```python 一次性对话
+    from agentscope.agent import A2AAgent
+    from agentscope.message import UserMsg
+
+    async with A2AAgent(card) as agent:
+        # 等远端把这一轮说完，只拿最终消息
+        reply = await agent.reply(
+            UserMsg(name="user", content="帮我规划一个杭州周末行程。"),
+        )
+        print(reply.get_text_content())
+
+        # 第二次调用自动复用同一段远端会话
+        reply = await agent.reply(
+            UserMsg(name="user", content="改成适合带小孩的。"),
+        )
+    ```
+
+    </CodeGroup>
+
+    <Note>
+    `A2AAgent.reply_stream` 不支持本地智能体的 `yield_final_msg` 参数，需要最终消息时用 `renderer.last_msg` 或改用 `reply`。
+    </Note>
+  </Step>
+
+  <Step title="（可选）交给终端 UI">
+    不想自己写循环时，`launch_console` 会把输入、渲染与中断一并接管，远端智能体可以直接丢进去调试。
+
+    ```python 在终端与远端智能体对话
+    from agentscope.console import launch_console
+
+    async with A2AAgent(card) as agent:
+        await launch_console(agent)
+    ```
+  </Step>
+</Steps>
+
+构造参数如下，其中 `client` 与 `state` 只能以关键字传入：
+
+| 参数 | 说明 |
+|------|------|
+| `agent_card` | 远端的 Agent Card，用于识别对方并选择传输方式 |
+| `client` | 可选，自行配置的官方 SDK 客户端，例如走 gRPC 或带自定义鉴权。不传则按卡片构造流式客户端，此时对方必须提供 `JSONRPC` 或 `HTTP+JSON` 接口 |
+| `state` | 可选，已有的 `A2AAgentState`，用于续接此前的远端会话 |
+
+<Tip>
+一段远端会话值得持久化的东西都在 `A2AAgentState` 里，把它传回构造函数即可续接：
+
+```python 续接同一段远端会话
+from agentscope.state import A2AAgentState
+
+agent = A2AAgent(card, state=A2AAgentState(context_id=stored_context_id))
+```
+</Tip>
+
+## 协议转换
+
+`A2AAgent` 的全部工作是把 A2A 的概念翻译成 AgentScope 的概念，翻译分三层：会话标识、响应载荷、内容 Part。
+
+### 会话与任务
+
+A2A 用两个标识组织一段对话，它们与 AgentScope 的概念并不一一对应，是使用中最容易误解的地方：
+
+| A2A 标识 | 含义 | 在 AgentScope 这一侧 |
+|----------|------|---------------------|
+| `context_id` | 远端的一段会话 | 相当于 `session_id`：同一个 `context_id` 下的多次 `reply()` 共享远端上下文，由 `A2AAgent` 自动携带，无需手动传递 |
+| `task_id` | 远端的一次执行单元 | **不等同于一次 `reply()`**：一次 `reply()` 可能跨越多个 Task，也可能续上此前 `reply()` 留下的 Task，取决于远端的实现 |
+
+两者都保存在 `A2AAgentState` 中。此外该状态还有一个本地的 `session_id`，只用于给本适配器产出的事件分组，与远端无关。
+
+### 响应载荷
+
+远端的每一种响应载荷都会被拆成内容 Part 转译，载荷本身只决定这批内容归属哪个 Task、以及本次回复如何收尾：
+
+| A2A 响应载荷 | 转译方式 |
+|-------------|---------|
+| `Message` | 其 Parts 转为内容；这是一次不产生 Task 的直接回答，因此会清空 `task_id` |
+| `TaskArtifactUpdateEvent` | 制品的 Parts 转为内容；`append` 与 `last_chunk` 标记决定文本是否继续写入同一个块，从而让流式文本不被切碎 |
+| `TaskStatusUpdateEvent` | 状态消息的 Parts 转为内容，同时用该状态决定 `finished_reason` 与 `task_id` |
+| `Task` | 完整快照：先转译全部制品，再转译状态消息 |
+
+### 内容 Part
+
+每个 Part 按类型转成对应的内容块：
+
+| A2A Part | AgentScope 内容块 |
+|----------|------------------|
+| 文本 Part | `TextBlock`，同一批连续文本流入同一个块 |
+| 字节 Part（`raw`） | `DataBlock`，字节以 base64 承载 |
+| URL Part（`url`） | `DataBlock`，保留原始 URL |
+| 其它（如结构化数据 Part） | 不支持，抛出 `ValueError` |
+
+因此事件流中只会出现回复起止事件与文本 / 数据块事件。不使用 `ConsoleRenderer`、自行分发事件时，处理 `TextBlockDeltaEvent` 与 `DataBlockEndEvent` 两类即可。块结束事件的 `metadata["a2a"]` 中记录了它来自哪个 A2A 对象（`task_id`、`artifact_id`、`message_id`），最终消息的 `metadata["a2a"]` 中记录 `context_id`。
+
+<Note>
+思考块、工具调用块、提示块与推送通知都不在转译范围内：A2A 传递的是最终产物，远端智能体的推理过程与工具调用不会出现在事件流里。
+</Note>
+
+### 回复的结束
+
+远端 Task 挂起在服务端，本地并没有任何东西被挂起，因此**每一次响应流结束都意味着本次回复结束**。流最后停在哪个 Task 状态，决定这次回复的 `finished_reason`：
+
+| 远端 Task 状态 | `finished_reason` | 含义 |
+|---------------|-------------------|------|
+| `COMPLETED` | `COMPLETED` | 任务完成 |
+| `INPUT_REQUIRED`、`AUTH_REQUIRED` | `COMPLETED` | 远端在等输入，其状态消息作为普通内容返回，用下一次 `reply()` 回答即可 |
+| `CANCELED` | `INTERRUPTED` | 任务被取消 |
+| `FAILED`、`REJECTED` | `ERROR` | 任务失败或被拒绝 |
+
+`task_id` 只在远端等待输入（`INPUT_REQUIRED` / `AUTH_REQUIRED`）时保留，下一条消息续上该 Task；其余状态会清空它，下一条消息在同一个 `context_id` 内开启新 Task。另有两种边界情况：远端已经忘记的 Task 退化为新 Task；远端仍在运行的 Task 会直接抛出 `RuntimeError`，因为此时发消息会让它再执行一遍。
+
+<Warning>
+A2A 的凭据在协议之外传递，因此 `AUTH_REQUIRED` 的 Task 无法通过本适配器授权，需要按状态消息中的指引自行完成。
+</Warning>
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="终端 UI" icon="terminal" href="/versions/2.0.8/zh/building-blocks/console" cta="查看详情" arrow>
+    把远端智能体交给终端，直接开始对话。
+  </Card>
+  <Card title="消息与事件" icon="message-square" href="/versions/2.0.8/zh/building-blocks/message-and-event" cta="查看详情" arrow>
+    了解事件流中每种事件的含义。
+  </Card>
+</CardGroup>

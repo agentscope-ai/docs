@@ -1,0 +1,57 @@
+---
+title: "Overview"
+description: "Manage the agent's working memory to keep long tasks on track"
+---
+
+The context is an agent's working memory: the messages (user inputs, assistant responses, tool calls, tool results) that the LLM sees on every reasoning step. Context management is about more than fitting the model's window; it shapes what the model sees at each step so the agent completes tasks better, through three mechanisms:
+
+| Mechanism | What It Does | Page |
+|-----------|--------------|------|
+| **Context injection** | Keeps the agent aware of runtime state that changes across turns (time, tasks, context usage) by injecting hints into the context | [Environment Awareness](/versions/2.0.9dev/en/building-blocks/context/environment-awareness) |
+| **Context compression** | Summarizes older messages and truncates oversized tool results, keeping long conversations within the model's window | [Compress Context](/versions/2.0.9dev/en/building-blocks/context/compress-context) |
+| **Context offloading** | Persists dropped content (compressed messages, truncated tool results) to external storage so details remain retrievable | [Offload Context](/versions/2.0.9dev/en/building-blocks/context/offload-context) |
+
+The three mechanisms work in concert: injection adds what the model needs to know now, compression removes what it no longer needs verbatim, and offloading keeps the removed content one file-read away.
+
+## Assemble Context
+
+Before each model call, the agent assembles a single API input from three layers. The structure below shows what flows into that call:
+
+<Tree>
+  <Tree.Folder name="Model API Input" defaultOpen>
+    <Tree.Folder name="System Prompt" defaultOpen>
+      <Tree.File name="Base system prompt" />
+      <Tree.File name="Skill instructions (from Toolkit)" />
+      <Tree.File name="on_system_prompt middleware transforms" />
+    </Tree.Folder>
+    <Tree.File name="Summary (compressed history, if any)" />
+    <Tree.File name="Context (recent uncompressed messages)" />
+  </Tree.Folder>
+</Tree>
+
+How each layer is built:
+
+1. **System prompt**: starts from the `system_prompt` passed at agent creation, then appends skill instructions (each skill's name and description, sourced from the toolkit), then runs every `on_system_prompt` [middleware](/versions/2.0.9dev/en/building-blocks/middleware) hook in order.
+2. **Summary**: the compressed digest of older messages, present only after a compression has occurred.
+3. **Context**: the recent uncompressed messages (user inputs, assistant responses, tool calls, tool results). This is also where injected runtime-state hints live.
+
+<Tip>
+Fixed information belongs in the system prompt (via the `on_system_prompt` middleware hook for dynamic composition); information that changes within a conversation belongs in the context, injected as hints. See [Environment Awareness](/versions/2.0.9dev/en/building-blocks/context/environment-awareness) for the distinction.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Awareness" icon="clock" href="/versions/2.0.9dev/en/building-blocks/context/environment-awareness">
+    Inject time, tasks, and context usage so the agent stays oriented.
+  </Card>
+  <Card title="Compress Context" icon="compress" href="/versions/2.0.9dev/en/building-blocks/context/compress-context">
+    Keep the context length within the preset limit.
+  </Card>
+  <Card title="Offload Context" icon="box-archive" href="/versions/2.0.9dev/en/building-blocks/context/offload-context">
+    Persist dropped content so the agent can read it back on demand.
+  </Card>
+  <Card title="Workspace" icon="folder-tree" href="/versions/2.0.9dev/en/building-blocks/workspace/overview">
+    Built-in offloader implementations and the agent's working environment.
+  </Card>
+</CardGroup>

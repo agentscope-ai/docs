@@ -1,0 +1,321 @@
+---
+title: "嵌入模型"
+description: "将文本与多媒体内容转换为向量，服务检索、RAG 与记忆"
+---
+
+嵌入模型（Embedding）将文本（多模态模型还包括图片、视频等媒体）转换为稠密向量，支撑语义检索、RAG 与记忆召回。AgentScope 当前提供以下模型类：
+
+| 模型 API | 模型类 | 说明 |
+|--------|--------|------|
+| DashScope | `DashScopeEmbeddingModel` | 文本 + 多模态统一 API（`text-embedding-v4`、`qwen3-vl-embedding` 等），内容感知分批 |
+| OpenAI | `OpenAIEmbeddingModel` | `text-embedding-3-small/large`，兼容 OpenAI 风格端点 |
+| Gemini | `GeminiEmbeddingModel` | 文本（`gemini-embedding-001`）与多模态（`gemini-embedding-2`，图片 / 视频 / 音频 / PDF） |
+| Ollama | `OllamaEmbeddingModel` | 本地嵌入模型（`nomic-embed-text` 等），凭证承载 host URL |
+
+## 创建模型
+
+每个嵌入模型接收一个凭证、一个模型名，以及可选的 `Parameters` 对象，与其他模型族的模式完全一致。`Parameters` 承载 `dimensions`，即输出向量的维度：
+
+<CodeGroup>
+```python DashScope
+import os
+from agentscope.embedding import DashScopeEmbeddingModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeEmbeddingModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="text-embedding-v4",
+    parameters=DashScopeEmbeddingModel.Parameters(dimensions=1024),
+)
+```
+
+```python OpenAI
+import os
+from agentscope.embedding import OpenAIEmbeddingModel
+from agentscope.credential import OpenAICredential
+
+model = OpenAIEmbeddingModel(
+    credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+    model="text-embedding-3-small",
+    parameters=OpenAIEmbeddingModel.Parameters(dimensions=1536),
+)
+```
+
+```python Gemini
+import os
+from agentscope.embedding import GeminiEmbeddingModel
+from agentscope.credential import GeminiCredential
+
+model = GeminiEmbeddingModel(
+    credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
+    model="gemini-embedding-001",
+    parameters=GeminiEmbeddingModel.Parameters(dimensions=768),
+)
+```
+
+```python Ollama
+from agentscope.embedding import OllamaEmbeddingModel
+from agentscope.credential import OllamaCredential
+
+model = OllamaEmbeddingModel(
+    credential=OllamaCredential(host="http://localhost:11434"),
+    model="nomic-embed-text",
+)
+```
+</CodeGroup>
+
+所有嵌入模型共享的构造参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `credential` | `CredentialBase` | API 专属凭证 |
+| `model` | `str` | 模型标识符（例如 `"text-embedding-v4"`） |
+| `parameters` | `Parameters \| None` | `dimensions`，即输出向量维度（默认 `512`） |
+| `embedding_cache` | `EmbeddingCacheBase \| None` | 可选缓存，跳过重复的 API 调用（参见[嵌入缓存](#嵌入缓存)） |
+| `context_size` | `int` | 单条输入的最大 token 数 |
+| `max_retries` | `int` | 每个批次在可重试错误下的最大重试次数 |
+| `retry_delay` | `float` | 两次重试之间的间隔秒数 |
+
+<Info>
+`dimensions` 的合法取值因模型而异：每张模型卡片通过顶层的 `dimensions` 字段固定默认值，通过 `supported_dimensions` 声明允许的取值（例如 `text-embedding-v4` 接受 2048 / 1536 / 1024 / ... / 64）。参见 [Embedding 模型卡片](#embedding-模型卡片)。
+</Info>
+
+## 调用模型
+
+通过传入一组输入调用模型。纯文本模型接受 `list[str]`；多模态模型还接受 `DataBlock` 元素：
+
+```python
+async def __call__(
+    self,
+    inputs: list[str | DataBlock],
+    **kwargs: Any,
+) -> EmbeddingResponse:
+```
+
+分批与重试由框架自动处理：
+
+1. 输入按模型的批大小切分（DashScope 文本为 10，OpenAI 为 2048，Gemini 为 100，Ollama 为 512）。
+2. 所有批次通过 `asyncio.gather` **并发**发出。
+3. 每个批次在 API 专属的可重试错误下独立重试，最多 `max_retries` 次。
+4. 结果合并为单个 `EmbeddingResponse`，并保持输入顺序。
+
+```python
+import asyncio
+import os
+from agentscope.embedding import DashScopeEmbeddingModel
+from agentscope.credential import DashScopeCredential
+
+async def main():
+    model = DashScopeEmbeddingModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="text-embedding-v4",
+        parameters=DashScopeEmbeddingModel.Parameters(dimensions=1024),
+    )
+    response = await model(
+        ["What is AgentScope?", "A multi-agent framework."],
+    )
+    print(len(response.embeddings))     # 2，每条输入一个向量
+    print(len(response.embeddings[0]))  # 1024
+    print(response.usage.tokens)        # 消耗的总 token 数
+    print(response.source)              # "api" 或 "cache"
+
+asyncio.run(main())
+```
+
+每个 `EmbeddingResponse` 包含：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `embeddings` | `list[Embedding]` | 每条输入一个向量，按输入顺序排列 |
+| `usage` | `EmbeddingUsage \| None` | 消耗的 `tokens` 与耗时 `time`（秒） |
+| `source` | `"api" \| "cache"` | 结果来自 API 还是缓存 |
+| `id` / `created_at` / `type` | `str` | 响应标识与时间戳；`type` 恒为 `"embedding"` |
+
+### 多模态嵌入
+
+多模态模型（`DashScopeEmbeddingModel` 搭配 `qwen3-vl-embedding` 等，`GeminiEmbeddingModel` 搭配 `gemini-embedding-2`）在字符串之外还接受 `DataBlock` 输入（图片支持 URL 或 base64，视频支持 URL）：
+
+```python
+import asyncio
+import os
+from agentscope.embedding import DashScopeEmbeddingModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import DataBlock, URLSource
+
+async def main():
+    model = DashScopeEmbeddingModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen3-vl-embedding",
+    )
+    response = await model([
+        "A cat sitting on a windowsill",
+        DataBlock(
+            source=URLSource(
+                url="https://example.com/cat.png",
+                media_type="image/png",
+            ),
+        ),
+    ])
+    print(len(response.embeddings))  # 2，每条输入一个向量
+
+asyncio.run(main())
+```
+
+<Info>
+多模态模型用**内容感知分批**取代简单的批大小切分：输入会按贪心策略打包，确保每个批次满足模型对总元素数、图片数、视频数的单次请求限制（例如 `qwen3-vl-embedding` 单次允许 20 个元素 / 5 张图片 / 1 个视频，`tongyi-embedding-vision-plus` 允许 20 / 64 / 8）。开发者无需自行拆分输入。
+</Info>
+
+## 嵌入缓存
+
+通过 `embedding_cache` 参数传入一个 `EmbeddingCacheBase` 实现，即可复用已计算过的向量。内置的 `FileEmbeddingCache` 将每次结果存为 `.npy` 文件，以请求的 SHA-256 哈希命名：
+
+```python
+import asyncio
+import os
+from agentscope.embedding import DashScopeEmbeddingModel, FileEmbeddingCache
+from agentscope.credential import DashScopeCredential
+
+async def main():
+    model = DashScopeEmbeddingModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="text-embedding-v4",
+        embedding_cache=FileEmbeddingCache(
+            cache_dir="./.cache/embeddings",
+            max_file_number=1000,
+            max_cache_size=100,  # MB
+        ),
+    )
+    r1 = await model(["What is AgentScope?"])
+    print(r1.source)  # "api"：首次调用走 API
+
+    r2 = await model(["What is AgentScope?"])
+    print(r2.source)  # "cache"：相同请求由本地缓存返回
+
+asyncio.run(main())
+```
+
+当超过 `max_file_number` 或 `max_cache_size` 时，最旧的文件会被优先淘汰。如需其他后端（Redis、SQLite 等），继承 `EmbeddingCacheBase` 并实现它的四个方法：`store`、`retrieve`、`remove`、`clear`。
+
+## 自定义模型 API
+
+新增嵌入模型 API 的步骤与[自定义大语言模型 API](/versions/2.0.8/zh/building-blocks/model/llm#自定义模型-api)一致。
+
+### 步骤 1：关联凭证
+
+在你的凭证上重写 `get_embedding_model_class()`（基类默认返回 `None`，表示"不支持嵌入模型"）：
+
+```python
+from typing import Type, TYPE_CHECKING
+from agentscope.credential import CredentialBase
+
+if TYPE_CHECKING:
+    from agentscope.embedding import EmbeddingModelBase
+
+class MyProviderCredential(CredentialBase):
+    # ... 字段与 get_chat_model_class() 同前 ...
+
+    @classmethod
+    def get_embedding_model_class(cls) -> Type["EmbeddingModelBase"]:
+        from .my_embedding import MyProviderEmbeddingModel
+        return MyProviderEmbeddingModel
+```
+
+### 步骤 2：实现模型类
+
+继承 `EmbeddingModelBase` 并实现 `_call_api` 处理**单个批次**，分批、并发与重试逻辑全部继承自基类。通过 `_get_retryable_exceptions` 声明 API 专属的瞬态错误：
+
+```python
+from typing import Any, Type
+from agentscope.embedding import EmbeddingModelBase, EmbeddingResponse, EmbeddingUsage
+
+class MyProviderEmbeddingModel(EmbeddingModelBase[str]):
+    def __init__(
+        self,
+        credential: "MyProviderCredential",
+        model: str,
+        parameters: "MyProviderEmbeddingModel.Parameters | None" = None,
+        context_size: int = 8192,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> None:
+        super().__init__(
+            credential=credential,
+            model=model,
+            parameters=parameters,
+            context_size=context_size,
+            batch_size=100,          # 单次 API 调用的最大条目数
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
+
+    @classmethod
+    def _get_retryable_exceptions(cls) -> tuple[Type[Exception], ...]:
+        return (TimeoutError,)       # 最多重试 max_retries 次
+
+    async def _call_api(
+        self,
+        inputs: list[str],
+        **kwargs: Any,
+    ) -> EmbeddingResponse:
+        # 框架保证 len(inputs) <= self.batch_size。
+        # 调用你的模型 API 并返回向量。
+        ...
+```
+
+按模型 API 支持的输入类型绑定泛型参数：纯文本用 `EmbeddingModelBase[str]`，多模态用 `EmbeddingModelBase[str | DataBlock]`，IDE 会据此为调用方提示正确的 `inputs` 类型。
+
+### 步骤 3：添加模型卡片（可选）
+
+将 YAML 文件放入实现旁边的 `_models/` 目录，`MyProviderEmbeddingModel.list_models()` 即可加载，与 Chat 模型卡片完全一致。
+
+## Embedding 模型卡片
+
+`EmbeddingModelCard` 是通用[模型卡片](/versions/2.0.8/zh/building-blocks/model/overview#前端集成)在嵌入场景下的对应物，带有嵌入专属的默认值：输出类型 `application/x-embedding` 表示该模型产出稠密向量。
+
+| 字段 | 与 `ModelCard` 的差异 |
+|------|------------------------|
+| `type` | 恒为 `"embedding_model"` |
+| `input_types` | 默认 `["text/plain"]`；多模态卡片追加 `image/*`、`video/*` 等 |
+| `output_types` | 默认 `["application/x-embedding"]` |
+| `dimensions` | **必填**的顶层字段：默认输出向量维度，以强类型 `int` 暴露 |
+| `supported_dimensions` | 俄罗斯套娃式模型（如 OpenAI 的 `text-embedding-3-*`）允许的维度集合；`None` 表示维度固定 |
+| `context_size` | 可选，单次请求的最大输入 token 数（如已知） |
+| `output_size` | 不存在，嵌入模型没有输出 token 上限 |
+
+一张典型的 YAML 卡片（`text-embedding-v4` 的真实卡片）：
+
+```yaml
+name: text-embedding-v4
+label: Text Embedding v4
+status: active
+
+input_types:
+  - text/plain
+
+output_types:
+  - application/x-embedding
+
+context_size: 8192
+
+# 默认输出向量维度，以及这个俄罗斯套娃式
+# 模型支持截断到的全部维度
+dimensions: 1024
+supported_dimensions: [2048, 1536, 1024, 768, 512, 256, 128, 64]
+```
+
+可以直接在模型类上获取卡片，也可以通过凭证的 `get_embedding_model_class()` 发现模型类：
+
+```python
+from agentscope.credential import DashScopeCredential
+from agentscope.embedding import OpenAIEmbeddingModel
+
+# 直接通过模型类
+cards = OpenAIEmbeddingModel.list_models()
+
+# 或从凭证发现模型类
+embed_cls = DashScopeCredential.get_embedding_model_class()
+cards = embed_cls.list_models()
+
+for card in cards:
+    print(f"{card.name}: dimensions={card.dimensions}")
+```

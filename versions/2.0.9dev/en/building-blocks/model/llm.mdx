@@ -1,0 +1,372 @@
+---
+title: "LLM"
+description: "Create chat models, call them, and plug in your own provider"
+---
+
+An LLM (called a **chat model** in AgentScope's class names) drives an agent's conversation and tool calls, accepting and producing multimodal content beyond plain text. AgentScope currently ships the following chat model classes:
+
+| Provider               | Model Class           |
+|------------------------|-----------------------|
+| OpenAI                 | `OpenAIChatModel`     |
+| OpenAI (Responses API) | `OpenAIResponseModel` |
+| Anthropic              | `AnthropicChatModel`  |
+| DashScope              | `DashScopeChatModel`  |
+| DeepSeek               | `DeepSeekChatModel`   |
+| Gemini                 | `GeminiChatModel`     |
+| Moonshot               | `MoonshotChatModel`   |
+| Volcengine             | `VolcengineChatModel` |
+| xAI                    | `XAIChatModel`        |
+| Ollama                 | `OllamaChatModel`     |
+
+## Create Chat Model
+
+Every chat model takes a credential, a model name, and an optional provider-specific `Parameters` object. The three tabs below show typical setups for streaming, tool calling, and reasoning:
+
+<CodeGroup>
+```python Streaming
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="qwen-plus",
+    stream=True,
+)
+```
+
+```python Tools
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="qwen-plus",
+    stream=False,
+    parameters=DashScopeChatModel.Parameters(
+        parallel_tool_calls=False,
+    ),
+)
+```
+
+```python Reasoning
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="qwen3-235b-a22b-thinking-2507",
+    parameters=DashScopeChatModel.Parameters(
+        thinking_enable=True,
+        thinking_budget=2048,
+    ),
+)
+```
+</CodeGroup>
+
+Common constructor arguments shared by every chat model:
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `credential` | `CredentialBase` | Provider-specific credential |
+| `model` | `str` | Model identifier (e.g. `"qwen-plus"`) |
+| `parameters` | `Parameters \| None` | Provider-specific parameters such as `temperature`, `thinking_enable`, `parallel_tool_calls` |
+| `stream` | `bool` | Whether to stream output |
+| `max_retries` | `int` | Maximum API retries on failure |
+| `context_size` | `int` | Context window used for context compression |
+| `formatter` | `FormatterBase \| None` | Override message formatter (see [Formatter](#formatter)) |
+
+## Call Chat Model
+
+Invoke the model by calling it with a list of `Msg` objects, plus optional `tools` and `tool_choice`:
+
+```python
+async def __call__(
+    self,
+    messages: list[Msg],
+    tools: list[dict] | None = None,
+    tool_choice: ToolChoice | None = None,
+    **kwargs: Any,
+) -> ChatResponse | AsyncGenerator[ChatResponse, None]:
+```
+
+The return type follows the model's `stream` setting:
+
+- **`stream=False`**: awaits a single `ChatResponse` carrying the full output.
+- **`stream=True`**: awaits an `AsyncGenerator[ChatResponse, None]`. Intermediate chunks (`is_last=False`) carry only the **delta** generated in that step. The final chunk (`is_last=True`) carries the **full accumulated content**.
+
+The two tabs below show both modes side by side:
+
+<CodeGroup>
+```python Streaming
+import asyncio
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+
+async def main():
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen-plus",
+        stream=True,
+    )
+    msgs = [UserMsg(name="user", content="Count from 1 to 5.")]
+
+    # stream=True: iterate over an async generator of ChatResponse chunks
+    async for chunk in await model(msgs):
+        if chunk.is_last:
+            print("Final:", chunk.content)   # full accumulated content
+        else:
+            print("Delta:", chunk.content)   # delta only
+
+asyncio.run(main())
+```
+
+```python Non-Streaming
+import asyncio
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+
+async def main():
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen-plus",
+        stream=False,
+    )
+    msgs = [UserMsg(name="user", content="Count from 1 to 5.")]
+
+    # stream=False: await a single ChatResponse with the full output
+    response = await model(msgs)
+    print(response.content)   # [TextBlock(text='1, 2, 3, 4, 5')]
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+A representative streaming trace, illustrating the delta-then-accumulated pattern:
+
+```
+Delta: [TextBlock(text='1')]
+Delta: [TextBlock(text=', 2,')]
+Delta: [TextBlock(text=' 3, ')]
+Delta: [TextBlock(text='4, 5')]
+Final: [TextBlock(text='1, 2, 3, 4, 5')]
+```
+
+Each `ChatResponse` carries content blocks (`TextBlock`, `ThinkingBlock`, `ToolCallBlock`, `DataBlock`), an `is_last` flag, a `finished_reason` (`FinishedReason.COMPLETED` or `FinishedReason.INTERRUPTED`), and a `ChatUsage` recording token counts and elapsed time.
+
+## Interrupt Model Call
+
+Interruption at the model layer means **asynchronous cancellation**: a model call runs inside an asyncio task, and cancelling that task (raising `asyncio.CancelledError`) stops the in-flight API request, typically because the user interrupted the agent while it was reasoning.
+
+Instead of discarding the partial output, `ChatModelBase.__call__` catches the cancellation and returns a final `ChatResponse` carrying the content accumulated so far, marked with `finished_reason=FinishedReason.INTERRUPTED`. Normal completions end with `FinishedReason.COMPLETED`, so downstream code can always distinguish a complete answer from a truncated one:
+
+```python
+import asyncio
+from agentscope.model import FinishedReason
+
+async def call_model():
+    async for chunk in await model(msgs):
+        if chunk.is_last and chunk.finished_reason == FinishedReason.INTERRUPTED:
+            # Partial content accumulated before the cancellation
+            print("Interrupted:", chunk.content)
+
+task = asyncio.create_task(call_model())
+# Cancelling the task interrupts the in-flight model call
+task.cancel()
+```
+
+This is the model-layer half of agent interruption: the `Agent` class builds on the same mechanism to stop a running reasoning-acting loop and keep its context consistent. See [Interrupt Agent](/versions/2.0.9dev/en/building-blocks/agent/interrupt-agent) for the agent-level behavior.
+
+## Generate Structured Output
+
+When you need a JSON object that conforms to a Pydantic model or JSON schema, call `generate_structured_output` instead of `__call__`. It returns a `StructuredResponse` whose `content` is a validated dict matching the schema:
+
+```python
+import asyncio
+import os
+from pydantic import BaseModel
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+
+class WeatherInfo(BaseModel):
+    city: str
+    temperature: float
+    unit: str
+
+async def main():
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen-plus",
+        stream=False,
+    )
+    response = await model.generate_structured_output(
+        messages=[UserMsg(name="user", content="What's the weather in Shanghai?")],
+        structured_model=WeatherInfo,
+    )
+    print(response.content)  # validated dict matching WeatherInfo
+
+asyncio.run(main())
+```
+
+<Info>
+`generate_structured_output` synthesizes a forced tool call from the schema, then validates and repairs the model's response.
+</Info>
+
+## Formatter
+
+A formatter translates AgentScope's `Msg` objects into the `list[dict]` payload that each provider's API expects. It is configured via the optional `formatter` argument on the chat model constructor. Every provider ships two built-in variants:
+
+| Variant | Use Case |
+|---------|----------|
+| **ChatFormatter** (default) | Standard single-agent dialog. Each `Msg` maps 1:1 to an API message, preserving native roles (`user`, `assistant`, `system`). |
+| **MultiAgentFormatter** | Multi-agent scenarios such as debate or moderation. Consecutive agent messages are grouped and wrapped in `<history>` tags with the sender's name, while tool call / result sequences keep their native API format. |
+
+Switch to multi-agent mode by passing the MultiAgent variant; no agent code changes are required:
+
+```python
+import os
+from agentscope.model import OpenAIChatModel
+from agentscope.credential import OpenAICredential
+from agentscope.formatter import OpenAIMultiAgentFormatter
+
+model = OpenAIChatModel(
+    credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+    model="gpt-4.1",
+    formatter=OpenAIMultiAgentFormatter(),
+)
+```
+
+For non-standard payload shapes (e.g. a provider whose API doesn't follow the OpenAI or Anthropic conventions), subclass `FormatterBase` and pass an instance through the same `formatter` argument.
+
+### Multimodal Tool Results
+
+A tool can return images, audio and other `DataBlock`s, and APIs differ in how much of that they can carry, so the formatter decides how those blocks enter the request:
+
+| Formatter | How multimodal tool results are carried |
+|-----------|-----------------------------------------|
+| `OpenAIResponseFormatter` | Written straight into the content array of `function_call_output`, with text, images and files in the order the tool returned them, so the media stays associated with its `call_id`. Text-only results remain string outputs. |
+| Every other formatter | The tool result keeps only text referring to the block, and the block itself is promoted into the user message that follows. The reference uses the `DataBlock`'s own stable `id`, so reformatting the same history produces the same output and provider prefix caching keeps working. |
+
+Both paths fall back to text for a media type the target model does not support: base64 data is written to a file and the tool result carries its path, while URL data is given as the URL.
+
+## Custom Provider
+
+You can extend AgentScope with your own model provider by implementing a credential and a chat model, then registering the credential.
+
+### Step 1: Define the Credential
+
+Subclass `CredentialBase` with a unique `type` discriminator and implement `get_chat_model_class()`:
+
+```python
+from typing import Literal, Type, TYPE_CHECKING
+from pydantic import ConfigDict, Field, SecretStr
+from agentscope.credential import CredentialBase
+
+if TYPE_CHECKING:
+    from agentscope.model import ChatModelBase
+
+class MyProviderCredential(CredentialBase):
+    model_config = ConfigDict(title="My Provider API")
+    type: Literal["my_provider_credential"] = "my_provider_credential"
+
+    api_key: SecretStr = Field(description="API key for My Provider.")
+    base_url: str = Field(default="https://api.myprovider.com/v1")
+
+    @classmethod
+    def get_chat_model_class(cls) -> Type["ChatModelBase"]:
+        from .my_model import MyProviderChatModel
+        return MyProviderChatModel
+```
+
+### Step 2: Implement the Chat Model
+
+Subclass `ChatModelBase`, define a `Parameters` inner class, and implement `_call_api`. The base class owns retry, streaming accumulation, and interruption handling, so `_call_api` only needs to translate provider responses into AgentScope `ChatResponse` chunks:
+
+```python
+from typing import Literal, Any, AsyncGenerator
+from pydantic import BaseModel, Field
+from agentscope.model import ChatModelBase, ChatResponse
+from agentscope.message import Msg
+from agentscope.tool import ToolChoice
+from agentscope.formatter import FormatterBase, OpenAIChatFormatter
+
+class MyProviderChatModel(ChatModelBase):
+    class Parameters(BaseModel):
+        max_tokens: int | None = Field(default=None, gt=0)
+        temperature: float | None = Field(default=None, ge=0, le=2)
+
+    type: Literal["my_provider_chat"] = "my_provider_chat"
+
+    def __init__(
+        self,
+        credential: "MyProviderCredential",
+        model: str,
+        parameters: Parameters | None = None,
+        stream: bool = True,
+        max_retries: int = 3,
+        context_size: int = 128000,
+        formatter: FormatterBase | None = None,
+    ) -> None:
+        super().__init__(
+            credential=credential,
+            model=model,
+            parameters=parameters or self.Parameters(),
+            stream=stream,
+            max_retries=max_retries,
+            context_size=context_size,
+        )
+        # If your API follows the OpenAI format, reuse OpenAIChatFormatter;
+        # otherwise implement your own FormatterBase subclass.
+        self.formatter = formatter or OpenAIChatFormatter()
+
+    async def _call_api(
+        self,
+        model_name: str,
+        messages: list[Msg],
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoice | None = None,
+        **kwargs: Any,
+    ) -> ChatResponse | AsyncGenerator[ChatResponse, None]:
+        formatted_messages = await self.formatter.format(messages)
+        # Call your provider's API using self.credential.api_key, etc.
+        # Return one ChatResponse for stream=False, or an async generator
+        # that yields delta ChatResponse chunks for stream=True.
+        # Do not accumulate streaming chunks here; ChatModelBase.__call__
+        # will append the final accumulated response and mark interruptions.
+        ...
+```
+
+<Info>
+For streaming custom providers, yield provider deltas as `ChatResponse(content=..., is_last=False)`. If `_call_api` ends without yielding a final `is_last=True` chunk, `ChatModelBase.__call__` will accumulate the deltas with `ChatResponse.append_chat_response()` and emit the final response automatically. If the stream is cancelled, it emits the partial accumulated response with `finished_reason=FinishedReason.INTERRUPTED`.
+</Info>
+
+### Step 3: Add Model Cards (optional)
+
+Drop YAML files into a `_models/` directory next to your model implementation. Each file describes one model: its capabilities (`input_types`, `output_types`), limits (`context_size`, `output_size`), and any per-model `parameter_overrides` (see [Integrate with Frontend](/versions/2.0.9dev/en/building-blocks/model/overview#integrate-with-frontend) for the full card format):
+
+```yaml
+name: my-model-v1
+label: My Model V1
+status: active
+input_types:
+  - text/plain
+output_types:
+  - text/plain
+context_size: 128000
+output_size: 4096
+parameter_overrides:
+  max_tokens: {"maximum": 4096}
+```
+
+`MyProviderChatModel.list_models()` then loads every YAML in that directory. To pull cards from a different location (for example, a registry your application maintains separately), pass `custom_yaml_dir`:
+
+```python
+cards = MyProviderChatModel.list_models(custom_yaml_dir="/path/to/cards")
+```

@@ -1,0 +1,147 @@
+---
+title: "Human-in-the-Loop"
+description: "Pause for user confirmation or external execution, then resume with result events"
+---
+
+The agent pauses execution and emits special events when it encounters two situations: a tool call that requires **user confirmation** (permission system returns ASK), or a tool marked as **external execution** (the result must come from outside the agent). In both cases, you resume the agent by passing a result event back via `reply`.
+
+While paused, `reply` returns a waiting notice message whose `finished_reason` is `None`: the reply is parked, not finished, and no remaining tool calls are executed until the outside result arrives.
+
+## User Confirmation
+
+When the permission system determines a tool call needs user approval, the agent emits a `RequireUserConfirmEvent` and pauses.
+
+<Steps>
+  <Step title="Receive the RequireUserConfirmEvent">
+    Use `reply_stream` to detect the pause. The event has the following structure:
+
+    <ParamField path="reply_id" type="str" required>
+      ID of the current reply, used to resume the agent.
+    </ParamField>
+    <ParamField path="tool_calls" type="list[ToolCallBlock]" required>
+      Tool calls pending user confirmation. Each `ToolCallBlock` contains:
+      <Expandable>
+        <ParamField path="id" type="str">Unique identifier for this tool call.</ParamField>
+        <ParamField path="name" type="str">The tool name (e.g. `"Bash"`, `"Write"`).</ParamField>
+        <ParamField path="input" type="str">JSON-encoded input parameters.</ParamField>
+        <ParamField path="suggested_rules" type="list[PermissionRule]">Auto-generated permission rules the user can accept to allow similar future calls.</ParamField>
+      </Expandable>
+    </ParamField>
+
+    ```python
+    from agentscope.event import RequireUserConfirmEvent
+
+    async for event in agent.reply_stream(msg):
+        if isinstance(event, RequireUserConfirmEvent):
+            for tc in event.tool_calls:
+                print(f"Tool: {tc.name}, Input: {tc.input}")
+                print(f"Suggested rules: {tc.suggested_rules}")
+    ```
+  </Step>
+  <Step title="Build the confirmation result">
+    For each pending tool call, create a `ConfirmResult` indicating whether to allow or deny it. You can also modify the tool call input or accept suggested permission rules:
+
+    ```python
+    from agentscope.event import ConfirmResult, UserConfirmResultEvent
+
+    confirm_results = []
+    for tc in event.tool_calls:
+        confirm_results.append(ConfirmResult(
+            confirmed=True,           # or False to deny
+            tool_call=tc,             # pass back (optionally modified)
+            rules=tc.suggested_rules, # accept rules for future auto-allow
+        ))
+    ```
+  </Step>
+  <Step title="Resume the agent">
+    Pass the `UserConfirmResultEvent` back to `reply` or `reply_stream`:
+
+    ```python
+    confirm_event = UserConfirmResultEvent(
+        reply_id=event.reply_id,
+        confirm_results=confirm_results,
+    )
+    result = await agent.reply(confirm_event)
+    ```
+
+    - **Confirmed** tool calls execute immediately and the agent continues reasoning
+    - **Denied** tool calls produce an error result visible to the LLM, which may retry with a different approach
+    - **Accepted rules** are persisted to the permission engine, so matching future calls are auto-allowed without prompting again
+  </Step>
+</Steps>
+
+## External Tool Execution
+
+When the agent calls a tool with `is_external_tool = True`, it emits a `RequireExternalExecutionEvent` and pauses. The tool's logic runs outside the agent, typically by a human operator or an external system.
+
+<Steps>
+  <Step title="Receive the RequireExternalExecutionEvent">
+    The event has the following structure:
+
+    <ParamField path="reply_id" type="str" required>
+      ID of the current reply, used to resume the agent.
+    </ParamField>
+    <ParamField path="tool_calls" type="list[ToolCallBlock]" required>
+      Tool calls to be executed externally. Each `ToolCallBlock` contains:
+      <Expandable>
+        <ParamField path="id" type="str">Unique identifier for this tool call.</ParamField>
+        <ParamField path="name" type="str">The external tool name.</ParamField>
+        <ParamField path="input" type="str">JSON-encoded input parameters.</ParamField>
+      </Expandable>
+    </ParamField>
+
+    ```python
+    from agentscope.event import RequireExternalExecutionEvent
+
+    async for event in agent.reply_stream(msg):
+        if isinstance(event, RequireExternalExecutionEvent):
+            for tc in event.tool_calls:
+                print(f"Execute externally: {tc.name}({tc.input})")
+    ```
+  </Step>
+  <Step title="Execute externally and build results">
+    Run the operation outside the agent and wrap the results as `ToolResultBlock` objects:
+
+    ```python
+    from agentscope.message import ToolResultBlock, TextBlock, ToolResultState
+    from agentscope.event import ExternalExecutionResultEvent
+
+    execution_results = []
+    for tc in event.tool_calls:
+        # Perform the actual operation (API call, human action, etc.)
+        output = await run_external_operation(tc.name, tc.input)
+
+        execution_results.append(ToolResultBlock(
+            id=tc.id,
+            name=tc.name,
+            output=[TextBlock(text=output)],
+            state=ToolResultState.SUCCESS,
+        ))
+    ```
+  </Step>
+  <Step title="Resume the agent">
+    Pass the `ExternalExecutionResultEvent` back to resume:
+
+    ```python
+    external_event = ExternalExecutionResultEvent(
+        reply_id=event.reply_id,
+        execution_results=execution_results,
+    )
+    result = await agent.reply(external_event)
+    ```
+
+    The results are injected into the agent's context and reasoning continues from where it left off.
+  </Step>
+</Steps>
+
+<Note>
+If multiple tool calls require outside interaction and only partial confirmation or execution results are passed back, the agent won't re-send the requiring events for the unconfirmed or unexecuted tool calls.
+</Note>
+
+<Tip>
+Confirmations are de-duplicated inside one concurrent batch: when several tool calls run in parallel and a later call is already covered by the rule suggested by an earlier confirmation in the same batch, it is not surfaced a second time. Safety ASKs are never de-duplicated this way.
+</Tip>
+
+<Tip>
+Use `reply_stream` when building interactive UIs: it lets you detect pause events in real time and prompt the user immediately. Use `reply` when you have pre-built automation that handles events programmatically.
+</Tip>

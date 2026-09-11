@@ -1,0 +1,450 @@
+---
+title: "Python 函数工具"
+description: "基于类或普通函数构建工具，并控制它们的执行方式"
+---
+
+Python 工具是任意继承 `ToolBase` 基类的对象。AgentScope 提供了一组内置工具覆盖常见操作，并对外暴露同一接口供开发者自定义：
+
+| 主题 | 内容 |
+|------|------|
+| [ToolBase 接口](#toolbase-接口) | 每个工具需要实现的属性与方法 |
+| [内置工具](#使用内置工具) | 开箱即用的工具：`Bash`、文件工具、计划工具 |
+| [切换工具后端](#切换工具后端) | 让内置工具运行在 Docker、E2B 等执行环境中 |
+| [自定义工具](#自定义工具) | 继承 `ToolBase`，声明 schema 并实现权限逻辑 |
+| [将函数包装为工具](#将函数包装为工具) | 用 `FunctionTool` 把普通 Python 函数变成工具 |
+| [外部执行工具](#定义外部执行工具) | 把执行委派给人工或外部系统 |
+| [工具中间件](#工具中间件) | 在单个工具实例上挂载洋葱式钩子 |
+
+## ToolBase 接口
+
+`ToolBase` 是所有工具的抽象基类。下表列出其属性与方法。
+
+工具的属性：
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `name` | `str` | 暴露给智能体的工具名称 |
+| `description` | `str` | 面向智能体的功能描述 |
+| `input_schema` | `dict` | 定义参数的 JSON Schema |
+| `is_concurrency_safe` | `bool` | 是否可并发调用 |
+| `is_read_only` | `bool` | 是否只读、不产生副作用 |
+| `is_external_tool` | `bool` | 为 `True` 时执行委派给外部执行（见[定义外部执行工具](#定义外部执行工具)） |
+| `is_state_injected` | `bool` | 为 `True` 时通过 `_agent_state` 参数注入智能体状态数据 |
+| `is_mcp` | `bool` | 是否来自 MCP 服务 |
+| `mcp_name` | `str \| None` | `is_mcp` 为 `True` 时所属 MCP 服务名 |
+
+`ToolBase` 提供的核心方法：
+
+| 方法 | 必需 | 说明 |
+|---|---|---|
+| `check_permissions(tool_input, context)` | 是 | 执行前的运行时权限检查；返回 `PermissionDecision` |
+| `check_read_only(tool_input)` | 可选 | 单次调用的只读判定；返回 `bool`。默认返回 `self.is_read_only`。当只读性取决于输入时覆写（例如 `Bash`：`ls` 是只读，`rm` 不是）。权限引擎在决定 EXPLORE / ACCEPT_EDITS 是否自动放行时调用。 |
+| `match_rule(rule_content, tool_input)` | 可选 | 权限系统中的自定义规则匹配；返回 `bool` |
+| `generate_suggestions(tool_input)` | 可选 | 基于本次工具调用生成建议规则；返回 `list[PermissionRule]` |
+| `call(**kwargs)` | 是* | 工具的执行逻辑，也是子类的 override 点。返回 `ToolChunk` 或 `AsyncGenerator[ToolChunk, None]`。外部执行工具（`is_external_tool = True`）不需要实现。 |
+| `__call__(**kwargs)` | — | 框架调度入口。依次运行中间件链（若有），再委托给 `call()`。不要 override。 |
+
+## 使用内置工具
+
+AgentScope 预置了一组覆盖常见智能体操作的工具，实例化后传入 `Toolkit(tools=[...])` 即可：
+
+| 工具 | 说明 | 只读 |
+|------|------|------|
+| `Bash` | 执行 shell 命令 | 否 |
+| `PowerShell` | 在 Windows 上执行 PowerShell 命令 | 否 |
+| `Read` | 按行号读取文件内容 | 是 |
+| `Write` | 创建或覆写文件 | 否 |
+| `Edit` | 在文件中做精确字符串替换 | 否 |
+| `Glob` | 按 glob 模式查找文件 | 是 |
+| `Grep` | 基于 ripgrep 搜索文件内容 | 是 |
+| `TaskCreate` | 创建结构化任务以跟踪进度 | 否 |
+| `TaskGet` | 按 ID 获取任务详情 | 是 |
+| `TaskList` | 列出全部任务及其状态 | 是 |
+| `TaskUpdate` | 更新任务状态或元数据 | 否 |
+
+<Note>
+元工具 `reset_tools` 和 `Skill` 查看工具只有在存在额外的工具组或技能时才会自动注册，开发者无需手动实例化。详见[元工具](/versions/2.0.8/zh/building-blocks/tool/manage-tools)与 [Skill](/versions/2.0.8/zh/building-blocks/tool/skill)。
+</Note>
+
+### Bash
+
+`Bash` 工具执行 shell 命令并返回 stdout / stderr。它实现了所有可选接口方法，提供精细的权限控制。
+
+`check_permissions()` 对命令字符串做分层安全分析：
+
+1. **注入风险检测**：标记 `$(...)`、反引号、进程替换等无法静态分析的动态结构 → ASK
+2. **只读命令检测**：自动放行安全命令（`git status`、`ls`、`cat`、`grep`、`docker ps` 等），包括所有子命令均只读的复合命令 → ALLOW
+3. **危险命令模式**：识别破坏性操作（如 `chmod 777`、`mkfs`） → ASK
+4. **Sed 约束检查**：阻止针对危险文件的就地 `sed -i` → ASK
+5. **危险路径保护**：检查命令是否操作敏感配置文件（`.bashrc`、`.ssh/`、`.env`） → ASK
+6. **危险删除检测**：捕获指向关键系统路径（`/`、`~`、`/usr`）的 `rm` / `rmdir` → ASK
+7. **ACCEPT_EDITS 模式**：自动放行文件系统命令（`mkdir`、`touch`、`rm`、`rmdir`、`mv`、`cp`、`sed`），**且仅当所有目标路径都在某个配置的工作目录内时**。任一目标路径越出工作集（例如 `cp /etc/hosts /tmp/x`）会落到 PASSTHROUGH 而不自动放行。
+
+`check_read_only()` 在上述第 2 步只读检测器识别出的任何命令上返回 `True`，其余返回 `False`。权限引擎用它在 EXPLORE / ACCEPT_EDITS 决定自动放行，避免重复跑完整的安全分析。
+
+`match_rule()` 使用基于前缀的通配匹配：
+
+| 模式 | 匹配 | 不匹配 |
+|------|------|--------|
+| `npm run:*` | `npm run build`、`npm run test` | `npm install` |
+| `git commit:*` | `git commit -m "fix"` | `git push` |
+| `rm:*` | `rm file.txt`、`rm -rf /tmp/x` | `ls` |
+
+`generate_suggestions()` 抽取命令前缀（前两个 token）并给出前缀规则。例如 `git commit -m "fix bug"` 生成建议 `git commit:*`。
+
+构造函数支持向危险路径列表追加自定义条目：
+
+```python
+from agentscope.tool import Bash
+
+bash = Bash(
+    additional_dangerous_files=[".secrets"],
+    additional_dangerous_directories=[".credentials"],
+)
+```
+
+### PowerShell
+
+`PowerShell` 是 `Bash` 在 Windows 上的对应工具。当宿主机为 Windows 时，`LocalWorkspace.list_tools()` 会返回 `PowerShell` 而非 `Bash`，因此同一份智能体代码可以在两种平台上运行：
+
+```python
+from agentscope.tool import PowerShell
+
+pwsh = PowerShell(cwd="C:\\Users\\me\\project")
+```
+
+它的执行方式与 `Bash` 存在以下差异：
+
+| 方面 | 行为 |
+|------|------|
+| 可执行程序 | 优先使用 `pwsh`（PowerShell 6+），不可用时回退到 `powershell.exe`；探测只执行一次并缓存结果 |
+| 会话状态 | 每条命令都以 `-NoProfile -NonInteractive` 运行，不加载用户配置文件，变量、当前目录等会话状态也不会在命令之间保留 |
+| 编码 | 命令以 UTF-16LE base64 的 `-EncodedCommand` 形式传入，引号与非 ASCII 字符不会被破坏 |
+| 超时 | `timeout` 参数以毫秒计，默认 120000，上限 600000 |
+| 输出 | stdout 与 stderr 合并返回，超过 30000 字符后截断 |
+
+<Warning>
+`check_permissions()` 对**任何** PowerShell 命令都返回 ASK。`Bash` 中用于自动放行只读命令的静态命令分析尚未在 PowerShell 上实现，因此没有命令会被判定为安全。该 ASK 是普通的确认请求，允许规则与 `BYPASS` 模式仍可覆盖；同时 `generate_suggestions()` 不会给出任何规则建议，以保持权限边界的保守性。
+</Warning>
+
+### 文件工具
+
+文件工具强制执行「先读后写」规则：`Write` 与 `Edit` 要求目标文件先经由 `Read` 读取过。这避免了盲目覆写，并保证智能体总是基于最新内容进行操作。
+
+| 工具 | 操作 | 关键行为 |
+|------|------|----------|
+| `Read` | 读取文件内容 | 文本返回带行号的内容；图片和 PDF 可按模型能力返回 `DataBlock` |
+| `Write` | 创建或覆写文件 | 文件已存在但未被读取过则失败 |
+| `Edit` | 替换文件中的精确字符串 | `old_string` 找不到或不唯一时失败（除非 `replace_all=True`）；要求先读取 |
+
+`check_permissions()`：`Write` 与 `Edit` 共用同一权限逻辑：
+
+1. **危险路径保护**：操作敏感文件（`.bashrc`、`.env`、`.ssh/`）返回带 `bypass_immune=True` 的 ASK，allow 规则无法静默授权。`BYPASS` 模式下该 ASK 仍然被跳过（BYPASS 明确选择放弃 safety 提示），`DONT_ASK` 下被转为 DENY。完整契约见[安全检查契约](/versions/2.0.8/zh/building-blocks/permission-system/tool-check#安全检查契约)。
+2. **ACCEPT_EDITS 模式**：自动放行配置工作目录内的文件操作
+3. **PASSTHROUGH**：交给权限引擎做规则匹配
+
+`Read` 是只读工具，始终返回 PASSTHROUGH（EXPLORE 与 ACCEPT_EDITS 模式下的自动放行由引擎通过 `check_read_only` 处理）。
+
+`Read` 会按文件类型选择返回形式：
+
+- 文本文件使用 `offset` / `limit` 分页，返回带行号的 `TextBlock`；
+- 模型支持的图片类型以 Base64 `DataBlock` 返回；
+- PDF 在模型支持 `application/pdf` 时以 `DataBlock` 返回，否则在本地提取文本。超过 10 页时必须传入 `pages="1-5"` 之类的范围，单次最多读取 20 页。
+
+可将模型卡片中的输入类型直接交给 `Read`，使工具只返回下游模型能处理的多模态内容：
+
+```python
+read = Read(model_input_types=model_card.input_types)
+result = await read(file_path="/workspace/report.pdf", pages="1-5")
+```
+
+`match_rule()`：三个工具都使用 `fnmatch` 对 `file_path` 参数做 glob 匹配：
+
+| 模式 | 匹配 |
+|------|------|
+| `src/**` | `src/` 下任意文件 |
+| `src/**/*.py` | `src/` 下的 Python 文件 |
+| `config.json` | 精确匹配该文件 |
+
+`generate_suggestions()` 提议覆盖父目录的 glob。例如编辑 `/project/src/main.py` 会生成建议 `src/**`。
+
+### 计划工具
+
+计划工具让智能体能够显式地维护一份结构化的任务清单，智能体可以通过工具调用来创建、查询和更新任务。计划相关的数据会被存储在智能体实例的 `agent.state.tasks_context` 中，所有计划相关的工具通过操作这个共享的状态来实现任务的管理。同时，所有计划相关的工具在权限检查中被默认放行。
+
+完整的任务生命周期、存储模型，以及如何以编程方式预置或自定义任务，请参见[计划模式](/versions/2.0.8/zh/building-blocks/plan)。
+
+## 切换工具后端
+
+AgentScope 中的 `Bash`、`PowerShell`、`Grep`、`Glob`、`Read`、`Write`、`Edit` 工具支持后端切换，即将运行逻辑委派到不同的执行环境中，例如本地文件系统、Docker 容器、E2B 沙箱等。
+
+通过指定 `backend` 参数即可切换后端，而 `backend` 实例可以通过 `Workspace` 实例获取，默认为本地环境。关于 `Workspace` 的更多信息，请参见[工作空间](/versions/2.0.8/zh/building-blocks/workspace/overview)章节。
+
+<CodeGroup>
+```python title="切换到 Docker 后端"
+from agentscope.workspace import DockerWorkspace
+
+# 获取 Docker 沙箱的 backend
+workspace = DockerWorkspace(...)
+await workspace.initialize()
+
+backend = workspace.get_backend()
+
+# 配置工具
+bash = Bash(backend=backend)
+
+# 运行逻辑
+...
+
+await workspace.close()
+```
+
+```python title="切换到 E2B 后端"
+from agentscope.workspace import E2BWorkspace
+
+# 获取 E2B 沙箱的 backend
+workspace = E2BWorkspace(...)
+await workspace.initialize()
+
+backend = workspace.get_backend()
+
+# 配置工具
+bash = Bash(backend=backend)
+
+# 运行逻辑
+...
+
+await workspace.close()
+```
+</CodeGroup>
+
+## 自定义工具
+
+通过继承 `ToolBase` 基类并实现对应的抽象接口即可创建自定义工具，同时通过设定相关的属性可以控制工具的权限审查和执行逻辑。
+
+```python
+from agentscope.tool import ToolBase, ToolChunk
+from agentscope.permission import (
+    PermissionContext, PermissionDecision, PermissionBehavior,
+)
+from agentscope.message import TextBlock
+
+class WebSearch(ToolBase):
+    name = "WebSearch"
+    description = "Search the web for information on a given query."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query.",
+            },
+        },
+        "required": ["query"],
+    }
+    is_concurrency_safe = True
+    is_read_only = True
+
+    async def check_permissions(
+        self, tool_input: dict, context: PermissionContext,
+    ) -> PermissionDecision:
+        return PermissionDecision(
+            behavior=PermissionBehavior.ALLOW,
+            message="Web search is read-only.",
+        )
+
+    async def call(self, query: str) -> ToolChunk:
+        results = await do_search(query)
+        return ToolChunk(content=[TextBlock(text=results)])
+```
+
+<Note>
+自定义工具时，有两个权限审查相关的逻辑需要注意：
+
+- **`check_read_only(tool_input)`**：当某次调用是否只读取决于输入时，需要覆写该函数（例如 `Bash`：`ls` 是只读，`rm` 不是）。该函数默认返回 `is_read_only` 静态属性。权限引擎在判定 EXPLORE / ACCEPT_EDITS 是否自动放行时调用。
+- **`PermissionDecision(..., bypass_immune=True)`**：在返回的 ASK 上设置，把它标记为 allow 规则无法静默的 safety check（例如 `DeployTool` 标记 `prod-*` 目标）。各模式下的具体处理见 [安全检查契约](/versions/2.0.8/zh/building-blocks/permission-system/tool-check#安全检查契约)。
+</Note>
+
+## 将函数包装为工具
+
+当需要把一个 Python 函数暴露给智能体时，一个轻量化的方法是用 `FunctionTool` 适配器包装。它会自动从 `func.__name__` 取工具名、从 docstring 提取工具描述、从类型注解推导 input schema。
+
+```python
+from agentscope.tool import FunctionTool, Toolkit
+
+def get_weather(city: str, unit: str = "celsius") -> str:
+    """Get the current weather for a city.
+
+    Args:
+        city: The city name to look up.
+        unit: Temperature unit, either "celsius" or "fahrenheit".
+    """
+    return f"The weather in {city} is 22°{unit[0].upper()}"
+
+toolkit = Toolkit(tools=[FunctionTool(get_weather)])
+```
+
+当自动推导的默认值不合适时，`FunctionTool` 支持显式覆盖：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `func` | `Callable` | 待包装的 Python 函数 |
+| `name` | `str \| None` | 覆盖工具名（默认取 `func.__name__`） |
+| `description` | `str \| None` | 覆盖描述（默认取 docstring） |
+| `input_schema` | `dict \| type[BaseModel] \| None` | 显式指定 JSON Schema 或 Pydantic 参数模型；不传时从函数注解推导 |
+| `is_concurrency_safe` | `bool` | 是否可并发调用（默认 `True`） |
+| `is_read_only` | `bool` | 是否无副作用（默认 `False`） |
+| `is_state_injected` | `bool` | 是否通过 `_agent_state` 注入智能体状态数据（默认 `False`） |
+
+需要枚举、数值范围或复杂结构时，可直接传入 Pydantic 模型：
+
+```python
+from pydantic import BaseModel, Field
+
+
+class WeatherInput(BaseModel):
+    city: str
+    days: int = Field(default=1, ge=1, le=7)
+
+
+def get_forecast(city: str, days: int = 1) -> str:
+    return f"{city} 未来 {days} 天天气晴朗"
+
+
+weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
+```
+
+<Note>
+`FunctionTool` 也会解析 `from __future__ import annotations` 产生的延迟注解。如果自动推导无法表达所需约束，优先使用 `input_schema`。
+</Note>
+
+<Note>
+被包装的函数默认走 `ASK` 权限行为：用户必须为每次调用显式放行。需要自定义权限逻辑时，请直接继承 `ToolBase`。
+</Note>
+
+## 定义外部执行工具
+
+外部执行工具把实际执行委派给智能体运行时之外，通常是人工操作员或外部系统。智能体调用此类工具时会发出 `RequireExternalExecutionEvent` 事件并退出 `reply` / `reply_stream` 函数，直到结果通过 `ExternalExecutionResultEvent` 回传。
+
+这种模式是[人机交互](/versions/2.0.8/zh/building-blocks/agent/human-in-the-loop)工作流的基础：某些动作需要人工确认或人工执行。
+
+创建外部执行工具只需把 `is_external_tool` 设为 `True`，不必实现 `call` 函数：
+
+```python
+from agentscope.tool import ToolBase
+from agentscope.permission import (
+    PermissionContext, PermissionDecision, PermissionBehavior,
+)
+
+class HumanApproval(ToolBase):
+    name = "HumanApproval"
+    description = "Request human approval for a sensitive operation."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "The action requiring approval."},
+            "reason": {"type": "string", "description": "Why this action needs approval."},
+        },
+        "required": ["action", "reason"],
+    }
+    is_concurrency_safe = True
+    is_read_only = False
+    is_external_tool = True
+
+    async def check_permissions(
+        self, tool_input: dict, context: PermissionContext,
+    ) -> PermissionDecision:
+        return PermissionDecision(
+            behavior=PermissionBehavior.ALLOW,
+            message="External tool dispatch is always allowed.",
+        )
+```
+
+## 工具中间件
+
+工具中间件（Tool Middleware）把洋葱式钩子直接挂到某个工具实例上。每次调用该工具时（无论由智能体触发还是直接调用），已注册的中间件都会按顺序触发，包裹执行流程。
+
+这与智能体级中间件是独立的两套机制：智能体中间件中的 `on_acting` 包裹 ReAct 循环内整个工具调用逻辑（包括权限检查与事件产出），而 `ToolMiddlewareBase` 只在工具自身的 `call()` 执行链内触发，即使工具在智能体之外被调用也会生效。
+
+### 自定义中间件
+
+实现自定义中间件需要继承 `ToolMiddlewareBase` 并实现唯一的抽象异步生成器方法 `on_tool_call`：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `tool` | `ToolBase` | 正在被调用的工具实例 |
+| `input_kwargs` | `dict[str, Any]` | 本次调用的输入参数。将（可能经修改的）参数传给 `next_handler`，可控制内层接收到的内容 |
+| `next_handler` | `Callable[..., AsyncGenerator[ToolChunk, None]]` | 通过 `next_handler(**input_kwargs)` 继续执行下一层。无论底层工具是否流式，始终返回 async generator |
+
+### 执行模型
+
+- **第一个**注册的中间件是**最外层**：其前置逻辑最先执行，后置逻辑最后执行。
+- `next_handler(**input_kwargs)` 始终返回 `AsyncGenerator[ToolChunk, None]`。流式与非流式工具统一处理，中间件无需区分。
+- 最内层调用工具自身的 `call()`。
+
+```
+middlewares[0].on_tool_call
+  └─ middlewares[1].on_tool_call
+       └─ ... → tool.call()
+```
+
+### 挂载中间件
+
+通过 `middlewares` 参数向工具构造函数传入中间件实例列表：
+
+```python
+from agentscope.tool import Bash
+
+bash = Bash(middlewares=[LoggingMiddleware(), MetricsMiddleware()])
+# 执行顺序：LoggingMiddleware → MetricsMiddleware → Bash.call()
+```
+
+### 示例
+
+一个在调用前后打印日志的中间件，以及一个在出错时自动重试的中间件：
+
+```python
+from typing import AsyncGenerator, Any, Callable
+from agentscope.tool import ToolMiddlewareBase, ToolBase, ToolChunk, Bash
+
+
+class LoggingMiddleware(ToolMiddlewareBase):
+    async def on_tool_call(
+        self,
+        tool: ToolBase,
+        input_kwargs: dict[str, Any],
+        next_handler: Callable[..., AsyncGenerator[ToolChunk, None]],
+    ) -> AsyncGenerator[ToolChunk, None]:
+        print(f"→ 调用 {tool.name}，参数：{input_kwargs}")
+        async for chunk in next_handler(**input_kwargs):
+            yield chunk
+        print(f"✓ {tool.name} 执行完毕")
+
+
+class RetryMiddleware(ToolMiddlewareBase):
+    def __init__(self, max_attempts: int = 3):
+        self.max_attempts = max_attempts
+
+    async def on_tool_call(
+        self,
+        tool: ToolBase,
+        input_kwargs: dict[str, Any],
+        next_handler: Callable[..., AsyncGenerator[ToolChunk, None]],
+    ) -> AsyncGenerator[ToolChunk, None]:
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                async for chunk in next_handler(**input_kwargs):
+                    yield chunk
+                return
+            except Exception as e:
+                if attempt == self.max_attempts:
+                    raise
+                print(f"第 {attempt} 次失败：{e}，重试中……")
+
+
+bash = Bash(middlewares=[LoggingMiddleware(), RetryMiddleware(max_attempts=3)])
+```
+
+<Note>
+**工具中间件 vs. 智能体中间件**：对属于工具本身的横切关注点（日志、指标、重试），使用 `ToolMiddlewareBase`。若需要访问更广泛的智能体上下文（权限决策、工具调用事件或所在的 ReAct 轮次），请使用 `MiddlewareBase.on_acting`。完整的智能体级钩子参考见[中间件](/versions/2.0.8/zh/building-blocks/middleware)。
+</Note>

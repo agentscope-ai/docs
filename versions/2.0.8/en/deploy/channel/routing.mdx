@@ -1,0 +1,163 @@
+---
+title: "Message Routing"
+description: "Decide which agent answers an incoming message and which session it joins."
+---
+
+Routing decides: for a message arriving from an IM platform, which agent handles it and which of that agent's sessions it joins. "Which agent" decides who answers; "which session" decides which earlier messages this one shares conversation context with. Messages in the same session see each other; different sessions are isolated. A session can be scoped two ways today: **one session per chat**, or **one session per member in a group chat**.
+
+Because in a channel both chats and users only show up with their first message: the first time anyone DMs the bot, it brings a chat that was never seen before. So routing is not a lookup table written in advance, but an ordered list of rules, matched top to bottom, first match wins, with a catch-all rule to guarantee every message has a definite destination.
+
+## Routing Rules
+
+A routing rule (binding) has four fields: the first two say "which messages to match", the last two say "what to do on a match".
+
+| Field | Description | Default |
+|---|---|---|
+| `match_key` | Which message field to match on: `chat_id` (which chat), `user_id` (who sent it), or a key in `metadata` (such as `chat_type`) | `chat_id` |
+| `match_value` | The exact value to match, or `"*"` for anything (catch-all) | `"*"` |
+| `agent_id` | Which agent handles a match | required |
+| `session_scope` | Which session a matched message joins (values below) | `per_chat` |
+
+`match_value` is an **exact match** (not a prefix, not a regex); only `"*"` is special and matches everything. When `match_key` points at a key in `metadata`, the matchable values are platform-defined: Feishu's `chat_type` is `group` / `p2p`, DingTalk's is `group` / `private`, Discord's is `guild` / `dm`; see each platform's page.
+
+## Session Scope
+
+`session_scope` decides how messages that hit the same rule are grouped into sessions. Messages in the same session share context.
+
+| Value | Meaning | When to use |
+|---|---|---|
+| `per_chat` | One session per chat | Default. A DM is naturally one session per person; a group shares one context for the whole group |
+| `per_chat_user` | One session per user within the same chat | Only meaningful for groups: isolate each member into their own session |
+
+Even when they resolve to the same agent, `per_chat` and `per_chat_user` put messages into different sessions. So **after you change the scope, later messages are regrouped under the new scheme**. Different agents never share a session.
+
+## Match Order
+
+Rules are matched top to bottom, **first match wins**, the same way firewall rules or Nginx `location` blocks work. Put specific exceptions first and the catch-all last.
+
+Saving a config runs three checks so that every message has a definite, unique destination:
+
+<Warning>
+- There must be exactly one catch-all rule (`match_value` of `"*"`);
+- The catch-all must be last, or the rules after it would never be reached;
+- Duplicate `(match_key, match_value)` combinations are not allowed.
+</Warning>
+
+## Full Example
+
+Suppose you've deployed two agents: a general assistant `friday` and a product expert `product-expert`. Let's follow one real message and see which agent and session it lands in under different rules.
+
+<Steps>
+  <Step title="A message arrives">
+    The bot is in a Feishu group called "Product Team" and receives a line from a member, Alice. The message looks roughly like this (only routing-relevant fields shown):
+
+    ```json Inbound message
+    {
+      "channel_user_id": "ou_alice",
+      "chat_id": "oc_product_team",
+      "content": [
+        {
+          "type": "text",
+          "text": "Check today's schedule for me"
+        }
+      ],
+      "metadata": {
+        "chat_type": "group"
+      }
+    }
+    ```
+  </Step>
+  <Step title="Rules decide where it goes">
+    The same message, under different rules, goes to different agents and sessions. Each tab below is one configuration:
+
+    <CodeGroup>
+    ```json Everything to friday
+    {
+      "bindings": [
+        // Use when: one general assistant serves every chat.
+        // This catch-all matches any message and hands it to friday;
+        // everyone in the "Product Team" group shares one session.
+        {
+          "match_key": "chat_id",
+          "match_value": "*",
+          "agent_id": "friday",
+          "session_scope": "per_chat"
+        }
+      ]
+    }
+    ```
+
+    ```json A dedicated agent for the product group
+    {
+      "bindings": [
+        // Use when: one group needs a dedicated agent, the rest use the general assistant.
+        // Messages from the "Product Team" group hit this and go to product-expert.
+        {
+          "match_key": "chat_id",
+          "match_value": "oc_product_team",
+          "agent_id": "product-expert",
+          "session_scope": "per_chat"
+        },
+        // Every other chat misses the above and falls to this catch-all -> friday.
+        {
+          "match_key": "chat_id",
+          "match_value": "*",
+          "agent_id": "friday",
+          "session_scope": "per_chat"
+        }
+      ]
+    }
+    ```
+
+    ```json Each person in the group chats separately
+    {
+      "bindings": [
+        // Use when: many people in a group talk to the bot independently, isolated from each other.
+        // Group messages hit this and go to friday; each person gets their own session,
+        // so Alice's session is hers alone and no one else sees it.
+        {
+          "match_key": "chat_type",
+          "match_value": "group",
+          "agent_id": "friday",
+          "session_scope": "per_chat_user"
+        },
+        // DMs and everything else fall to the catch-all.
+        {
+          "match_key": "chat_id",
+          "match_value": "*",
+          "agent_id": "friday",
+          "session_scope": "per_chat"
+        }
+      ]
+    }
+    ```
+    </CodeGroup>
+  </Step>
+  <Step title="The catch-all rule">
+    Every config must end with a catch-all rule (`match_value` of `"*"`) so that a message matching none of the earlier rules still has a definite destination. The last rule in all three examples above is exactly that:
+
+    ```json Catch-all rule
+    {
+      "match_key": "chat_id",
+      "match_value": "*",
+      "agent_id": "friday",
+      "session_scope": "per_chat"
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+Before configuring routing, call `GET /channels/{id}/chat_ids` to list the chats the bot knows and their `chat_id`; copy them directly instead of transcribing platform IDs by hand.
+</Tip>
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Connect Feishu" icon="comment" href="/versions/2.0.8/en/deploy/channel/feishu" cta="Learn more" arrow>
+    Create a Feishu bot and let agents chat in Feishu.
+  </Card>
+  <Card title="Connect Discord" icon="discord" href="/versions/2.0.8/en/deploy/channel/discord" cta="Learn more" arrow>
+    Create a Discord bot and let agents chat in Discord.
+  </Card>
+</CardGroup>

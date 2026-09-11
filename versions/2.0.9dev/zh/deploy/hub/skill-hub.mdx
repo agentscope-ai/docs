@@ -1,0 +1,255 @@
+---
+title: "技能中心"
+description: "让用户安装他人发布的技能，并装配给自己的智能体。"
+---
+
+技能中心是一个 [技能](/versions/2.0.9dev/zh/building-blocks/tool/skill) 的目录，用户可以在应用内浏览并安装。技能本质上是一个文件夹，其中的 `SKILL.md` 告诉智能体如何完成某件事，另外还可以附带脚本等文件；有了技能中心，用户无需克隆仓库，也无需知道这些文件该放在哪里。
+
+安装并不等于装配给智能体。安装只是把该技能加入用户自己的技能资源池，装配是另一个独立步骤：
+
+<Steps>
+  <Step title="安装到资源池">
+    用户在卡片上读完 `SKILL.md` 后直接安装，无需填写任何内容。所有中心汇入同一个资源池，装完之后就不必再关心它来自哪个来源。
+  </Step>
+  <Step title="装配给智能体的工作区">
+    在会话中，用户从资源池里挑选，把技能解压到这个智能体的 [工作区](/versions/2.0.9dev/zh/deploy/workspace-manager)，智能体从此便可以遵照它执行。
+  </Step>
+</Steps>
+
+资源池属于用户，而不属于某一次会话，因此安装一次可以装配到任意多个工作区。此外，本地文件夹也可以直接上传到工作区，无论它是否来自某个中心。
+
+## 内置的技能中心
+
+AgentScope 目前内置一个技能中心，其他来源都可以通过 [自定义技能中心](#自定义技能中心) 接入：
+
+| 类 | 来源 | 说明 |
+|----|------|------|
+| `ClawSkillHub` | [ClawHub](https://clawhub.ai) | 社区发布技能的公开目录。匿名即可访问，配置令牌可提高调用频率上限。 |
+| _即将支持_ | — | 更多来源正在接入中。 |
+
+`ClawSkillHub` 不传任何参数即可使用，下列字段均有默认值：
+
+```python 配置 ClawSkillHub
+from agentscope.app.hub import ClawSkillHub
+
+hub = ClawSkillHub(
+    # 用于接口路径和前端 URL，重启前后必须保持不变。
+    hub_id="clawhub",
+    # 显示在前端的中心切换列表中。
+    display_name="ClawHub",
+    # 可选令牌。匿名请求同样可用，只是有频率限制。
+    api_token=None,
+)
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `hub_id` | `"clawhub"` | 该中心在接口路径与 URL 中的标识 |
+| `display_name` | `"ClawHub"` | 在切换列表中显示的名称 |
+| `description` | ClawHub 简介 | 名称下方的一句话说明 |
+| `icon_url` | ClawHub 站点图标 | 名称旁的图标 |
+| `base_url` | `"https://clawhub.ai"` | 来源的接口地址 |
+| `api_token` | `None` | ClawHub 令牌，仅影响调用频率上限 |
+| `timeout` | `30.0` | 单次请求超时时间，单位为秒 |
+| `max_retries` | `3` | 请求被限流后放弃前的重试次数 |
+
+## 快速上手
+
+<Steps>
+  <Step title="启动智能体服务">
+    技能中心是 [智能体服务](/versions/2.0.9dev/zh/deploy/agent-service) 的能力之一，因此需要先跑起一个服务和一个前端。请按照 [智能体服务快速上手](/versions/2.0.9dev/zh/deploy/agent-service#试用示例) 的步骤，同时启动仓库自带的 [`examples/agent_service`](https://github.com/agentscope-ai/agentscope/tree/main/examples/agent_service) 后端与 [`examples/web_ui`](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui) 前端。
+  </Step>
+
+  <Step title="注册技能中心">
+    通过 `skill_hubs` 参数把中心传给 `create_app`，路由、市场页面与安装流程都会随之启用：
+
+    ```python 注册一个技能中心
+    from agentscope.app import create_app
+    from agentscope.app.hub import ClawSkillHub
+
+    app = create_app(
+        # ...已有代码...
+        skill_hubs=[ClawSkillHub()],
+    )
+    ```
+
+    也可以注册多个，让用户在不同目录之间切换，各自使用独立的 `hub_id`。
+
+    <Note>
+    两个技能中心使用同一个 `hub_id` 时，服务会在启动阶段直接报错，而不是静默覆盖其中一个。
+    </Note>
+  </Step>
+
+  <Step title="浏览并安装">
+    重启服务后打开前端的 **Skill** 页面。侧边栏列出已注册的各个中心，以及用户自己的资源池 **Installed skills**。选中一个中心，搜索，点开卡片即可先阅读它的 `SKILL.md` 再决定。
+
+    <Frame caption="在 Skill 页面浏览一个技能中心。">
+      <img src="/images/agentscope/skill_hub.png" alt="浏览技能中心" />
+    </Frame>
+
+    点击 **Install** 即刻加入用户的资源池，无需填写任何内容。安装好的技能都汇总在 **Installed skills** 中：
+
+    <Frame caption="用户已安装的技能。">
+      <img src="/images/agentscope/installed_skill.png" alt="已安装的技能" />
+    </Frame>
+  </Step>
+
+  <Step title="装配给智能体">
+    打开一个会话，展开 **Skill** 面板，点击 **Add**，两个标签页覆盖了两种来源：
+
+    | 标签页 | 说明 |
+    |--------|------|
+    | From installed | 从资源池中挑选，文件会被拉取并解压到智能体的工作区 |
+    | Upload a folder | 从本地选一个文件夹，其根目录需包含 `SKILL.md`，上传过程有进度条 |
+
+    <Frame caption="从资源池或本地文件夹把技能装配给智能体。">
+      <img src="/images/agentscope/assign_skill.png" alt="把技能装配给智能体" />
+    </Frame>
+
+    上传有额度限制，避免单个用户占满工作区：最多 100 个文件，单文件不超过 50 MB，总计不超过 500 MB。若文件夹名称已被占用，新技能会以带数字后缀的名称安装，而不会覆盖原有内容。
+
+    <Note>
+    装配一个已安装的技能时，其文件是在那一刻从中心拉取的，因为安装只保存技能的描述信息，而不保存文件副本。如果此时中心不可达，该技能会连同原因单独报错，同一请求中的其他技能照常装配成功。
+    </Note>
+  </Step>
+</Steps>
+
+## 自定义技能中心
+
+继承 `SkillHubBase` 就能把任意技能目录接成一个中心。需要实现三个方法，分别用于浏览、获取单个条目，以及提供压缩包：
+
+```python 接入内部目录的中心
+from agentscope.app.hub import (
+    SkillArchive,
+    SkillCard,
+    SkillHubBase,
+    SkillHubPage,
+)
+
+
+class InternalSkillHub(SkillHubBase):
+    """平台团队内部发布的技能。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            hub_id="internal",
+            display_name="内部技能目录",
+            description="由平台团队发布的技能。",
+        )
+
+    async def list_skills(
+        self,
+        user_id: str,
+        # 用户输入的搜索词，为 `None` 时浏览全部。
+        q: str | None = None,
+        # 上一页返回的游标，为 `None` 时从第一页开始。
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> SkillHubPage:
+        """返回一页条目，不含各自的 `SKILL.md` 正文。"""
+        page = await fetch_our_catalog(query=q, after=cursor, limit=limit)
+        return SkillHubPage(
+            cards=[self._to_card(c) for c in page.items],
+            # 返回 `None` 表示已无更多内容可加载。
+            next_cursor=page.next_cursor,
+        )
+
+    async def get_skill(self, user_id: str, card_id: str) -> SkillCard:
+        """返回单个条目，这一次带上 `SKILL.md` 正文。"""
+        detail = await fetch_one(card_id)
+        return self._to_card(detail, markdown=detail.readme)
+
+    async def download(
+        self,
+        user_id: str,
+        card_id: str,
+        version: str | None = None,
+    ) -> SkillArchive:
+        """打开该技能的压缩包以供流式读取。"""
+        response = await self._client.get(f"/skills/{card_id}/archive")
+        # 取值为 "zip"、"tar" 或 "tar.gz" 之一。
+        return SkillArchive(format="tar.gz", stream=response.aiter_bytes())
+```
+
+另有三点决定了中心的行为：
+
+| 要点 | 说明 |
+|------|------|
+| 列表要轻 | 不要在 `list_skills` 中拉取 `SKILL.md`。逐条拉取会把一次请求放大为一页的条数，多数来源在第一屏就会触发限流。请放在 `get_skill` 中加载 |
+| 游标翻页 | 返回任意能让你续读的字符串即可；目录读完时返回 `None` |
+| 条目不存在 | `get_skill` 遇到未知 id 时抛出 `KeyError`，服务会将其转换为 404 |
+
+压缩包中应包含技能所在的文件夹，且根目录带有 `SKILL.md`：既可以是单个顶层目录，也可以直接是这些文件。两种结构都能识别，该文件夹会被重命名为所安装技能的名称。
+
+### 按用户控制可见性
+
+三个方法的第一个参数都是 `user_id`，因此同一个目录不必对所有人呈现相同的内容。基于它做筛选，即可实现按团队区分的白名单、依据计费系统的权限开放付费条目，或者让草稿技能只对作者可见：
+
+```python 因用户而异的目录
+class InternalSkillHub(SkillHubBase):
+    async def list_skills(
+        self,
+        user_id: str,
+        q: str | None = None,
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> SkillHubPage:
+        """只返回该用户有权看到的条目。"""
+        # 由开发者自己的系统判定该用户可安装哪些条目。
+        allowed = await our_entitlements(user_id)
+        page = await fetch_our_catalog(query=q, after=cursor, limit=limit)
+        return SkillHubPage(
+            cards=[
+                self._to_card(c) for c in page.items if c.id in allowed
+            ],
+            next_cursor=page.next_cursor,
+        )
+
+    async def get_skill(self, user_id: str, card_id: str) -> SkillCard:
+        """对隐藏条目同样拒绝，使猜测 id 无法奏效。"""
+        if card_id not in await our_entitlements(user_id):
+            raise KeyError(card_id)
+        detail = await fetch_one(card_id)
+        return self._to_card(detail, markdown=detail.readme)
+
+    async def download(
+        self,
+        user_id: str,
+        card_id: str,
+        version: str | None = None,
+    ) -> SkillArchive:
+        """隐藏条目的压缩包也一并拒绝。"""
+        if card_id not in await our_entitlements(user_id):
+            raise KeyError(card_id)
+        response = await self._client.get(f"/skills/{card_id}/archive")
+        return SkillArchive(format="tar.gz", stream=response.aiter_bytes())
+```
+
+<Warning>
+`download` 之所以也接收 `user_id`，正是为了这个场景，因此它同样要应用相同的筛选。仅仅让条目不出现在列表里并不构成访问控制：`get_skill` 与 `download` 都可以用任意猜到的 id 直接请求。
+</Warning>
+
+### 复用同一个 HTTP 客户端
+
+中心实例的生命周期与服务同长，因此可以持有一个连接池，而不必每次请求都新建。实现异步上下文管理器的两个方法即可，服务会在启动时进入每个中心，并在关闭时退出：
+
+```python 打开与关闭共享客户端
+class InternalSkillHub(SkillHubBase):
+    async def __aenter__(self) -> "InternalSkillHub":
+        self._client = httpx.AsyncClient(timeout=30.0)
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self._client.aclose()
+```
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="MCP 中心" icon="plug" href="/versions/2.0.9dev/zh/deploy/hub/mcp-hub" cta="查看详情" arrow>
+    面向 MCP 服务的同类能力。
+  </Card>
+  <Card title="Skill" icon="book-open" href="/versions/2.0.9dev/zh/building-blocks/tool/skill" cta="查看详情" arrow>
+    智能体如何发现并遵照一个技能执行。
+  </Card>
+</CardGroup>

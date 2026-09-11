@@ -1,0 +1,99 @@
+---
+title: "Overview"
+description: "Bring the agents in your AgentScope service onto IM platforms."
+---
+
+Channels connect the agents in an AgentScope service to external instant-messaging (IM) platforms, so an agent can talk to users directly inside the platform.
+
+Channels in an AgentScope service currently support:
+
+- Receiving and replying to user messages on IM platforms such as Feishu, DingTalk, and Discord;
+- Pushing messages to a chosen IM platform on the agent's own initiative;
+- Routing messages to different agents and sessions by rule;
+- Sending and receiving multimodal content such as images and files;
+- Approving an agent's tool calls right inside the conversation;
+- Injecting channel context (platform, chat name, group vs. private) into the agent automatically, so replies fit the setting.
+
+## Supported Platforms
+
+Each platform has a built-in type id (`channel_type`) that you pick when creating a channel:
+
+| Platform | Type id | Connection | Status |
+|---|---|---|---|
+| Feishu (Lark) | `feishu` | WebSocket long connection | Available |
+| Discord | `discord` | Gateway WebSocket | Available |
+| DingTalk | `dingtalk` | Stream mode long connection | Available |
+| WeCom | `wecom` | App callback | Coming soon |
+
+<Tip>
+Within an agent service, call `GET /channels/types` to fetch every type and its credential form schema (JSON Schema); the frontend renders the config form from it, with no per-platform hard-coding.
+</Tip>
+
+## Enable Channels
+
+Channels start with the [agent service](/versions/2.0.9dev/en/deploy/agent-service). Declare which channel types the service accepts through the `channels` argument of `create_app`:
+
+```python Enable built-in channels
+from agentscope.app import create_app
+from agentscope.app.channel import (
+    DingTalkChannel,
+    DiscordChannel,
+    FeishuChannel,
+)
+
+app = create_app(
+    storage=...,
+    message_bus=...,
+    workspace_manager=...,
+    # channel types this service accepts
+    channels=[FeishuChannel, DingTalkChannel, DiscordChannel],
+)
+```
+
+Omitting `channels` enables no channel types and keeps the feature off. To connect a platform beyond the built-in ones, add your channel class to the list; see [Custom Channel](/versions/2.0.9dev/en/deploy/channel/custom).
+
+## Distributed Deployment
+
+Channels support distributed multi-node deployment. Shared state (channel config, sessions, the message bus) all lives in Redis, and the nodes run as equals, each handling its own requests; swap `storage` and `message_bus` for their Redis versions to scale out across machines.
+
+At the connection level, every deployment node keeps its own long connection for each enabled channel. The platform may deliver one message to several nodes, but only one node is allowed to collect and send the reply for a given session at a time, so users never get a duplicate answer.
+
+## HTTP Endpoints
+
+A channel's full lifecycle is managed through the endpoints under `/channels`:
+
+| Method and path | Purpose |
+|---|---|
+| `GET /channels/types` | List supported platform types and their credential form schemas |
+| `POST /channels/` | Create a channel |
+| `GET /channels/` | List the current user's channels |
+| `GET /channels/{id}` | View a channel's details (credentials redacted) |
+| `PATCH /channels/{id}` | Update name / routing / session / platform config |
+| `DELETE /channels/{id}` | Delete a channel |
+| `POST /channels/{id}/enable` | Enable a channel |
+| `POST /channels/{id}/disable` | Disable a channel |
+| `GET /channels/{id}/status` | View the channel's live connection status |
+| `GET /channels/{id}/sessions` | List the sessions this channel has spawned |
+| `GET /channels/{id}/chat_ids` | List chats the bot knows, to help configure routing |
+
+For each endpoint's full request and response fields, see the [API](/versions/2.0.9dev/en/deploy/openapi.json) part of this chapter.
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Message Routing" icon="route" href="/versions/2.0.9dev/en/deploy/channel/routing" cta="Learn more" arrow>
+    Decide which agent answers and which session a message joins.
+  </Card>
+  <Card title="Connect Feishu" icon="comment" href="/versions/2.0.9dev/en/deploy/channel/feishu" cta="Learn more" arrow>
+    Create a Feishu bot and let agents chat in Feishu.
+  </Card>
+  <Card title="Connect DingTalk" icon="comments" href="/versions/2.0.9dev/en/deploy/channel/dingtalk" cta="Learn more" arrow>
+    Create a DingTalk robot and let agents chat in DingTalk.
+  </Card>
+  <Card title="Connect Discord" icon="discord" href="/versions/2.0.9dev/en/deploy/channel/discord" cta="Learn more" arrow>
+    Create a Discord bot and let agents chat in Discord.
+  </Card>
+  <Card title="Custom Channel" icon="puzzle-piece" href="/versions/2.0.9dev/en/deploy/channel/custom" cta="Learn more" arrow>
+    Implement ChannelBase to connect a platform beyond the built-ins.
+  </Card>
+</CardGroup>

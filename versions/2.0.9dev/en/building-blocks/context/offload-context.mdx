@@ -1,0 +1,100 @@
+---
+title: "Offload Context"
+description: "Persist dropped content so the agent can read it back on demand"
+---
+
+Context offloading writes content the agent has dropped (compressed messages, truncated tool outputs) to external storage, so the agent can read it back later via its file tools (Read, Grep, Glob) when it needs a detail that was compressed away. The component that performs the writes is called an **offloader**.
+
+## Attach an Offloader
+
+An offloader is any object satisfying the `Offloader` protocol, a structural contract with two methods:
+
+| Method | Description |
+|--------|-------------|
+| `offload_context(session_id, msgs)` | Persist compressed messages; returns a reference (e.g. a file path) to the persisted content |
+| `offload_tool_result(session_id, tool_result)` | Persist a truncated tool result; returns a reference to the persisted content |
+
+Pass any object satisfying this protocol to the agent's `offloader` argument. Every built-in [workspace](/versions/2.0.9dev/en/building-blocks/workspace/overview) (local, Docker, E2B, ...) implements the protocol and can serve as the offloader directly:
+
+```python
+from agentscope.agent import Agent
+from agentscope.workspace import LocalWorkspace
+
+workspace = LocalWorkspace(workdir="/tmp/agent_workspace")
+await workspace.initialize()
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    toolkit=toolkit,
+    offloader=workspace,
+)
+```
+
+Without an offloader attached, compressed messages and truncated tool results are simply dropped after they leave the context window.
+
+## Offload to a Workspace
+
+A workspace writes offloaded content under `workdir` in its own filesystem, isolating each agent run by `session_id`. The layout below uses the local workspace as an example; sandboxed workspaces use the same structure inside their filesystems:
+
+<Tree>
+  <Tree.Folder name="{workdir}" defaultOpen>
+    <Tree.Folder name="data" defaultOpen>
+      <Tree.File name="{sha256}.png" />
+    </Tree.Folder>
+    <Tree.Folder name="sessions" defaultOpen>
+      <Tree.Folder name="{session_id}" defaultOpen>
+        <Tree.File name="context.jsonl" />
+        <Tree.File name="tool_result-{tool_id}.txt" />
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.Folder name="skills">
+      <Tree.File name="..." />
+    </Tree.Folder>
+  </Tree.Folder>
+</Tree>
+
+How content is laid out:
+
+- **`sessions/{session_id}/`**: one directory per agent session, so concurrent agents don't collide. Compressed messages append to `context.jsonl`; each truncated tool result becomes its own `tool_result-{tool_id}.txt`.
+- **`data/`**: multimodal files (images, audio) referenced by offloaded messages, deduplicated by SHA-256 content hash.
+- **`skills/`**: unrelated to offloading; the workspace also serves as the agent's skill directory.
+
+## Create Custom Offloader
+
+For backends other than a workspace (databases, cloud blobs, vector stores), implement the `Offloader` protocol. No inheritance is required, since it is a structural protocol:
+
+```python
+from typing import Any
+from agentscope.message import Msg, ToolResultBlock
+
+class S3Offloader:
+    def __init__(self, bucket: str, prefix: str) -> None:
+        self.bucket = bucket
+        self.prefix = prefix
+
+    async def offload_context(
+        self,
+        session_id: str,
+        msgs: list[Msg],
+        **kwargs: Any,
+    ) -> str:
+        key = f"{self.prefix}/sessions/{session_id}/context.jsonl"
+        content = "\n".join(m.model_dump_json() for m in msgs)
+        await self._upload(self.bucket, key, content)
+        return f"s3://{self.bucket}/{key}"
+
+    async def offload_tool_result(
+        self,
+        session_id: str,
+        tool_result: ToolResultBlock,
+        **kwargs: Any,
+    ) -> str:
+        key = f"{self.prefix}/sessions/{session_id}/tool_result-{tool_result.id}.txt"
+        # Extract text content from the tool result blocks and upload.
+        ...
+        return f"s3://{self.bucket}/{key}"
+```
+
+Pass the instance into `Agent(offloader=...)` like a workspace.

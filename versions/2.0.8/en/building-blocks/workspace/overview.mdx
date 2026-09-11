@@ -1,0 +1,54 @@
+---
+title: "Overview"
+description: "Give the agent an execution environment it can act in and persist to"
+---
+
+A workspace is the agent's execution environment. It supplies the resources the agent acts with, and owns the lifecycle of everything living inside it (MCP server processes, dynamically added skills, offloaded files):
+
+| Resource | What the Workspace Provides |
+|----------|-----------------------------|
+| Tools | Built-in tools (Bash, Read, Write, ...) executed through the workspace's backend, plus tools from registered MCP servers |
+| Skills | Markdown instruction sets stored under `skills/`, loadable by the agent's `Skill` viewer |
+| Context offloading | Persistent storage for compressed messages and truncated tool results, via the `Offloader` protocol |
+
+AgentScope ships seven workspace implementations, one per execution environment. All of them expose the same interface, so the same agent code runs against any backend:
+
+| Class | Environment | Persistence |
+|-------|-------------|-------------|
+| `LocalWorkspace` | Host filesystem | `workdir` on the host |
+| `BubblewrapWorkspace` | Linux [bubblewrap](https://github.com/containers/bubblewrap) sandbox | Host `host_workdir` mounted at `/workspace`; omit it for an ephemeral temp directory |
+| `DockerWorkspace` | Docker container | Host `workdir` bind-mounted to `/workspace`; omit it for an ephemeral container |
+| `E2BWorkspace` | [E2B](https://e2b.dev) cloud sandbox | Sandbox filesystem; reattached by sandbox metadata |
+| `DaytonaWorkspace` | [Daytona](https://www.daytona.io) sandbox | Sandbox filesystem; reattached by sandbox labels |
+| `K8sWorkspace` | Kubernetes Pod | PVC mounted into the Pod; reattached by workspace-id-derived name |
+| `OpenSandboxWorkspace` | [OpenSandbox](https://github.com/agentscope-ai/opensandbox) sandbox | Sandbox filesystem; reattached by sandbox metadata |
+
+## Interface
+
+Every implementation derives from `WorkspaceBase`, whose methods fall into four roles:
+
+| Role | Methods | Called By |
+|------|---------|-----------|
+| Lifecycle | `initialize()` / `close()` / `reset()`, plus the `async with` protocol | The developer, or a workspace manager |
+| Discovery | `list_tools()` / `list_mcps()` / `list_skills()` / `get_instructions()` | Agent assembly, to build the toolkit and system prompt |
+| Offloading | `offload_context()` / `offload_tool_result()` | The agent, when compression or truncation fires |
+| Dynamic management | `add_mcp()` / `remove_mcp()` / `add_skill()` / `remove_skill()` | The developer or service, at runtime |
+
+For the sandboxed backends (Bubblewrap, Docker, E2B, Daytona, K8s, OpenSandbox), MCP servers run *inside* the isolated environment; the host reaches them through an in-workspace gateway, covered in [MCP Gateway](/versions/2.0.8/en/building-blocks/workspace/mcp-gateway).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Run Workspace" icon="play" href="/versions/2.0.8/en/building-blocks/workspace/run-workspace">
+    Create a workspace on any backend and wire it into an agent.
+  </Card>
+  <Card title="Manage Resources" icon="boxes-stacked" href="/versions/2.0.8/en/building-blocks/workspace/manage-resources">
+    Add and remove MCP servers and skills at runtime.
+  </Card>
+  <Card title="MCP Gateway" icon="tower-broadcast" href="/versions/2.0.8/en/building-blocks/workspace/mcp-gateway">
+    How sandboxed workspaces expose their MCP servers to the host.
+  </Card>
+  <Card title="Workspace Manager" icon="server" href="/versions/2.0.8/en/deploy/workspace-manager">
+    Allocate and isolate workspaces per user, agent, or session in a service.
+  </Card>
+</CardGroup>

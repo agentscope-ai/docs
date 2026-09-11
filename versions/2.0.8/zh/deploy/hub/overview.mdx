@@ -1,0 +1,48 @@
+---
+title: "概览"
+description: "快速接入不同来源的 MCP 与技能中心。"
+---
+
+MCP 与技能中心指的是以代码方式实现在 [智能体服务](/versions/2.0.8/zh/deploy/agent-service) 中注册 MCP 与技能来源，并在对话中分配给指定的智能体服务。
+该“中心”可以来自受信的第三方服务，也可以来自自定义实现。
+
+按资源类型区分，分为 MCP 和技能两类：
+
+<CardGroup cols={2}>
+  <Card title="MCP 中心" icon="plug" href="/versions/2.0.8/zh/deploy/hub/mcp-hub" cta="查看详情" arrow>
+    安装 [MCP](/versions/2.0.8/zh/building-blocks/tool/mcp) 服务，并配置凭证。
+  </Card>
+  <Card title="技能中心" icon="book-open" href="/versions/2.0.8/zh/deploy/hub/skill-hub" cta="查看详情" arrow>
+    安装他人发布的 [技能](/versions/2.0.8/zh/building-blocks/tool/skill)。
+  </Card>
+</CardGroup>
+
+## 工作方式
+
+安装与装配是两个独立的步骤，因此用户只需配置一次，之后处处可用：
+
+<Steps>
+  <Step title="安装到自己的资源池">
+    用户浏览某个中心并安装 MCP 服务或技能，填写的凭证一并保存下来。所有中心汇入同一个资源池，装完之后就不必再关心它来自哪个来源。
+  </Step>
+  <Step title="装配给智能体的工作区">
+    在会话中，用户从资源池里挑选，把它加入该智能体的 [工作区](/versions/2.0.8/zh/deploy/workspace-manager)，其工具随即对智能体可见。
+  </Step>
+</Steps>
+
+资源池属于用户，而不属于某一次会话。同一个 MCP 服务可以装配到十个不同的工作区而无需重复填写密钥，也不会随任何一次会话结束而消失。
+
+<Tip>
+MCP 和技能中心是可选的。即使一个都不注册，用户依然可以通过粘贴配置来添加 MCP 服务，通过上传文件夹来添加技能。
+</Tip>
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="智能体服务" icon="server" href="/versions/2.0.8/zh/deploy/agent-service" cta="查看详情" arrow>
+    MCP 与技能中心所依托的托管层。
+  </Card>
+  <Card title="工作区管理" icon="folder-tree" href="/versions/2.0.8/zh/deploy/workspace-manager" cta="查看详情" arrow>
+    装配好的 MCP 服务与技能的运行环境。
+  </Card>
+</CardGroup>

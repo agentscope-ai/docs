@@ -1,0 +1,240 @@
+---
+title: "Overview"
+description: "Connect model providers with a credential and discover their models through model cards"
+---
+
+The model layer connects AgentScope to LLM providers through a two-tier hierarchy. A **Credential** sits at the top, with the model families the provider exposes beneath it: **LLM (Chat Model)**, **TTS**, **Embedding**, and **Realtime Model**.
+
+A **Credential** carries the API authentication fields a provider requires (`api_key`, `base_url`, ...). From a single credential, you can discover every model the provider offers in each family it supports. The table below shows each built-in credential and the model classes under it:
+
+| Credential | LLM (Chat Model) | TTS | Embedding | Realtime |
+|------------|------------------|-----|-----------|----------|
+| `DashScopeCredential` | `DashScopeChatModel` | `DashScopeTTSModel`<br/>`DashScopeRealtimeTTSModel`<br/>`DashScopeCosyVoiceTTSModel` | `DashScopeEmbeddingModel` | *coming soon* |
+| `OpenAICredential` | `OpenAIChatModel`<br/>`OpenAIResponseModel` | `OpenAITTSModel` | `OpenAIEmbeddingModel` | *coming soon* |
+| `GeminiCredential` | `GeminiChatModel` | `GeminiTTSModel` | `GeminiEmbeddingModel` | *coming soon* |
+| `AnthropicCredential` | `AnthropicChatModel` | — | — | — |
+| `DeepSeekCredential` | `DeepSeekChatModel` | — | — | — |
+| `MoonshotCredential` | `MoonshotChatModel` | — | — | — |
+| `VolcengineCredential` | `VolcengineChatModel` | — | — | — |
+| `XAICredential` | `XAIChatModel` | — | — | — |
+| `OllamaCredential` | `OllamaChatModel` | — | `OllamaEmbeddingModel` | — |
+
+This layering mirrors the natural frontend flow (register a credential first, then pick a model from under it), letting the UI authenticate once and surface every model family the provider supports.
+
+All model families share the same construction pattern: a model takes a **credential**, a **model name**, and an optional provider-specific **`Parameters`** object. Each family page covers its own creation and invocation details:
+
+- [LLM](/versions/2.0.9dev/en/building-blocks/model/llm): drives an agent's conversation and tool calls
+- [TTS](/versions/2.0.9dev/en/building-blocks/model/tts): converts text into synthesized speech audio
+- [Embedding](/versions/2.0.9dev/en/building-blocks/model/embedding): converts text and media into dense vectors
+
+<Tip>
+**Realtime Model** is coming soon: we are migrating Realtime Model support from v1.0 to v2.0.
+</Tip>
+
+## Integrate with Frontend
+
+### What is ModelCard
+
+A model card is a declarative description of a model's capabilities and constraints, designed to drive the frontend: model selectors, parameter forms, and feature toggles can be rendered dynamically without hardcoding any provider-specific knowledge. Each model family has its own card class:
+
+| Card Class | Family | `type` Discriminator |
+|------------|--------|----------------------|
+| `ModelCard` | LLM (chat model) | `"chat_model"` |
+| `TTSModelCard` | TTS | `"tts_model"` |
+| `EmbeddingModelCard` | Embedding | `"embedding_model"` |
+
+All three card classes share a common core of fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `str` | Model identifier (e.g. `"claude-sonnet-4-6"`) |
+| `label` | `str` | Human-readable display name (e.g. `"Claude Sonnet 4.6"`) |
+| `status` | `"active" \| "deprecated" \| "sunset"` | Model lifecycle status |
+| `input_types` | `list[str]` | Accepted input MIME types, used by the frontend to filter attachment uploads (e.g. only show an image button when `image/*` is supported) |
+| `output_types` | `list[str]` | Output MIME types the model can produce, advertising capabilities such as a thinking toggle when `application/x-thinking` is present |
+| `parameter_schema` | `dict` | Final JSON Schema for the parameter form: base schema merged with per-model overrides (see below) |
+| `parameter_overrides` | `dict[str, dict]` | The raw per-model overrides from the YAML, before merging |
+
+On top of the common core, each card type adds family-specific fields:
+
+| Card Class | Family-Specific Fields |
+|------------|------------------------|
+| `ModelCard` | `context_size` (max context window in tokens), `output_size` (max output tokens), `deprecated_at` (deprecation date) |
+| `TTSModelCard` | `realtime` (whether the model supports streaming input), `deprecated_at`; the YAML's `voices` list is injected into `parameter_schema` as an enum on the `voice` field |
+| `EmbeddingModelCard` | `dimensions` (default output vector size, required), `supported_dimensions` (allowed sizes for Matryoshka-style models, `None` = fixed), `context_size` (optional) |
+
+`input_types` and `output_types` use MIME types to describe modality. Common values:
+
+| MIME Type | Meaning |
+|-----------|---------|
+| `text/plain` | Text |
+| `application/x-thinking` | Reasoning / chain-of-thought |
+| `application/x-embedding` | Dense vector embedding |
+| `image/*` (e.g. `image/png`, `image/jpeg`) | Image |
+| `audio/*` (e.g. `audio/wav`, `audio/mp3`) | Audio |
+| `video/*` (e.g. `video/mp4`) | Video |
+
+Each card is defined by a YAML file that ships alongside the model implementation. The tabs below show a real card from each family:
+
+<CodeGroup>
+```yaml Chat (claude-sonnet-4-6)
+name: claude-sonnet-4-6
+label: Claude Sonnet 4.6
+status: active
+
+input_types:
+  - text/plain
+  - application/x-thinking
+  - image/jpeg
+  - image/png
+  - image/gif
+  - image/webp
+
+output_types:
+  - text/plain
+  - application/x-thinking
+
+context_size: 1000000
+output_size: 65536
+
+parameter_overrides:
+  max_tokens: {"maximum": 65536}
+```
+
+```yaml TTS (qwen3-tts-flash)
+name: qwen3-tts-flash
+label: Qwen3-TTS-Flash
+status: active
+
+input_types:
+  - text/plain
+
+output_types:
+  - audio/wav
+
+# Injected into parameter_schema as an enum on the voice field,
+# so the frontend renders a dropdown selector.
+voices:
+  - Cherry
+  - Serena
+  - Ethan
+  - Chelsie
+
+parameter_overrides: {}
+```
+
+```yaml Embedding (text-embedding-v4)
+name: text-embedding-v4
+label: Text Embedding v4
+status: active
+
+input_types:
+  - text/plain
+
+output_types:
+  - application/x-embedding
+
+context_size: 8192
+
+# Default output vector size, plus the sizes this
+# Matryoshka-style model can be truncated to.
+dimensions: 1024
+supported_dimensions: [2048, 1536, 1024, 768, 512, 256, 128, 64]
+```
+</CodeGroup>
+
+### Parameter Schema and Overrides
+
+The `parameter_schema` exposed to the frontend is built in two layers:
+
+1. **Base schema**: auto-derived from the model's `Parameters` class via `model_json_schema()`. This lists every adjustable parameter (`temperature`, `max_tokens`, `thinking_enable`, ...) along with its type and the API-wide range.
+2. **Per-model overrides**: the YAML's `parameter_overrides` block is merged on top, field by field.
+
+Overrides matter because adjustable ranges are not uniform across an API: every Qwen model accepts `max_tokens`, but each one has a different ceiling. Overrides let a card tighten a range, pin a default, or hide a parameter that doesn't apply.
+
+| Override syntax | Effect |
+|-----------------|--------|
+| `param: { ... }` | Shallow-merge into the base field (e.g. `max_tokens: {maximum: 16384}`) |
+| `param: { hidden: true }` | Hide the parameter from the frontend |
+| `param: null` | Remove the parameter entirely |
+
+<Note>
+Some adjustments are applied automatically, without an explicit override: chat cards drop `thinking_enable` / `thinking_budget` when `application/x-thinking` is absent from `output_types` and cap `max_tokens` at `output_size`; TTS cards turn the `voices` list into an enum on the `voice` field.
+</Note>
+
+### Retrieve ModelCards
+
+Model card discovery follows the hierarchy: **credential class ⇒ model class ⇒ model cards**. Each credential knows its linked model class for every family (`get_chat_model_class()`, `get_tts_model_classes()`, `get_embedding_model_class()`), and each model class loads the YAML card definitions from the `_models/` directory next to its implementation:
+
+```python
+from agentscope.credential import DashScopeCredential
+
+# Credential class -> model class
+model_cls = DashScopeCredential.get_chat_model_class()  # -> DashScopeChatModel
+
+# Model class -> model cards
+cards = model_cls.list_models()                          # -> list[ModelCard]
+```
+
+In practice, call `list_models()` on either end of the chain. The tabs below show the retrieval for each family:
+
+<CodeGroup>
+```python Chat
+from agentscope.credential import DashScopeCredential
+from agentscope.model import AnthropicChatModel
+
+# Via credential class: delegates to its linked chat model class
+cards = DashScopeCredential.list_models()
+
+# Or directly on the model class
+cards = AnthropicChatModel.list_models()
+
+for card in cards:
+    print(f"{card.name}: context={card.context_size}, inputs={card.input_types}")
+```
+
+```python TTS
+from agentscope.credential import DashScopeCredential
+from agentscope.tts import DashScopeTTSModel
+
+# Via credential class: aggregates cards from every linked TTS model class
+cards = DashScopeCredential.list_tts_models()
+
+# Or directly on one TTS model class
+cards = DashScopeTTSModel.list_models()
+
+for card in cards:
+    print(f"{card.name} (realtime={card.realtime}): {card.label}")
+```
+
+```python Embedding
+from agentscope.credential import DashScopeCredential
+from agentscope.embedding import OpenAIEmbeddingModel
+
+# Discover the embedding model class from the credential
+embed_cls = DashScopeCredential.get_embedding_model_class()
+cards = embed_cls.list_models()
+
+# Or directly on the model class
+cards = OpenAIEmbeddingModel.list_models()
+
+for card in cards:
+    print(f"{card.name}: dimensions={card.dimensions}")
+```
+</CodeGroup>
+
+This design allows the frontend to discover available models, their capabilities, and valid parameter ranges, all from a single credential, without any hardcoded provider logic.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="LLM" icon="message" href="/versions/2.0.9dev/en/building-blocks/model/llm" cta="Learn more" arrow>
+    Create and call chat models, generate structured output, and add custom providers.
+  </Card>
+  <Card title="TTS" icon="volume-high" href="/versions/2.0.9dev/en/building-blocks/model/tts" cta="Learn more" arrow>
+    Synthesize speech in standard and realtime modes, and integrate TTS with agents.
+  </Card>
+  <Card title="Embedding" icon="cube" href="/versions/2.0.9dev/en/building-blocks/model/embedding" cta="Learn more" arrow>
+    Embed text and multimodal content, with built-in batching, retry, and caching.
+  </Card>
+</CardGroup>

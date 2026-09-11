@@ -1,0 +1,163 @@
+---
+title: "会话路由"
+description: "决定 IM 平台来的消息交给哪个智能体、进入哪个会话。"
+---
+
+路由（Routing）决定：从 IM 平台收到的一条消息，交给哪个智能体、进入它的哪个会话。「交给哪个智能体」决定谁来回答，「进入哪个会话」决定这条消息和此前哪些消息共享同一段对话上下文。同一个会话里的消息彼此可见，不同会话互不相通。目前会话有两种划分方式：**一个聊天共用一个会话**，或**群聊里每个成员各自一个会话**。
+
+考虑到一个渠道中，聊天和用户都是伴随着第一次输入才出现的：任何人第一次私聊机器人，都会带来一个此前从未见过的聊天。因此路由不是一张事先写好的对照表，而是一组有先后顺序的规则，逐条匹配、命中即停，并用一条兜底规则保证任何消息都有确定去向。
+
+## 路由规则
+
+一条路由规则（binding）由四个字段构成：前两个是"匹配什么消息"，后两个是"命中后怎么处理"。
+
+| 字段 | 说明 | 默认值 |
+|---|---|---|
+| `match_key` | 拿消息的哪个字段来匹配：`chat_id`（来自哪个聊天）、`user_id`（谁发的），或 `metadata` 里的键（如 `chat_type`） | `chat_id` |
+| `match_value` | 要匹配的具体值，或 `"*"` 表示匹配任意（兜底） | `"*"` |
+| `agent_id` | 命中后交给哪个智能体 | 必填 |
+| `session_scope` | 命中后这条消息进入哪个会话，取值见下节 | `per_chat` |
+
+`match_value` 是**精确匹配**（不是前缀，也不是正则），只有 `"*"` 例外，它匹配一切。当 `match_key` 指向 `metadata` 里的键时，可匹配的值由平台决定，例如飞书的 `chat_type` 取值为 `group` / `p2p`，钉钉为 `group` / `private`，Discord 为 `guild` / `dm`，详见各平台接入页。
+
+## 会话划分
+
+`session_scope` 决定命中同一条规则的消息如何归入会话。进入同一个会话的消息共享上下文。
+
+| 取值 | 含义 | 适用场景 |
+|---|---|---|
+| `per_chat` | 一个聊天一个会话 | 默认值。私聊天然是一人一个会话；群聊则整群共享同一段上下文 |
+| `per_chat_user` | 同一聊天里，每个用户各自一个会话 | 仅群聊有意义：把群里每个成员隔离到各自的会话，互不干扰 |
+
+即便匹配到同一个智能体，`per_chat` 与 `per_chat_user` 也会把消息归入不同会话。因此**改动划分方式后，后续消息会按新方式重新归组**。不同智能体之间永远不共享会话。
+
+## 匹配顺序
+
+规则按列表顺序自上而下匹配，**首条命中即停**，与防火墙规则、Nginx location 的匹配方式一致。把具体的例外规则放在前面，把兜底规则放在最后。
+
+保存配置时会做三项校验，保证任何消息都有确定且唯一的去向：
+
+<Warning>
+- 必须有且仅有一条兜底规则（`match_value` 为 `"*"`）；
+- 兜底规则必须在最后，否则它后面的规则永远不会被命中；
+- 不允许出现重复的 `(match_key, match_value)` 组合。
+</Warning>
+
+## 完整示例
+
+假设你已经部署了两个智能体：通用助手 `friday`，以及产品专家 `product-expert`。下面用一条真实消息，看它在不同规则下分别交给哪个智能体、进入哪个会话。
+
+<Steps>
+  <Step title="收到一条消息">
+    机器人在一个叫"产品团队"的飞书群里，收到成员 Alice 的一句话。这条消息大致长这样（只列出与路由相关的字段）：
+
+    ```json 入站消息
+    {
+      "channel_user_id": "ou_alice",
+      "chat_id": "oc_product_team",
+      "content": [
+        {
+          "type": "text",
+          "text": "帮我查下今天的排期"
+        }
+      ],
+      "metadata": {
+        "chat_type": "group"
+      }
+    }
+    ```
+  </Step>
+  <Step title="用规则决定去向">
+    同一条消息，配上不同的规则，会去往不同的智能体和会话。下面每个标签页是一种配置：
+
+    <CodeGroup>
+    ```json 全部交给 friday
+    {
+      "bindings": [
+        // 适用：一个通用助手服务所有聊天
+        // 这条兜底规则匹配任何消息，都交给通用助手 friday，
+        // "产品团队"群里所有人共用同一个会话
+        {
+          "match_key": "chat_id",
+          "match_value": "*",
+          "agent_id": "friday",
+          "session_scope": "per_chat"
+        }
+      ]
+    }
+    ```
+
+    ```json 产品群走专属智能体
+    {
+      "bindings": [
+        // 适用：某个群需要专门的智能体，其余聊天走通用助手
+        // 来自"产品团队"群的消息命中这条，交给产品专家 product-expert
+        {
+          "match_key": "chat_id",
+          "match_value": "oc_product_team",
+          "agent_id": "product-expert",
+          "session_scope": "per_chat"
+        },
+        // 其余聊天没命中上面，落到这条兜底，交给 friday
+        {
+          "match_key": "chat_id",
+          "match_value": "*",
+          "agent_id": "friday",
+          "session_scope": "per_chat"
+        }
+      ]
+    }
+    ```
+
+    ```json 群里每人各聊各的
+    {
+      "bindings": [
+        // 适用：群里多人分别和机器人对话，各自独立、互不干扰
+        // 群聊消息命中这条，交给 friday；群里每个人各自一个会话，
+        // Alice 的会话只属于她，别人看不到
+        {
+          "match_key": "chat_type",
+          "match_value": "group",
+          "agent_id": "friday",
+          "session_scope": "per_chat_user"
+        },
+        // 私聊等其余情况落到兜底
+        {
+          "match_key": "chat_id",
+          "match_value": "*",
+          "agent_id": "friday",
+          "session_scope": "per_chat"
+        }
+      ]
+    }
+    ```
+    </CodeGroup>
+  </Step>
+  <Step title="兜底规则">
+    每份配置的最后都必须有一条兜底规则（`match_value` 为 `"*"`），保证没命中任何前面规则的消息也有确定去向。上面三个例子的最后一条都是它：
+
+    ```json 兜底规则
+    {
+      "match_key": "chat_id",
+      "match_value": "*",
+      "agent_id": "friday",
+      "session_scope": "per_chat"
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+配置路由前，调用 `GET /channels/{id}/chat_ids` 可以列出机器人已知的聊天及其 `chat_id`，直接复制即可，不必手工抄写平台 ID。
+</Tip>
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="接入飞书" icon="comment" href="/versions/2.0.9dev/zh/deploy/channel/feishu" cta="查看详情" arrow>
+    创建飞书机器人，让智能体在飞书里收发消息。
+  </Card>
+  <Card title="接入 Discord" icon="discord" href="/versions/2.0.9dev/zh/deploy/channel/discord" cta="查看详情" arrow>
+    创建 Discord Bot，让智能体在 Discord 里收发消息。
+  </Card>
+</CardGroup>

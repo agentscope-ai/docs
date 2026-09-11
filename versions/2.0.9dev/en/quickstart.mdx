@@ -1,0 +1,114 @@
+---
+title: "Quickstart"
+description: "Get up and running with AgentScope 2.0 in minutes"
+---
+
+## Installation
+
+AgentScope requires Python 3.11+, and you can install it from PyPI or from source.
+
+It's recommended to install AgentScope by using [uv](https://github.com/astral-sh/uv).
+
+### From PyPI
+
+```bash
+uv pip install agentscope
+```
+
+### From Source
+
+```bash
+git clone -b main https://github.com/agentscope-ai/agentscope
+cd agentscope
+uv pip install -e .
+```
+
+### Verify Installation
+
+To ensure AgentScope is installed successfully, check via executing the following code:
+
+```python
+import agentscope
+
+print(agentscope.__version__)
+```
+
+## Your First Agent
+
+The snippet below builds the minimal agent: a DashScope credential, the matching chat model, an empty toolkit, and an `Agent`. The agent exposes two entry points — `reply` returns the final message, while `reply_stream` yields incremental events as the agent reasons and acts.
+
+```python
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.credential import DashScopeCredential
+from agentscope.event import EventType
+from agentscope.message import UserMsg
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import Toolkit, Bash, Read, Write, Edit
+
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You are a helpful assistant named Friday.",
+        model=DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.getenv("DASHSCOPE_API_KEY"),
+            ),
+            model="qwen-plus",
+        ),
+        toolkit=Toolkit(tools=[Bash(), Read(), Write(), Edit()]),
+    )
+
+    user_msg = UserMsg(name="user", content="Hello, who are you?")
+
+    # Option 1: await the final assistant message.
+    reply_msg = await agent.reply(user_msg)
+    # `reply_msg` is an `AssistantMsg` whose `content` is a list of blocks.
+    # Inspect text blocks, tool calls, etc. as needed.
+    ...
+
+    # Option 2: stream incremental events (text deltas, tool calls, ...).
+    async for event in agent.reply_stream(user_msg):
+        # Dispatch on `event.type` — each branch handles one event kind.
+        match event.type:
+            case EventType.TEXT_BLOCK_DELTA:
+                # Streaming text chunk from the model — append to UI / stdout.
+                ...
+            case EventType.TOOL_CALL_START:
+                # The agent is about to invoke a tool — surface the call.
+                ...
+            case _:
+                # Other events: thinking blocks, tool results, reply end, ...
+                ...
+
+
+asyncio.run(main())
+```
+
+<Tip>
+Set `DASHSCOPE_API_KEY` in your environment before running the script. To use a different provider, swap `DashScopeCredential` and `DashScopeChatModel` for the matching pair (e.g. `OpenAICredential` and `OpenAIChatModel`).
+</Tip>
+
+## Extra Dependencies
+
+To satisfy the requirements of different functionalities, AgentScope provides extra dependencies that can be installed based on your needs.
+
+- **full**: including extra dependencies for model APIs, tool functions and more.
+- **dev**: development dependencies, including testing and documentation tools.
+
+For example, when installing the full dependencies, the installation command varies depending on your operating system.
+
+- For Windows users:
+
+```bash
+uv pip install agentscope[full]
+```
+
+- For Mac and Linux users:
+
+```bash
+uv pip install agentscope\[full\]
+```

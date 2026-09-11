@@ -1,0 +1,57 @@
+---
+title: "中断智能体"
+description: "干净地停止运行中或暂停中的智能体，并从一致状态恢复"
+---
+
+`Agent` 类基于 `asyncio.CancelledError` 实现中断机制，支持在模型推理或工具执行的任意阶段停止执行。中断之后，智能体的上下文会保持一致状态，会话可以立即通过新的输入消息继续。
+
+中断智能体有两种方式，取决于智能体是否正在运行：
+
+- **智能体正在运行**：通过对承载 `reply` / `reply_stream` 的协程调用 `task.cancel()` 来中断。这会在智能体内部触发 `asyncio.CancelledError`，从而干净地展开当前的推理-行动步骤。
+- **智能体处于暂停状态**：通过 `reply_stream` 传入一个 `UserInterruptEvent`。如果智能体当前正在等待用户确认或外部工具执行，它会清理待处理状态并结束本次回复。对于每一个待处理的工具调用，智能体会合成一个标记为"被用户中断"的 `ToolResultBlock`，并依次产出对应的 `ToolResultStartEvent`、`ToolResultTextDeltaEvent`、`ToolResultEndEvent` 以及最后的 `ReplyEndEvent`，使智能体重新处于可以接受用户输入的状态。如果智能体并未处于暂停状态，则该事件是空操作，`reply` / `reply_stream` 会立即返回。
+
+<CodeGroup>
+
+```python 中断运行中的智能体
+import asyncio
+from agentscope.agent import Agent
+from agentscope.message import UserMsg
+
+async def chat(agent: Agent) -> None:
+    async for event in agent.reply_stream(
+        UserMsg(name="user", content="..."),
+    ):
+        ...
+
+async def main() -> None:
+    agent = Agent(...)
+    task = asyncio.create_task(chat(agent))
+
+    # 在任意时刻取消任务即可中断智能体
+    await asyncio.sleep(1)
+    task.cancel()
+
+asyncio.run(main())
+```
+
+```python 中断已暂停的智能体
+from agentscope.agent import Agent
+from agentscope.event import UserInterruptEvent
+
+async def main() -> None:
+    agent = Agent(...)
+
+    # 假设智能体此前已因 RequireUserConfirmEvent
+    # 或 RequireExternalExecutionEvent 而暂停。
+    # 传入 UserInterruptEvent 以清理待处理状态并结束当前回复。
+    async for event in agent.reply_stream(
+        UserInterruptEvent(reply_id=agent.state.reply_id),
+    ):
+        print(event)
+```
+
+</CodeGroup>
+
+<Note>
+使用 `agent.state.reply_id` 引用当前处于暂停状态的回复。有关智能体如何进入暂停状态，请参见[人机交互](/versions/2.0.8/zh/building-blocks/agent/human-in-the-loop)。
+</Note>

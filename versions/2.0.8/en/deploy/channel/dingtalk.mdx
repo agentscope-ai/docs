@@ -1,0 +1,193 @@
+---
+title: "DingTalk"
+description: "Chat with your service's agents inside DingTalk."
+---
+
+The DingTalk channel connects over the official Stream mode long connection, so it needs no public callback URL and works from a local or intranet deployment. The DingTalk channel currently supports:
+
+- **Interactive card approval**: when an agent calls a tool that needs approval, it asks for confirmation as a card in DingTalk; click a button to allow or deny;
+- **Streaming replies**: the answer updates within a single AI card as it is generated;
+- **Multimodal input**: receive images, files, voice, video, and rich-text messages from users and pass them to the agent;
+- **Outbound sending**: the agent can look up the directory and known chats, then send messages, images, and files to users or groups outside the current conversation.
+
+Connecting takes three steps: create an app on the [DingTalk Open Platform](https://open.dingtalk.com/) and get its credentials, start an agent service to host the channel, then add the DingTalk channel in the management UI. No card template needs preparing; the channel ships defaults.
+
+## Prerequisites
+
+The DingTalk channel depends on `dingtalk-stream`, installed with the `channel` extra:
+
+```bash Install the dependency
+pip install "agentscope[channel]"
+```
+
+## Create App
+
+Create and configure the enterprise internal app and its robot on the [DingTalk Open Platform](https://open.dingtalk.com/).
+
+<Steps>
+  <Step title="Create an enterprise internal app">
+    In the developer console, create an "enterprise internal app" and fill in its name and icon.
+  </Step>
+  <Step title="Record the Client ID and Client Secret">
+    On the app's credentials and basic info page, copy the **Client ID** (AppKey) and **Client Secret** (AppSecret) to fill into the channel config later. The Client Secret is a secret; keep it safe.
+  </Step>
+  <Step title="Add the robot capability">
+    Under "App capabilities", add "Robot" and fill in its name and icon so the app can send and receive messages.
+  </Step>
+  <Step title="Set the message delivery mode to Stream">
+    On the robot config page, set the message delivery mode to **Stream mode**, with no HTTP callback URL.
+  </Step>
+  <Step title="Request permissions">
+    Under "Permission management", request: sending messages as an enterprise robot, creating and updating card instances, and uploading and downloading media files. If you want the `ListUsers` tool to search people by name, also request the directory permissions for user search and user profile reads. Refer to the [DingTalk docs](https://open.dingtalk.com/document/) for the exact scopes.
+  </Step>
+  <Step title="Publish the app">
+    Publish an app version so it becomes available in your organization. You can then add the robot to a group or DM it directly.
+  </Step>
+</Steps>
+
+## Start Agent Service
+
+A channel runs on top of an [agent service](/versions/2.0.8/en/deploy/agent-service). Start the service with `create_app` and declare the accepted channel types via `channels`. Channels depend on a message bus (`message_bus`); use `InMemoryMessageBus` for single-machine development, and switch to `RedisMessageBus` for multi-process or multi-node deployment.
+
+```python Start an agent service that hosts the channel
+from agentscope.app import create_app
+from agentscope.app.channel import DingTalkChannel
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.storage import RedisStorage
+from agentscope.app.workspace_manager import LocalWorkspaceManager
+
+app = create_app(
+    storage=RedisStorage(host="localhost", port=6379),
+    # In-memory bus for single-machine dev; switch to RedisMessageBus for multi-node
+    message_bus=InMemoryMessageBus(),
+    workspace_manager=LocalWorkspaceManager(basedir="./workspaces"),
+    channels=[DingTalkChannel],   # channel types this service accepts
+)
+# After starting with uvicorn, the channel feature is ready
+# uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+## Add Channel
+
+In the management UI (see the sample frontend [`examples/web_ui`](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)), add a channel through a visual form, with no config to write by hand.
+
+<Steps>
+  <Step title="Create a channel and pick DingTalk">
+    On the channel management page, create a channel and choose "DingTalk" as the platform type.
+  </Step>
+  <Step title="Fill in the credentials">
+    Enter the **Client ID** and **Client Secret** from the previous step into the credential form.
+  </Step>
+  <Step title="Configure routing rules">
+    Choose which agent handles messages and how sessions are scoped. See [Message Routing](/versions/2.0.8/en/deploy/channel/routing) for what the rules mean.
+  </Step>
+  <Step title="Save and enable">
+    Save and enable the channel; the service opens the DingTalk Stream connection immediately and the robot comes online. Add it to a group or start a DM to begin.
+  </Step>
+</Steps>
+
+<Note>
+The management UI maps onto the `/channels` endpoints; call them directly when you need to create channels programmatically. See the [API](/versions/2.0.8/en/deploy/openapi.json) part of this chapter for the fields.
+</Note>
+
+## Platform Config
+
+The DingTalk channel's platform-specific fields:
+
+| Field | Description | Default |
+|---|---|---|
+| `only_at_reply` | In group chats, reply only when the robot is @mentioned. DMs are unaffected and always answered | `true` |
+| `show_thinking` | Include the model's reasoning in the reply | `false` |
+| `show_tool_process` | Include tool calls and results in the reply | `false` |
+| `max_media_bytes` | Maximum bytes for one inbound or outbound attachment, capped at 100 MB | `10485760` (10 MB) |
+| `approval_card_template_id` | Template ID used for tool approval cards; empty means no approval card is delivered | DingTalk's published AI card |
+| `streaming_card_template_id` | AI card template ID used for streaming replies; empty means replies go out as regular Markdown | DingTalk's published streaming AI card |
+| `streaming_card_key` | Template variable name of the AI card streaming component | `content` |
+
+<Note>
+When routing matches on `chat_type`, group chats use `group` and DMs use `private`.
+</Note>
+
+## Customising Cards
+
+The DingTalk channel delivers two kinds of card: an **approval card** when the agent calls a tool that needs confirmation, and a **streaming card** that carries a reply as it is generated. Both use a template DingTalk publishes, so **connecting the channel needs no card configuration at all**.
+
+What those templates look like is fixed: the layout, the button colours, and the button widths cannot be adjusted, and the card's built-in feedback row cannot be removed. To change any of that, build a template in the [Card Platform](https://open-dev.dingtalk.com/fe/card) and put its ID in the matching channel config field:
+
+| Card | Config field | Default |
+|---|---|---|
+| Approval card | `approval_card_template_id` | DingTalk's published general AI card |
+| Streaming card | `streaming_card_template_id` | DingTalk's published streaming AI card |
+
+Switching to a template of your own needs no channel code changes, but the template has to declare the variables the channel fills in. Each card's requirements follow.
+
+### Approval Card
+
+The channel fills in these variables when it delivers an approval card. Bind whichever ones the template shows:
+
+| Variable | Content | Example |
+|---|---|---|
+| `title` | Which agent is asking | `Friday 提交的工具执行` |
+| `name` | The tool awaiting approval | `Bash` |
+| `input` | The tool's arguments, trimmed by bytes when long | `{"command": "ls -la"}` |
+| `created_at` | When the tool call was made | `2026-08-24 18:26:25` |
+| `status` | Card state | `pending` / `approved` / `denied` |
+
+`name`, `input`, and `created_at` come straight off the agent's tool call (the same-named fields of `ToolCallBlock`), so authoring a template needs no vocabulary beyond the call being approved. `status` is the card's own state: `pending` when delivered, then updated to `approved` or `denied` once someone decides. A template can switch its buttons and result text on it.
+
+Give the template an approve button and a deny button, both configured as callback buttons, and carry `action` in their callback parameters (`cardPrivateData.params`):
+
+| Decision | Accepted `action` values |
+|---|---|
+| Approve | `allow`, `approve`, `approved`, `accept`, `agree` |
+| Deny | `deny`, `denied`, `reject` |
+
+A button carries **nothing but `action`**. The channel finds the tool call from the `outTrackId` it pinned when creating the card, and the chat from what the callback itself reports.
+
+<Tip>
+The repository ships a template ready to import: [`assets/dingtalk/tool_approval_card.json`](https://github.com/agentscope-ai/agentscope/blob/main/assets/dingtalk/tool_approval_card.json). Import it when creating a template in the Card Platform, **publish** it, then put its ID in `approval_card_template_id`. Forgetting to publish makes card creation fail with `param.templateUnpublished`.
+</Tip>
+
+<Warning>
+Clearing `approval_card_template_id` turns approval cards off. Tool calls awaiting confirmation then cannot be answered from DingTalk; the channel says so in the chat and the session stays parked.
+</Warning>
+
+### Streaming Card
+
+A streaming card's template needs an AI card streaming component, which is where the channel writes the reply as it grows. Set that component's variable name as `streaming_card_key` in the channel config; on the built-in template the name is `content`.
+
+## Agent Tools
+
+The channel gives the agent an extra set of DingTalk tools for sending to users or groups outside the current conversation. The lookup tools return a target of the form `user:<staffId>` or `group:<openConversationId>`, which the agent passes verbatim to a send tool.
+
+| Tool | Purpose | Permission |
+|---|---|---|
+| `ListConversations` | List the chats this process has received messages from; empty in a split deployment | Read-only, allowed directly |
+| `ListUsers` | Search the enterprise directory for users by name | Read-only, allowed directly |
+| `SendMessage` | Send Markdown text to a given user or group | Needs user confirmation |
+| `SendImage` | Send an image from the workspace to a given user or group, rendered inline | Needs user confirmation |
+| `SendFile` | Send a file from the workspace to a given user or group; doc, docx, pdf, rar, xlsx, and zip are supported | Needs user confirmation |
+
+<Warning>
+A DingTalk enterprise robot cannot enumerate every group it belongs to, and the process answering this call is not the one holding the robot's connection, so in a split deployment `ListConversations` comes back empty and stays empty. Treat an empty result as the normal case and ask the user for the target.
+</Warning>
+
+## Verify and Troubleshoot
+
+- Check the channel status in the management UI, or call `GET /channels/{id}/status` to confirm the Stream connection is established.
+- If the robot doesn't respond in a group, first check `only_at_reply` and the @-mention behavior, then check that the send-message permission was requested and published with the version.
+- If the robot never comes online, check the Client ID / Client Secret and that the message delivery mode is set to Stream.
+- If clicking a card button does nothing, check that the button is configured as a callback request and that its `action` value is one of those listed above.
+- If group chats work but a DM fails with `chatbotId.notAllow.sendOTO`, the robot's one-to-one messaging is not enabled: enable the robot in the developer console and publish an app version.
+- If an attachment fails to send, check whether the file exceeds `max_media_bytes` and whether its extension is one DingTalk supports.
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Message Routing" icon="route" href="/versions/2.0.8/en/deploy/channel/routing" cta="Learn more" arrow>
+    Route different groups to different agents.
+  </Card>
+  <Card title="Feishu" icon="comment" href="/versions/2.0.8/en/deploy/channel/feishu" cta="Learn more" arrow>
+    Connect Feishu with the same flow.
+  </Card>
+</CardGroup>

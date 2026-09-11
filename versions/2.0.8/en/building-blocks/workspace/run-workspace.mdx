@@ -1,0 +1,267 @@
+---
+title: "Run Workspace"
+description: "Create a workspace on any backend and wire it into an agent"
+---
+
+Running a workspace takes two steps: create one on the backend that matches your target environment, then hand its resources to the agent.
+
+## Create Workspace
+
+Each backend has its own persistence model and directory layout. Pick the tab matching your target environment:
+
+<Tabs>
+  <Tab title="Local">
+    `LocalWorkspace` persists state directly under `workdir` on the host filesystem; restarts simply re-open the same directory. The directory has the following layout:
+
+    ```
+    {workdir}/
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads (deduped by SHA-256)
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import LocalWorkspace
+
+    workspace = LocalWorkspace(
+        workdir="/data/my-workspace",
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="Bubblewrap">
+    `BubblewrapWorkspace` runs every command through [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`), so it needs no daemon or cloud account, only the `bwrap` binary on a Linux host. `host_workdir` is mounted read-write at `/workspace` and holds the persisted state; omit it for an ephemeral temp directory removed on close.
+
+    ```
+    {host_workdir}/    # host directory, mounted at /workspace in the sandbox
+    ├── .agentscope    # gateway venv and runtime files
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import BubblewrapWorkspace
+
+    workspace = BubblewrapWorkspace(
+        host_workdir="/data/bwrap-workspaces/agent-1",  # mounted at /workspace
+        host_cache_dir=None,        # None keeps a workspace-private package cache
+        gateway_port=None,          # None picks an available loopback port
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+
+    <Warning>
+    This is **not** a network sandbox. The MCP gateway is reached over host loopback across separate `bwrap` executions, so `share_net` must stay `True` and sandboxed code shares the host network namespace: it can reach any service the host can, including other loopback services and cloud metadata endpoints. Bubblewrap still isolates the other namespaces and the mounted filesystem. Use Docker, K8s, or a cloud sandbox when the workload also needs network isolation.
+    </Warning>
+
+    An explicit `host_cache_dir` must not overlap `host_workdir`; sharing one cache directory across workspaces trades isolation for faster bootstrap and should be limited to mutually trusted workspaces.
+  </Tab>
+
+  <Tab title="Docker">
+    `DockerWorkspace` bind-mounts the host `workdir` to `/workspace` inside the container, so the layout below lives on the host and survives container restarts. Omit `workdir` for a purely ephemeral container whose writable layer disappears with it.
+
+    ```
+    {workdir}/         # host directory, bind-mounted to /workspace in container
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import DockerWorkspace
+
+    workspace = DockerWorkspace(
+        base_image="python:3.11-slim",
+        workdir="/data/docker-workspaces/agent-1",  # bind-mounted to /workspace
+        node_version="20",
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="E2B">
+    `E2BWorkspace` uses the sandbox filesystem itself as the persistence layer; there is no host `workdir`. Each sandbox is tagged with `workspace_id` in its E2B metadata; on restart the workspace looks it up via `AsyncSandbox.list(...)` and reconnects with `connect(sandbox_id=...)`. Pausing keeps disk state, resuming restores it intact.
+
+    ```
+    $workdir/          # inside the sandbox
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import E2BWorkspace
+
+    workspace = E2BWorkspace(
+        template="base",
+        api_key="your-e2b-api-key",   # or set E2B_API_KEY
+        timeout_seconds=300,
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="Daytona">
+    `DaytonaWorkspace` targets a [Daytona](https://www.daytona.io) deployment; the sandbox filesystem is the persistence layer, so there is no host `workdir`. Each sandbox carries `workspace_id` in its Daytona labels; on restart the workspace reattaches by that label and reuses the sandbox's disk state.
+
+    ```
+    $workdir/          # inside the sandbox
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import DaytonaWorkspace
+
+    workspace = DaytonaWorkspace(
+        api_key="your-daytona-api-key",  # "" reads the SDK's env config
+        api_url="",                      # optional, for self-hosted deployments
+        timeout_seconds=300,
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="Kubernetes">
+    `K8sWorkspace` runs one Pod per workspace on a Kubernetes cluster, with a PVC mounted as the persistence layer, so the filesystem below survives Pod restarts. On restart the workspace reattaches to the Pod and PVC by their workspace-id-derived names. Set `delete_pvc_on_close=True` to remove the PVC when the workspace closes.
+
+    ```
+    /workspace/        # inside the Pod, backed by the PVC
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import K8sWorkspace
+
+    workspace = K8sWorkspace(
+        namespace="agentscope",       # namespace for the Pod and PVC
+        kubeconfig=None,              # None uses the in-cluster config
+        image="python:3.11-slim",     # container image
+        storage_size="1Gi",           # PVC size backing the filesystem
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="OpenSandbox">
+    `OpenSandboxWorkspace` targets an [OpenSandbox](https://github.com/agentscope-ai/opensandbox) deployment; the sandbox filesystem is the persistence layer, so there is no host `workdir`. Each sandbox is tagged with `workspace_id` under the `agentscope.workspace.id` metadata key; on restart the workspace filters `list_sandbox_infos(...)` by that key and resumes the matching sandbox, restoring its disk state intact.
+
+    ```
+    /workspace/        # inside the sandbox (SANDBOX_WORKDIR)
+    ├── .mcp           # MCP declarations stored per agent / session
+    ├── data/          # offloaded multimodal payloads
+    ├── skills/        # the .seed template and per-agent skill directories
+    └── sessions/      # per-session context.jsonl and tool-result files
+    ```
+
+    ```python
+    from agentscope.workspace import OpenSandboxWorkspace
+
+    workspace = OpenSandboxWorkspace(
+        image="python:3.11-slim",
+        api_key="your-opensandbox-api-key",  # or use the SDK's env fallback
+        domain="your-opensandbox-domain",    # optional, for self-hosted deployments
+        protocol="http",
+        timeout_seconds=300,
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+
+    The gateway venv is bootstrapped inside the sandbox on first `initialize()`; `extra_pip` packages are installed into it alongside the base gateway requirements. Because the slim base image streams `apt-get` + `uv` + `pip` for several minutes on a cold start, bootstrap commands run under a longer per-command timeout; leave `request_timeout_seconds` at its default (which matches the bootstrap budget) unless you know your image is pre-provisioned.
+  </Tab>
+</Tabs>
+
+<Note>
+`default_mcps` and `skill_paths` are seed-time inputs, but they never make resources shared inside a shared workspace. Each agent / session gets its own client instances the first time it accesses MCPs, and each agent gets its own skill partition copied from `skills/.seed` the first time it accesses skills. Later additions and removals only affect that agent / session.
+</Note>
+
+## Integrate with Agent
+
+A workspace plugs into `Agent` along two axes: as a source of tools, MCPs, and skills, and as the offloader for context compression:
+
+```python
+from agentscope.agent import Agent
+from agentscope.tool import Toolkit
+from agentscope.workspace import LocalWorkspace
+
+workspace = LocalWorkspace(workdir="./my-workspace")
+await workspace.initialize()
+
+agent_id = "coder"
+session_id = "session-1"
+
+agent = Agent(
+    name="coder",
+    system_prompt="You are a coding assistant.",
+    model=model,
+    toolkit=Toolkit(
+        tools=await workspace.list_tools(),
+        mcps=await workspace.list_mcps(
+            agent_id=agent_id,
+            session_id=session_id,
+        ),
+        skills_or_loaders=await workspace.list_skills(agent_id=agent_id),
+    ),
+    offloader=workspace,
+)
+```
+
+| Axis | Wiring | What the Agent Gets |
+|------|--------|---------------------|
+| Resources | `Toolkit(tools=..., mcps=..., skills_or_loaders=...)` | Built-in tools, MCP-provided tools, and skills available in the workspace |
+| Offloading | `Agent(offloader=workspace)` | When context compression triggers or a tool result exceeds the size limit, the agent calls `workspace.offload_context()` / `offload_tool_result()` and stores the returned reference path in place of the original payload |
+
+The tools returned by `list_tools()` are already bound to the workspace's execution backend, so on a sandboxed workspace they run inside the container or sandbox. To bind your own tool instances to the same environment, obtain the backend with `workspace.get_backend()` and pass it to the tool constructor; see [Switch Tool Backend](/versions/2.0.8/en/building-blocks/tool/python-tool#switch-tool-backend).
+
+<Tip>
+Because the workspace exposes its resources as flat lists, you can partition them into `ToolGroup`s when the agent has too many tools to keep all active at once. Pass the groups to `Toolkit(tool_groups=[...])` and the agent activates them on demand through the built-in [meta tool](/versions/2.0.8/en/building-blocks/tool/manage-tools); only the reserved `basic` group stays always-on.
+
+```python
+from agentscope.tool import Toolkit, ToolGroup
+
+mcps = await workspace.list_mcps(
+    agent_id=agent_id,
+    session_id=session_id,
+)
+skills = await workspace.list_skills(agent_id=agent_id)
+
+toolkit = Toolkit(
+    tools=await workspace.list_tools(),         # always active (basic group)
+    tool_groups=[
+        ToolGroup(name="search", description="Web search and retrieval.",
+                  mcps=[m for m in mcps if m.name.startswith("search")]),
+        ToolGroup(name="coding", description="Code editing skills.",
+                  skills_or_loaders=skills),
+    ],
+)
+```
+</Tip>

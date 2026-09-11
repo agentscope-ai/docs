@@ -1,0 +1,115 @@
+---
+title: "Discord"
+description: "在 Discord 中与智能体服务里的智能体对话。"
+---
+
+Discord 渠道通过 Gateway WebSocket 接入，机器人以长连接方式收发消息。目前 Discord 渠道的实现支持：
+
+- **交互式按钮确认**：智能体调用需要审批的工具时，以按钮形式请求确认，点击即可批准或拒绝；
+- **多模态输入**：接收用户发来的图片、文件等附件，交给智能体处理；
+- **Markdown 富文本**：回复支持 Markdown 渲染，单条消息上限 2000 字符，超长自动分段。
+
+接入分三步：在 [Discord 开发者门户](https://discord.com/developers/applications)创建应用与 Bot、拿到令牌，启动一个智能体服务承载渠道，最后在管理界面添加 Discord 渠道。
+
+## 前置条件
+
+Discord 渠道依赖 `discord.py`，随 `channel` 可选依赖安装：
+
+```bash 安装依赖
+pip install "agentscope[channel]"
+```
+
+## 创建 Bot
+
+在 [Discord 开发者门户](https://discord.com/developers/applications)完成 Bot 的创建与配置。
+
+<Steps>
+  <Step title="创建应用">
+    点击 "New Application" 创建应用，在 "General Information" 页记录 **Application ID**。
+  </Step>
+  <Step title="添加 Bot 并获取令牌">
+    进入 "Bot" 页添加 Bot，点击 "Reset Token" 生成并复制 **Bot Token**。令牌是机密，只显示一次，请妥善保管。
+  </Step>
+  <Step title="开启 Message Content Intent">
+    在 "Bot" 页的 "Privileged Gateway Intents" 中开启 **MESSAGE CONTENT INTENT**。这是读取消息文本的必要权限，不开启则收不到消息内容。
+  </Step>
+  <Step title="邀请 Bot 进服务器">
+    在 "OAuth2 → URL Generator" 勾选 `bot` scope，再勾选所需权限（至少 "Send Messages" 与 "Read Message History"），用生成的链接把 Bot 邀请进你的服务器。
+  </Step>
+</Steps>
+
+## 启动智能体服务
+
+渠道运行在[智能体服务](/versions/2.0.8/zh/deploy/agent-service)之上。用 `create_app` 启动服务，并用 `channels` 参数声明允许接入的渠道类型。渠道依赖消息总线（`message_bus`），单机开发用 `InMemoryMessageBus` 即可，多进程或多节点部署再换成 `RedisMessageBus`。
+
+```python 启动承载渠道的智能体服务
+from agentscope.app import create_app
+from agentscope.app.channel import DiscordChannel
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.storage import RedisStorage
+from agentscope.app.workspace_manager import LocalWorkspaceManager
+
+app = create_app(
+    storage=RedisStorage(host="localhost", port=6379),
+    # 单机开发用内存消息总线；多节点部署换成 RedisMessageBus
+    message_bus=InMemoryMessageBus(),
+    workspace_manager=LocalWorkspaceManager(basedir="./workspaces"),
+    channels=[DiscordChannel],   # 本服务允许接入的渠道类型
+)
+# 用 uvicorn 启动后，渠道功能即可用
+# uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+## 添加渠道
+
+在智能体服务的管理界面（参见示例前端 [`examples/web_ui`](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)）中，通过可视化表单添加渠道，无需手写配置。
+
+<Steps>
+  <Step title="新建渠道并选择 Discord">
+    在渠道管理页新建一个渠道，平台类型选择 "Discord"。
+  </Step>
+  <Step title="填入凭据">
+    把上一步拿到的 **Application ID** 与 **Bot Token** 填入凭据表单。
+  </Step>
+  <Step title="配置路由规则">
+    选择消息交给哪个智能体、会话如何划分。路由规则的含义见[会话路由](/versions/2.0.8/zh/deploy/channel/routing)。
+  </Step>
+  <Step title="保存并启用">
+    保存后启用渠道，服务立即建立与 Discord 的连接，机器人上线。在服务器频道 @ 它，或给它发私信，即可开始对话。
+  </Step>
+</Steps>
+
+<Note>
+管理界面的操作对应一组 `/channels` 接口，需要以编程方式批量创建渠道时可直接调用，字段见本章 [API](/versions/2.0.8/en/deploy/openapi.json) 部分。
+</Note>
+
+## 平台配置
+
+Discord 渠道有一个平台专属开关：
+
+| 字段 | 说明 | 默认值 |
+|---|---|---|
+| `only_at_reply` | 服务器频道中是否仅在被 @ 时才回复。私信不受影响，始终回复 | `true` |
+| `show_thinking` | 是否把模型的思考过程一并展示在回复里 | `false` |
+| `show_tool_process` | 是否把工具调用与结果一并展示在回复里 | `false` |
+
+<Note>
+路由匹配 `chat_type` 时，服务器频道的值为 `guild`，私信为 `dm`。
+</Note>
+
+## 验证与排查
+
+- 在管理界面查看渠道状态，或调用 `GET /channels/{id}/status` 确认连接已建立。
+- 若 Bot 在服务器频道里不响应，先确认 **MESSAGE CONTENT INTENT** 已开启，再确认 `only_at_reply` 与 @ 行为符合预期。
+- 若 Bot 完全不上线，检查 Bot Token 是否正确、是否已邀请进服务器。
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="会话路由" icon="route" href="/versions/2.0.8/zh/deploy/channel/routing" cta="查看详情" arrow>
+    把不同服务器频道路由到不同的智能体。
+  </Card>
+  <Card title="自定义渠道" icon="puzzle-piece" href="/versions/2.0.8/zh/deploy/channel/custom" cta="查看详情" arrow>
+    接入内置之外的其他平台。
+  </Card>
+</CardGroup>
