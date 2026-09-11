@@ -1,9 +1,9 @@
 ---
-title: "Full-Duplex Voice Agent"
+title: "Speech-to-Speech"
 description: "Hold a realtime voice conversation through an end-to-end speech model"
 ---
 
-In the full-duplex implementation, audio flows straight in and out of one end-to-end speech model, which handles recognition, understanding, and synthesis internally. Compared with turn-based pipelines, it does not wait for the user to finish before running each stage, so latency stays low, tone and emotion survive the round trip, and the user can interrupt at any time.
+In the speech-to-speech implementation, audio flows straight in and out of one end-to-end speech model, which handles recognition, understanding, and synthesis internally. Compared with turn-based pipelines, it does not wait for the user to finish before running each stage, so latency stays low, tone and emotion survive the round trip, and the user can interrupt at any time.
 
 AgentScope implements this through `RealtimeAgent`, which supports:
 
@@ -11,20 +11,26 @@ AgentScope implements this through `RealtimeAgent`, which supports:
 - **Barge-in**: the user speaking cuts off the current reply, and the context keeps only what the user actually heard; your code can interrupt as well
 - **Tool calling with user confirmation**: works with `Toolkit` and the permission system, and the audio stream keeps running while the user decides
 - **Text input**: send text during a voice conversation, on models that accept text
-- **Automatic reconnection**: after the provider API closes an idle session, the next input reconnects and restores the conversation
+- **Automatic reconnection**: after the provider API closes a session on idle or timeout, the next input reconnects and restores the conversation
 - **Turn aggregation**: merge sentences split by a pause, and drop acknowledgements that carry no content
 
-The supported provider APIs and models are:
+The table below lists the supported provider APIs and models. Each model class takes the credential of the API it belongs to, exactly like every other model in AgentScope:
 
-| Provider API | Model Class | Models | Tool Calling |
-|--------------|-------------|--------|--------------|
-| DashScope (Qwen-Omni) | `DashScopeRealtimeModel` | qwen3.5-omni-plus-realtime, qwen3.5-omni-flash-realtime, qwen3-omni-flash-realtime, qwen-omni-turbo-realtime | qwen3.5 series only |
-| DashScope (Qwen-Audio-3.0) | `DashScopeAudioRealtimeModel` | qwen-audio-3.0-realtime-plus, qwen-audio-3.0-realtime-flash | Yes |
-| More provider APIs | Coming soon | | |
+| Provider API | Model Class | Credential | Models | Tool Calling |
+|--------------|-------------|------------|--------|--------------|
+| DashScope (Qwen-Omni) | `DashScopeRealtimeModel` | `DashScopeCredential` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` | qwen3.5 series only |
+| DashScope (Qwen-Audio-3.0) | `DashScopeAudioRealtimeModel` | `DashScopeCredential` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` | Yes |
+| OpenAI Realtime | `OpenAIRealtimeModel` | `OpenAICredential` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` | Yes |
+| Gemini Live | `GeminiRealtimeModel` | `GeminiCredential` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` | Yes |
+| xAI Grok Voice | `XAIRealtimeModel` | `XAICredential` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` | Yes |
+
+<Tip>
+Calling `list_models()` on a model class returns the [model cards](/versions/2.0.8dev/en/building-blocks/model/overview#what-is-modelcard) of every model under that API, carrying its sample rates, context limits, and available voices, ready to render a model selector in the frontend.
+</Tip>
 
 ## Core Concepts
 
-A full-duplex voice agent is built from three components:
+A speech-to-speech agent is built from three components:
 
 - Audio transport (`TransportBase`): where sound comes from and goes to, such as a local sound card or a browser
 - Realtime speech model (`RealtimeModelBase`): the session with the provider API, translating protocol messages into uniform model events
@@ -64,9 +70,10 @@ pip install "agentscope[realtime]"
 The sound card library `sounddevice` depends on PortAudio. macOS and Windows ship it with the package; on Debian/Ubuntu, run `apt install libportaudio2` first.
 </Note>
 
-The example below talks to `qwen-audio-3.0-realtime-plus` through the local microphone and prints both sides of the conversation to the terminal. Speak into the microphone to hear a reply, speak again mid-reply to interrupt it, and press Ctrl+C to exit:
+The example below talks to a model through the local microphone and prints both sides of the conversation to the terminal. Speak into the microphone to hear a reply, speak again mid-reply to interrupt it, and press Ctrl+C to exit. Switching the provider API only swaps the model class and the credential, leaving the agent and transport code untouched:
 
-```python Talk to the agent through the local microphone
+<CodeGroup>
+```python DashScope
 import asyncio
 import os
 
@@ -115,6 +122,48 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+```python OpenAI
+import os
+
+from agentscope.credential import OpenAICredential
+from agentscope.realtime import OpenAIRealtimeModel
+
+# Voice, turn detection and the other tuneables go through Parameters
+model = OpenAIRealtimeModel(
+    model="gpt-realtime-2.1",
+    credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+    parameters=OpenAIRealtimeModel.Parameters(voice="marin"),
+)
+```
+
+```python Gemini
+import os
+
+from agentscope.credential import GeminiCredential
+from agentscope.realtime import GeminiRealtimeModel
+
+model = GeminiRealtimeModel(
+    model="gemini-3.1-flash-live-preview",
+    credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
+    parameters=GeminiRealtimeModel.Parameters(voice="Puck"),
+)
+```
+
+```python xAI
+import os
+
+from agentscope.credential import XAICredential
+from agentscope.realtime import XAIRealtimeModel
+
+model = XAIRealtimeModel(
+    model="grok-voice-latest",
+    credential=XAICredential(api_key=os.environ["XAI_API_KEY"]),
+    # Setting reasoning_effort to "none" buys faster but shallower answers
+    parameters=XAIRealtimeModel.Parameters(voice="eve", reasoning_effort="high"),
+)
+```
+</CodeGroup>
 
 Three lifecycles run in this code, each owned by a different object:
 
@@ -198,6 +247,10 @@ The input types `send()` accepts line up with `Agent.reply`:
 | `UserConfirmResultEvent` | The result of a tool confirmation |
 | `UserInterruptEvent` | Interrupt the current reply, equivalent to `interrupt()` |
 
+<Note>
+The Qwen-Omni API behind `DashScopeRealtimeModel` accepts no text turns. Every other model class supports text input, which the `supports_text_input` class attribute reports.
+</Note>
+
 ### Barge-In
 
 When the user speaks while a reply is playing, the agent stops playback immediately and cancels the reply on the model side. The transport reports how far playback actually got, and the agent truncates the agent message in the context to the part the user really heard, so the model does not assume the whole sentence landed. You can also interrupt from code, for example in response to a stop button:
@@ -208,13 +261,17 @@ await agent.interrupt()
 
 An interrupted reply ends with a `ReplyEndEvent` whose `finished_reason` is `interrupted`. Because text deltas arrive ahead of audio, the frontend has already received more text than the user heard, so that text block's `TextBlockEndEvent` carries a `text` field with the final text. `Msg.append_event` applies it automatically; a frontend assembling messages itself needs to replace the block's content with it.
 
-<Note>
-Context truncation happens on the agent side only. The DashScope realtime API accepts no truncation instruction, so the model side still holds the full reply. A model class's `truncation` attribute states how far each provider API supports it.
-</Note>
+The agent-side context is always truncated. What happens on the model side depends on the provider's protocol, which a model class reports through its `truncation` attribute:
+
+| `truncation` | Provider API | On the model side |
+|--------------|--------------|-------------------|
+| `EXPLICIT` | OpenAI Realtime | Accepts a truncate frame, so the model's context matches what the user heard |
+| `SERVER` | Gemini Live | The provider handles the interruption itself, and no truncate frame is needed |
+| `NONE` | DashScope, xAI Grok Voice | Accepts no truncate frame, so the model side still holds the full reply |
 
 ### Call Tools
 
-With a `toolkit` provided, the model can call tools during the conversation. Tools run on the agent side, and permission checks and user confirmation work as they do for a [regular agent](/versions/2.0.8dev/en/building-blocks/agent/human-in-the-loop). The difference is that a realtime voice agent never pauses: after emitting `RequireUserConfirmEvent`, `reply_stream()` keeps emitting other events, and you send the result back through `send()` whenever it is ready, decoupled from the event stream itself:
+With a `toolkit` provided, the model can call tools during the conversation. Tools run on the agent side, and permission checks and user confirmation work as they do for a [regular agent](/versions/2.0.8dev/en/building-blocks/agent/human-in-the-loop). The difference is that a realtime agent never pauses: after emitting `RequireUserConfirmEvent`, `reply_stream()` keeps emitting other events, and you send the result back through `send()` whenever it is ready, decoupled from the event stream itself:
 
 ```python Attach tools and receive confirmation requests
 from agentscope.event import RequireUserConfirmEvent
@@ -283,7 +340,7 @@ Two things to keep in mind when using tools:
 - A confirmation request that goes unanswered for five minutes is treated as a rejection.
 
 <Tip>
-Realtime voice agents do not support meta tools (tool groups) yet: the tool list and system prompt are sent once when connecting to the model, so activating a tool group or adding a tool mid-session has no effect. Put every tool you need into the toolkit at construction time.
+Realtime agents do not support meta tools (tool groups) yet: the tool list and system prompt are sent once when connecting to the model, so activating a tool group or adding a tool mid-session has no effect. Put every tool you need into the toolkit at construction time.
 </Tip>
 
 ### Turn Detection
@@ -295,7 +352,17 @@ Turn detection decides when the user has finished speaking, and only one side ca
 | Provider API detection | Leave `vad` unset and pick the detection method through `Parameters.turn_detection` | The default, with no extra model needed |
 | Local detection | Pass a `VADBase` implementation | You need a custom endpointing policy, or the provider API offers no turn detection |
 
-Local detection means implementing `VADBase`: `push()` receives every PCM16 chunk the transport delivers and returns a `SpeechTransition` only on the chunk where speech starts or ends, and `None` otherwise; `reset()` clears the internal state when the audio stream breaks, such as on a reconnection:
+Each provider API accepts its own `turn_detection` values, with sensitivity and silence duration configured through `Parameters` as well:
+
+| Provider API | `turn_detection` values |
+|--------------|-------------------------|
+| DashScope (Qwen-Omni) | `server_vad`, `semantic_vad`, `none` |
+| DashScope (Qwen-Audio-3.0) | `server_vad`, `smart_turn`, `none` |
+| OpenAI Realtime | `server_vad`, `semantic_vad`, `none` |
+| Gemini Live | `automatic`, `none` |
+| xAI Grok Voice | `server_vad`, `none` |
+
+Local detection means implementing `VADBase`: `push()` receives every PCM16 chunk the transport delivers and returns a `SpeechTransition` only on the chunk where speech starts or ends, and `None` otherwise; `reset()` clears the internal state when the audio stream breaks, such as on a reconnection. Passing `vad` sets `turn_detection` to `none` for you:
 
 ```python Plug in a local VAD
 from agentscope.realtime import SpeechTransition, VADBase
@@ -325,19 +392,19 @@ agent = RealtimeAgent(
     system_prompt="...",
     model=model,
     aggregator=TurnAggregator(
-        merge_window_ms=800,                     # Transcripts within 800ms of the last turn merge into it
+        merge_window_ms=800,                       # Transcripts within 800ms of the last turn merge into it
         backchannels=frozenset({"uh-huh", "ok"}),  # These acknowledgements do not form a turn
-        min_chars=1,                             # Transcripts shorter than this are dropped
+        min_chars=1,                               # Transcripts shorter than this are dropped
     ),
 )
 ```
 
 ### Automatic Reconnection
 
-The provider API closes a session that has been quiet for a while, and DashScope's idle timeout is around three minutes. The agent treats this as normal: it logs an INFO line, keeps the transport open, and reconnects on the user's next utterance, replaying the audio recorded in the meantime. The conversation history lives in `agent.state`, and on reconnection the agent appends the earlier transcript to the system prompt, so the model picks the topic back up.
+Every provider API closes sessions on its own, only the trigger differs: DashScope times out after around three minutes of silence, a Gemini Live audio session is capped at around 15 minutes, and OpenAI Realtime at around an hour. The agent treats this as normal: it logs an INFO line, keeps the transport open, and reconnects on the user's next utterance, replaying the audio recorded in the meantime. The conversation history lives in `agent.state`, and on reconnection the agent appends the earlier transcript to the system prompt, so the model picks the topic back up.
 
 <Tip>
-Long silences are safe and need no handling for the idle timeout. To continue the same conversation after a client disconnects, keep the agent open and call `reply_stream()` again with a new transport.
+Long silences and long conversations are both safe, and neither needs handling for the session timeout. To continue the same conversation after a client disconnects, keep the agent open and call `reply_stream()` again with a new transport.
 </Tip>
 
 ## Audio Transport
@@ -377,7 +444,7 @@ The audio transport decides where sound comes from and goes to, and the agent do
   The fade-out applied to audio still playing when an interruption happens, which avoids a pop.
 </ParamField>
 
-When the default devices are not the right ones, list the available devices with `sounddevice` and pick one by index:
+Sample rates differ between provider APIs (DashScope captures at 16 kHz, OpenAI and xAI at 24 kHz), so build the transport from the model's properties instead of hardcoding the numbers. When the default devices are not the right ones, list the available devices with `sounddevice` and pick one by index:
 
 ```bash List audio devices
 python -m sounddevice

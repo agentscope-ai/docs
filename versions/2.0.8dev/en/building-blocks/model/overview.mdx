@@ -10,12 +10,12 @@ A **Credential** carries the API authentication fields a provider requires (`api
 | Credential | LLM (Chat Model) | TTS | Embedding | Realtime |
 |------------|------------------|-----|-----------|----------|
 | `DashScopeCredential` | `DashScopeChatModel` | `DashScopeTTSModel`<br/>`DashScopeRealtimeTTSModel`<br/>`DashScopeCosyVoiceTTSModel` | `DashScopeEmbeddingModel` | `DashScopeRealtimeModel`<br/>`DashScopeAudioRealtimeModel` |
-| `OpenAICredential` | `OpenAIChatModel`<br/>`OpenAIResponseModel` | `OpenAITTSModel` | `OpenAIEmbeddingModel` | *coming soon* |
-| `GeminiCredential` | `GeminiChatModel` | `GeminiTTSModel` | `GeminiEmbeddingModel` | *coming soon* |
+| `OpenAICredential` | `OpenAIChatModel`<br/>`OpenAIResponseModel` | `OpenAITTSModel` | `OpenAIEmbeddingModel` | `OpenAIRealtimeModel` |
+| `GeminiCredential` | `GeminiChatModel` | `GeminiTTSModel` | `GeminiEmbeddingModel` | `GeminiRealtimeModel` |
 | `AnthropicCredential` | `AnthropicChatModel` | — | — | — |
 | `DeepSeekCredential` | `DeepSeekChatModel` | — | — | — |
 | `MoonshotCredential` | `MoonshotChatModel` | — | — | — |
-| `XAICredential` | `XAIChatModel` | — | — | — |
+| `XAICredential` | `XAIChatModel` | — | — | `XAIRealtimeModel` |
 | `OllamaCredential` | `OllamaChatModel` | — | `OllamaEmbeddingModel` | — |
 
 This layering mirrors the natural frontend flow (register a credential first, then pick a model from under it), letting the UI authenticate once and surface every model family the provider supports.
@@ -27,7 +27,7 @@ All model families share the same construction pattern: a model takes a **creden
 - [Embedding](/versions/2.0.8dev/en/building-blocks/model/embedding): converts text and media into dense vectors
 
 <Tip>
-**Realtime Model** powers full-duplex voice conversations. See [Full-Duplex Voice Agent](/versions/2.0.8dev/en/building-blocks/realtime/full-duplex) for how to create and use one; more provider APIs are coming soon.
+**Realtime Model** powers speech-to-speech voice conversations. See [Speech-to-Speech](/versions/2.0.8dev/en/building-blocks/realtime/speech-to-speech) for how to create and use one.
 </Tip>
 
 ## Integrate with Frontend

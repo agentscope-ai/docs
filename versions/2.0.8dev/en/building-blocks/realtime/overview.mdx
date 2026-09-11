@@ -4,19 +4,19 @@ description: "Talk to an agent by voice, and let it call tools while the convers
 ---
 
 <Warning>
-Realtime voice agents are experimental. The interfaces may change in future releases.
+Realtime agents are experimental. The interfaces may change in future releases.
 </Warning>
 
-A realtime voice agent takes speech in and sends speech back: it listens continuously, answers out loud, and calls tools mid-conversation, instead of waiting for a complete text message before replying.
+A realtime agent (`RealtimeAgent`) takes speech in and sends speech back: it listens continuously, answers out loud, and calls tools mid-conversation, instead of waiting for a complete text message before replying.
 
 Two implementations exist, differing in how audio reaches the model:
 
 | Implementation | How it works |
 |----------------|--------------|
-| Full-duplex (speech-to-speech) | Audio flows straight in and out of one end-to-end speech model, which handles recognition, understanding, and synthesis internally |
+| Speech-to-speech | Audio flows straight in and out of one end-to-end speech model, which handles recognition, understanding, and synthesis internally |
 | Cascaded (ASR + LLM + TTS) | Speech recognition turns the user's voice into text for an `Agent`, and speech synthesis speaks the reply |
 
-AgentScope supports the full-duplex implementation today; the cascaded one is coming soon. Both share the following capabilities:
+AgentScope supports the speech-to-speech implementation today; the cascaded one is coming soon. Both share the following capabilities:
 
 | Capability | Description |
 |------------|-------------|
@@ -24,12 +24,12 @@ AgentScope supports the full-duplex implementation today; the cascaded one is co
 | Barge-in | The moment the user speaks, the current reply stops, and the context keeps only the part the user actually heard. Your code can interrupt as well |
 | Tool calling | Works with `Toolkit` and the permission system, so tools run during the voice conversation |
 | Human-in-the-loop | The agent can ask the user to confirm a tool call without pausing the audio stream |
-| Automatic reconnection | After the provider API closes an idle session, the user's next utterance reconnects it, with the conversation history kept in the agent's state |
+| Automatic reconnection | After the provider API closes a session, the user's next utterance reconnects it, with the conversation history kept in the agent's state |
 
 Each implementation has its own page:
 
 <CardGroup cols={2}>
-  <Card title="Full-Duplex Voice Agent" icon="waveform-lines" href="/versions/2.0.8dev/en/building-blocks/realtime/full-duplex" cta="Learn more" arrow>
+  <Card title="Speech-to-Speech" icon="waveform-lines" href="/versions/2.0.8dev/en/building-blocks/realtime/speech-to-speech" cta="Learn more" arrow>
     Hold a realtime voice conversation through an end-to-end speech model, with barge-in, tool calling, and automatic reconnection.
   </Card>
 </CardGroup>

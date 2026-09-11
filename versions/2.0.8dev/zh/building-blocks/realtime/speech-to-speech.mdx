@@ -1,30 +1,36 @@
 ---
-title: "全双工语音智能体"
-description: "通过端到端的语音交互模型实现实时语音对话"
+title: "语音到语音"
+description: "通过端到端的语音模型实现实时语音对话"
 ---
 
-全双工方案是指音频直接进出一个端到端的语音交互模型：语音识别、理解与合成全部在模型内部完成。与基于轮次进行交互的方式相比，它不需要等用户说完再逐级处理，延迟更低，能保留语气与情绪，用户也可以随时打断。
+语音到语音（Speech-to-Speech）方案是指音频直接进出一个端到端的语音模型：语音识别、理解与合成全部在模型内部完成。与基于轮次进行交互的方式相比，它不需要等用户说完再逐级处理，延迟更低，能保留语气与情绪，用户也可以随时打断。
 
-AgentScope 通过 `RealtimeAgent` 实现全双工方案，支持：
+AgentScope 通过 `RealtimeAgent` 实现该方案，支持：
 
 - **回合检测**：支持由模型 API 判断用户何时说完，也支持传入本地 VAD 自行判断
 - **打断**：支持用户开口即打断当前回复，上下文只保留用户实际听到的部分，也支持由代码主动打断
 - **工具调用与用户确认**：支持 `Toolkit` 与权限系统，确认过程中语音流不中断
 - **文本输入**：支持在语音对话中直接发送文字（需模型支持文本输入）
-- **断线自动恢复**：模型 API 因空闲关闭会话后，用户再次输入时自动重连并恢复会话
+- **断线自动恢复**：模型 API 因空闲或超时关闭会话后，用户再次输入时自动重连并恢复会话
 - **回合整理**：支持合并被停顿切开的句子，过滤没有实际内容的应答
 
-目前支持的模型 API 与模型如下：
+目前支持的模型 API 与模型如下，每个模型类使用所属 API 的凭证，用法与其它模型一致：
 
-| 模型 API | 模型类 | 模型 | 工具调用 |
-|----------|--------|------|----------|
-| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime、qwen3-omni-flash-realtime、qwen-omni-turbo-realtime | 仅 qwen3.5 系列 |
-| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | qwen-audio-3.0-realtime-plus、qwen-audio-3.0-realtime-flash | 是 |
-| 更多模型 API | 即将上线 | | |
+| 模型 API | 模型类 | 凭证 | 支持的模型 | 工具调用 |
+|----------|--------|------|------------|----------|
+| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | `DashScopeCredential` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` | 仅 qwen3.5 系列 |
+| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | `DashScopeCredential` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` | 支持 |
+| OpenAI Realtime | `OpenAIRealtimeModel` | `OpenAICredential` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` | 支持 |
+| Gemini Live | `GeminiRealtimeModel` | `GeminiCredential` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` | 支持 |
+| xAI Grok Voice | `XAIRealtimeModel` | `XAICredential` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` | 支持 |
+
+<Tip>
+调用模型类的 `list_models()` 可以拿到该 API 下所有模型的[模型卡片](/versions/2.0.8dev/zh/building-blocks/model/overview#什么是模型卡片)，其中包含采样率、上下文上限、可选音色等信息，可直接用于渲染前端的模型选择器。
+</Tip>
 
 ## 核心概念
 
-全双工语音智能体由三个组件组成：
+语音到语音智能体由三个组件组成：
 
 - 音频传输（`TransportBase`）：负责声音的来源与去向，例如本地声卡或浏览器
 - 实时语音模型（`RealtimeModelBase`）：负责与模型 API 的会话，把协议消息翻译成统一的模型事件
@@ -64,9 +70,10 @@ pip install "agentscope[realtime]"
 本地声卡库 `sounddevice` 依赖 PortAudio。macOS 与 Windows 已随包附带；Debian/Ubuntu 需要先执行 `apt install libportaudio2`。
 </Note>
 
-下面的例子用本地麦克风与 `qwen-audio-3.0-realtime-plus` 对话，并把双方说的话打印到终端。对着麦克风说话即可听到回复，在回复过程中开口即可打断，按 Ctrl+C 退出：
+下面的例子用本地麦克风与模型对话，并把双方说的话打印到终端。对着麦克风说话即可听到回复，在回复过程中开口即可打断，按 Ctrl+C 退出。切换模型 API 只需替换模型类与凭证，智能体与传输的代码不变：
 
-```python 用本地麦克风与智能体对话
+<CodeGroup>
+```python DashScope
 import asyncio
 import os
 
@@ -114,6 +121,48 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+```python OpenAI
+import os
+
+from agentscope.credential import OpenAICredential
+from agentscope.realtime import OpenAIRealtimeModel
+
+# 音色、回合检测方式等可调项通过 Parameters 传入
+model = OpenAIRealtimeModel(
+    model="gpt-realtime-2.1",
+    credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+    parameters=OpenAIRealtimeModel.Parameters(voice="marin"),
+)
+```
+
+```python Gemini
+import os
+
+from agentscope.credential import GeminiCredential
+from agentscope.realtime import GeminiRealtimeModel
+
+model = GeminiRealtimeModel(
+    model="gemini-3.1-flash-live-preview",
+    credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
+    parameters=GeminiRealtimeModel.Parameters(voice="Puck"),
+)
+```
+
+```python xAI
+import os
+
+from agentscope.credential import XAICredential
+from agentscope.realtime import XAIRealtimeModel
+
+model = XAIRealtimeModel(
+    model="grok-voice-latest",
+    credential=XAICredential(api_key=os.environ["XAI_API_KEY"]),
+    # reasoning_effort 设为 "none" 可以换取更快但更浅的回答
+    parameters=XAIRealtimeModel.Parameters(voice="eve", reasoning_effort="high"),
+)
+```
+</CodeGroup>
 
 上面的代码里有三个生命周期，各自由不同的对象掌控：
 
@@ -197,6 +246,10 @@ await agent.send("帮我查一下今天的天气")
 | `UserConfirmResultEvent` | 工具调用的确认结果 |
 | `UserInterruptEvent` | 打断当前回复，等价于 `interrupt()` |
 
+<Note>
+`DashScopeRealtimeModel`（Qwen-Omni）的模型 API 不接受文本轮次，其余模型类均支持文本输入，可通过模型类的 `supports_text_input` 属性判断。
+</Note>
+
 ### 打断
 
 用户在回复播放期间开口，智能体会立即停止播放并取消模型侧的回复。传输会报告实际播放到的位置，智能体据此把上下文中的智能体消息截到用户真正听到的部分，避免模型"以为"用户听完了整句话。开发者也可以在代码中主动打断，例如响应界面上的停止按钮：
@@ -207,13 +260,17 @@ await agent.interrupt()
 
 被打断的回复以 `finished_reason` 为 `interrupted` 的 `ReplyEndEvent` 结束。由于文本增量比音频先到，前端此时已经收到了多于用户实际听到的文字，因此该文本块的 `TextBlockEndEvent` 会带上 `text` 字段给出最终文本，用 `Msg.append_event` 拼消息时会自动覆盖，自行拼接的前端需要用它替换该块的内容。
 
-<Note>
-上下文截断只发生在智能体侧。DashScope 的实时模型 API 不接受截断指令，模型侧仍保留完整的回复；模型类的 `truncation` 属性标明了各模型 API 的支持程度。
-</Note>
+智能体侧的上下文一定会被截断，模型侧则取决于模型 API 的协议，由模型类的 `truncation` 属性标明：
+
+| `truncation` | 模型 API | 模型侧的处理 |
+|--------------|----------|--------------|
+| `EXPLICIT` | OpenAI Realtime | 接受截断指令，模型侧上下文与用户听到的内容一致 |
+| `SERVER` | Gemini Live | 模型 API 自行处理打断，无需发送截断指令 |
+| `NONE` | DashScope、xAI Grok Voice | 不接受截断指令，模型侧仍保留完整的回复 |
 
 ### 调用工具
 
-传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`reply_stream()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
+传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时智能体不会暂停：需要确认时，`reply_stream()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
 
 ```python 装配工具并接收确认请求
 from agentscope.event import RequireUserConfirmEvent
@@ -282,7 +339,7 @@ async def confirm_in_terminal(event: RequireUserConfirmEvent) -> None:
 - 确认请求超过 5 分钟没有回应，智能体按拒绝处理。
 
 <Tip>
-实时语音智能体目前不支持元工具（工具分组）：工具列表与系统提示在连接模型时一次性发送，会话中途激活工具组或添加工具不会生效，请在构造时把需要的工具全部放进工具包。
+实时智能体目前不支持元工具（工具分组）：工具列表与系统提示在连接模型时一次性发送，会话中途激活工具组或添加工具不会生效，请在构造时把需要的工具全部放进工具包。
 </Tip>
 
 ### 回合检测
@@ -294,7 +351,17 @@ async def confirm_in_terminal(event: RequireUserConfirmEvent) -> None:
 | 模型 API 检测 | 不传 `vad`，通过 `Parameters.turn_detection` 选择检测方式 | 默认选择，无需额外模型 |
 | 本地检测 | 传入 `VADBase` 实现 | 需要自定义端点策略，或模型 API 不提供回合检测 |
 
-本地检测需要实现 `VADBase`：`push()` 接收传输送来的每一块 PCM16 音频，只在说话开始或结束的那一块返回 `SpeechTransition`，其余时候返回 `None`；`reset()` 在音频流出现间断（例如重连）时清空内部状态：
+各模型 API 的 `turn_detection` 取值不同，敏感度、静音时长等参数同样在 `Parameters` 中：
+
+| 模型 API | `turn_detection` 取值 |
+|----------|------------------------|
+| DashScope（Qwen-Omni） | `server_vad`、`semantic_vad`、`none` |
+| DashScope（Qwen-Audio-3.0） | `server_vad`、`smart_turn`、`none` |
+| OpenAI Realtime | `server_vad`、`semantic_vad`、`none` |
+| Gemini Live | `automatic`、`none` |
+| xAI Grok Voice | `server_vad`、`none` |
+
+本地检测需要实现 `VADBase`：`push()` 接收传输送来的每一块 PCM16 音频，只在说话开始或结束的那一块返回 `SpeechTransition`，其余时候返回 `None`；`reset()` 在音频流出现间断（例如重连）时清空内部状态。传入 `vad` 后智能体会把 `turn_detection` 置为 `none`，无需手动设置：
 
 ```python 接入本地 VAD
 from agentscope.realtime import SpeechTransition, VADBase
@@ -333,10 +400,10 @@ agent = RealtimeAgent(
 
 ### 断线自动恢复
 
-模型 API 会在长时间没有对话时关闭会话，DashScope 的空闲超时约为三分钟。智能体把这视为正常情况：记录一条 INFO 日志，保持传输打开，用户下一次说话时自动重连并补发这期间的音频。对话历史保存在 `agent.state` 中，重连时智能体会把此前的对话转写附在系统提示之后发给模型，因此模型能接上之前的话题。
+模型 API 都会主动关闭会话，只是触发条件不同：DashScope 的空闲超时约为三分钟，Gemini Live 的音频会话上限约为 15 分钟，OpenAI Realtime 约为 1 小时。智能体把这视为正常情况：记录一条 INFO 日志，保持传输打开，用户下一次说话时自动重连并补发这期间的音频。对话历史保存在 `agent.state` 中，重连时智能体会把此前的对话转写附在系统提示之后发给模型，因此模型能接上之前的话题。
 
 <Tip>
-长时间静默是安全的，不需要为空闲超时做任何处理。若要在客户端断开后继续同一场对话，保持智能体不关闭，换一个传输再次调用 `reply_stream()` 即可。
+长时间静默或长对话都是安全的，不需要为会话超时做任何处理。若要在客户端断开后继续同一场对话，保持智能体不关闭，换一个传输再次调用 `reply_stream()` 即可。
 </Tip>
 
 ## 音频传输
@@ -376,7 +443,7 @@ agent = RealtimeAgent(
   打断时对正在播放的音频施加的淡出时长，避免爆音。
 </ParamField>
 
-默认设备不合适时，可以用 `sounddevice` 列出设备并按编号指定：
+各模型 API 的采样率并不一致（DashScope 上行 16 kHz，OpenAI 与 xAI 上行 24 kHz），因此推荐直接用模型的属性构造传输，而不是写死数值。默认设备不合适时，可以用 `sounddevice` 列出设备并按编号指定：
 
 ```bash 列出音频设备
 python -m sounddevice

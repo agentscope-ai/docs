@@ -101,11 +101,11 @@
                         ]
                       },
                       {
-                        "group": "Realtime Voice Agent",
+                        "group": "Realtime Agent",
                         "tag": "EXP",
                         "pages": [
                           "versions/2.0.8dev/en/building-blocks/realtime/overview",
-                          "versions/2.0.8dev/en/building-blocks/realtime/full-duplex"
+                          "versions/2.0.8dev/en/building-blocks/realtime/speech-to-speech"
                         ]
                       },
                       "versions/2.0.8dev/en/building-blocks/console",
@@ -850,11 +850,11 @@
                         ]
                       },
                       {
-                        "group": "实时语音智能体",
+                        "group": "实时智能体",
                         "tag": "EXP",
                         "pages": [
                           "versions/2.0.8dev/zh/building-blocks/realtime/overview",
-                          "versions/2.0.8dev/zh/building-blocks/realtime/full-duplex"
+                          "versions/2.0.8dev/zh/building-blocks/realtime/speech-to-speech"
                         ]
                       },
                       "versions/2.0.8dev/zh/building-blocks/console",
