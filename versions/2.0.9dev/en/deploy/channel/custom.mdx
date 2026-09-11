@@ -152,6 +152,7 @@ class MyChannel(ChannelBase):
         interactive=True,          # can the platform present interactive confirmation UI
         streaming=True,            # can it update a single message incrementally
         max_message_length=4000,   # per-message character cap
+        wiki=True,                 # whether the platform has a knowledge base the agent can read
     )
 ```
 
@@ -162,6 +163,9 @@ class MyChannel(ChannelBase):
 | `interactive` | Whether the platform can present interactive confirmation UI |
 | `streaming` | Whether a reply can be updated within a single message |
 | `max_message_length` | Per-message character cap; `_split_long_message()` splits by it automatically |
+| `wiki` | Whether the platform has a knowledge base the agent can browse and read. Unlike the flags above, this one describes the read direction |
+
+A channel that declares `wiki=True` implements three methods on `ChannelBase`: `list_wiki_spaces`, `list_wiki_nodes` and `read_wiki_document`. Once they are there, the channel inherits the `ListWikiSpaces` / `ListWikiNodes` / `ReadWikiDocument` read-only tools that call them — nothing to register. Each method receives the platform user id of whoever sent the current message; make the request as that user and let the platform do the authorization. A run with no trusted sender receives none of these tools. See the [DingTalk knowledge base tools](/versions/2.0.9dev/en/deploy/channel/dingtalk#knowledge-base-tools) for a worked implementation.
 
 ## Tool Confirmation
 

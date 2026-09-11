@@ -61,6 +61,7 @@ AgentScope 预置了一组覆盖常见智能体操作的工具，实例化后传
 | `TaskGet` | 按 ID 获取任务详情 | 是 |
 | `TaskList` | 列出全部任务及其状态 | 是 |
 | `TaskUpdate` | 更新任务状态或元数据 | 否 |
+| `AskUser` | 以多选题的形式向用户提问 | 是 |
 
 <Note>
 元工具 `reset_tools` 和 `Skill` 查看工具只有在存在额外的工具组或技能时才会自动注册，开发者无需手动实例化。详见[元工具](/versions/2.0.9dev/zh/building-blocks/tool/manage-tools)与 [Skill](/versions/2.0.9dev/zh/building-blocks/tool/skill)。
@@ -173,6 +174,22 @@ result = await read(file_path="/workspace/report.pdf", pages="1-5")
 计划工具让智能体能够显式地维护一份结构化的任务清单，智能体可以通过工具调用来创建、查询和更新任务。计划相关的数据会被存储在智能体实例的 `agent.state.tasks_context` 中，所有计划相关的工具通过操作这个共享的状态来实现任务的管理。同时，所有计划相关的工具在权限检查中被默认放行。
 
 完整的任务生命周期、存储模型，以及如何以编程方式预置或自定义任务，请参见[计划模式](/versions/2.0.9dev/zh/building-blocks/plan)。
+
+### 询问用户
+
+当智能体需要用户拿主意时（在两种实现方案之间选择、确认一份草稿的方向、补齐指令里没说清的偏好），`AskUser` 让它把问题摆到用户面前，而不是自行猜测：
+
+```python 注册 AskUser
+from agentscope.tool import AskUser, Toolkit
+
+toolkit = Toolkit(tools=[AskUser()])
+```
+
+一次调用最多提 4 个问题，每个问题 2 到 4 个选项。选项除了 `label` 还带 `description` 说明各自的取舍，单选题的选项可以再带一段 `preview`，用于并排比较代码片段、配置或界面草图这类具体产物。用户看到的选项之外总是附带一个「其他」自由输入项，因此智能体不应自己再加一个。
+
+`AskUser` 是一个外部执行工具（`is_external_tool = True`），它自己不执行任何逻辑：只有驱动智能体的那一方才能把问题呈现给人，所以智能体发出 `RequireExternalExecutionEvent` 后暂停，等待 `ExternalExecutionResultEvent` 带回答案。权限检查对它直接放行，因为这次调用本来就由用户回答，在它前面再加一次确认只是「为提问而提问」。
+
+回传结果时，`output` 是写给模型读的，同时应在 `ToolResultBlock.metadata` 里按 `AskUserMetadata` 的结构给出同一份答案，供需要按选择分支的程序读取。完整的回传流程参见[人机交互](/versions/2.0.9dev/zh/building-blocks/agent/human-in-the-loop#内置的-askuser)。
 
 ## 切换工具后端
 
@@ -328,7 +345,7 @@ weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
 
 这种模式是[人机交互](/versions/2.0.9dev/zh/building-blocks/agent/human-in-the-loop)工作流的基础：某些动作需要人工确认或人工执行。
 
-创建外部执行工具只需把 `is_external_tool` 设为 `True`，不必实现 `call` 函数：
+内置的 [`AskUser`](#询问用户) 就是这样一个工具。创建自己的外部执行工具只需把 `is_external_tool` 设为 `True`，不必实现 `call` 函数：
 
 ```python
 from agentscope.tool import ToolBase

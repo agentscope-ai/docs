@@ -61,6 +61,7 @@ AgentScope ships a set of ready-to-use tools covering common agent operations. I
 | `TaskGet` | Retrieve task details by ID | Yes |
 | `TaskList` | List all tasks and their status | Yes |
 | `TaskUpdate` | Update task status or metadata | No |
+| `AskUser` | Ask the user multiple-choice questions | Yes |
 
 <Note>
 Two more tools, the `reset_tools` meta tool and the `Skill` viewer, are auto-registered by `Toolkit` whenever extra tool groups or skills exist. Developers do not instantiate them directly. See [Meta Tool](/versions/2.0.9dev/en/building-blocks/tool/manage-tools) and [Skill](/versions/2.0.9dev/en/building-blocks/tool/skill).
@@ -173,6 +174,22 @@ result = await read(file_path="/workspace/report.pdf", pages="1-5")
 The plan tools give the agent a structured task list it can append to, query, and update through normal tool calls. They share a single store on `agent.state.tasks_context`, are state-injected, and always pass permission checks: the agent treats them as free-cost coordination primitives for breaking complex work into trackable steps.
 
 See [Plan](/versions/2.0.9dev/en/building-blocks/plan) for the full task lifecycle, the storage model, and how to seed or customize tasks programmatically.
+
+### Ask the User
+
+When an agent needs a decision from the person it is working for — which of two implementations to take, whether a draft is heading the right way, a preference the instructions never spelled out — `AskUser` lets it put the question in front of them instead of guessing:
+
+```python Register AskUser
+from agentscope.tool import AskUser, Toolkit
+
+toolkit = Toolkit(tools=[AskUser()])
+```
+
+One call carries up to four questions, each with two to four options. Beyond its `label`, an option has a `description` for the trade-off it represents, and a single-select question's options may each carry a `preview` for comparing concrete artifacts side by side: a code snippet, a config, a mockup. An "Other" free-text answer is always offered alongside the options, so the agent should not add one of its own.
+
+`AskUser` is an external execution tool (`is_external_tool = True`) and runs nothing itself: only whatever drives the agent can put a question in front of a person, so the agent emits `RequireExternalExecutionEvent` and pauses until an `ExternalExecutionResultEvent` brings the answer back. Permission checking passes it straight through — the call is answered by the user in the first place, so a confirmation in front of it would only be a prompt about a prompt.
+
+When returning the result, `output` is written for the model to read, and the same answers belong in `ToolResultBlock.metadata` shaped by `AskUserMetadata`, for programs that branch on the choice. See [human-in-the-loop](/versions/2.0.9dev/en/building-blocks/agent/human-in-the-loop#the-built-in-askuser) for the full round trip.
 
 ## Switch Tool Backend
 
@@ -328,7 +345,7 @@ An external execution tool delegates its actual execution outside the agent runt
 
 This pattern underlies the [human-in-the-loop](/versions/2.0.9dev/en/building-blocks/agent/human-in-the-loop) workflow, where certain actions require human approval or manual execution.
 
-To create an external execution tool, set `is_external_tool = True`. There is no need to implement `call`:
+The built-in [`AskUser`](#ask-the-user) is one such tool. To create your own, set `is_external_tool = True`. There is no need to implement `call`:
 
 ```python
 from agentscope.tool import ToolBase
