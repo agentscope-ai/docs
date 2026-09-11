@@ -53,6 +53,10 @@ asyncio.run(main())
 | `error` | `ErrorInfo \| None` | 结构化错误信息，仅当 `finished_reason` 为 `error` 时填充 |
 | `finished_at` | `str \| None` | 回复结束时间（ISO 8601 时间戳） |
 
+<Note>
+`finished_reason` 为 `exceed_max_iters` 时，消息里通常仍有可用的文本答复：迭代预算用尽而智能体还没有给出最终文本时，框架会追加一次禁用工具的模型调用，要求它把已完成的工作与结论总结出来。这次收尾调用最多一次，它也没有产出文本时，回复才会以空文本结束。
+</Note>
+
 完整的 `Msg` 结构与内容块类型参见[消息与事件](/versions/2.0.8dev/zh/building-blocks/message-and-event)。
 
 ### 流式回复

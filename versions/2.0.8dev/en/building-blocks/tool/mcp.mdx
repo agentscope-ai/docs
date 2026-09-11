@@ -82,6 +82,28 @@ client = MCPClient(
 )
 ```
 
+## Update HTTP Headers at Runtime
+
+The `headers` in `mcp_config` are fixed at construction. When an auth token rotates mid-session, call `set_runtime_headers()` on a Streamable HTTP client to replace the headers sent with subsequent requests — no rebuild and no reconnect:
+
+```python
+# The map is replaced, not merged; an empty dict clears it and the static headers apply again
+await client.set_runtime_headers({"Authorization": "Bearer new-token"})
+```
+
+The behaviour has a few boundaries worth knowing:
+
+| Aspect | Behaviour |
+|--------|-----------|
+| Scope | Streamable HTTP clients only; STDIO and SSE clients raise `ValueError` |
+| When it takes effect | The next outbound request. A call already under way keeps the snapshot it started with, and the headers of a Streamable HTTP session's long-lived GET stream are fixed when the stream is established |
+| Precedence | Headers MCP sets per request (`mcp-session-id`, `content-type`, ...) always win; `connection`, `content-length`, `host` and `transfer-encoding` are owned by the HTTP layer and are rejected |
+| Persistence | Runtime headers are live instance state, excluded from `model_dump` and from workspace persistence |
+
+<Note>
+In a Docker workspace the live MCP client runs inside the gateway process and the host holds a proxy. Calling `set_runtime_headers()` on the proxy relays the update to the gateway — see [MCP Gateway](/versions/2.0.8dev/en/building-blocks/workspace/mcp-gateway).
+</Note>
+
 ## Use MCP Tools Outside a Toolkit
 
 If you need to invoke MCP tools outside a `Toolkit`, call `await client.list_tools()` to retrieve a list of `MCPTool` adapters and use them like any other `ToolBase` instance.

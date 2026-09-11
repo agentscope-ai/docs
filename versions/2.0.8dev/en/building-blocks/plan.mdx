@@ -102,7 +102,7 @@ await TaskUpdate()(
 # Now: task "2".blocked_by == ["1"] AND task "1".blocks == ["2"]
 ```
 
-When a task is deleted, its ID is removed from every other task's `blocks` and `blocked_by` lists, so the dependency graph remains valid.
+When a task is deleted, its ID is removed from every other task's `blocks` and `blocked_by` lists, so the dependency graph remains valid. Completing a task through `TaskUpdate` does the same to its dependents' `blocked_by`, so what remains there is always a prerequisite still outstanding and a task whose blockers are resolved never looks unavailable.
 
 <Note>
 `TaskList` annotates every task that still has unresolved `blocked_by` entries, and `TaskGet` returns the full edge list. The agent uses these hints to prefer unblocked work, but **enforcement is advisory** — nothing in the runtime prevents the model from working on a blocked task.

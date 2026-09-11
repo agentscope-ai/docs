@@ -63,6 +63,8 @@ flowchart TD
 开发者/部署者通过继承并实现 `ResourceAccessPolicyBase` 类实现业务相关的资源共享逻辑。
 
 
+被共享的智能体不止能直接对话：只要该智能体开启了 `Invitable`，访问者的队长智能体也可以用 `AgentInvite` 把它邀请进团队，详见[设置邀请范围](/versions/2.0.8dev/zh/deploy/agent-team#设置邀请范围)。
+
 <Note>
 智能体服务中默认策略实现是 `DenyAllResourceAccessPolicy`，即跨用户不共享任何资源。
 </Note>

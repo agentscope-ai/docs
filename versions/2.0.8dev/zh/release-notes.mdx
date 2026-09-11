@@ -7,6 +7,149 @@ description: "AgentScope 版本改动和更新日志。"
 如需查看完整的提交历史与贡献者名单，请访问 [GitHub Releases 页面](https://github.com/agentscope-ai/agentscope/releases)。
 </Tip>
 
+## v2.0.8
+
+*发布于 2026-09-08。*
+
+<Note>
+**Highlight**：本次版本新增了
+	- 实时语音智能体与 `agentscope.realtime` 模块，
+	- 接入远端 A2A 智能体的 `A2AAgent`，
+	- 带验证者的 `GoalPipeline` 流水线，
+	- 由智能体自行触发的上下文压缩，以及
+	- RAG 检索结果的大模型重排。
+</Note>
+
+### 新增
+
+**Realtime**
+
+- **实时语音智能体**：新增 `RealtimeAgent` 与 `agentscope.realtime` 模块，支持打断、工具调用与轮次延迟统计的语音对话。([#2547](https://github.com/agentscope-ai/agentscope/pull/2547)、[#2550](https://github.com/agentscope-ai/agentscope/pull/2550))
+- **实时模型与音频传输**：内置 DashScope 的 Qwen-Omni-Realtime 与 Qwen-Audio-3.0-Realtime 两类实时模型，以及基于本地麦克风与扬声器的音频传输。([#2547](https://github.com/agentscope-ai/agentscope/pull/2547))
+
+**A2A**
+
+- **`A2AAgent`**：新增 A2A 客户端智能体，可以把遵循 A2A 1.0 协议的远端智能体当作本地智能体使用，并在多轮之间保持远端的会话与 Task。([#2142](https://github.com/agentscope-ai/agentscope/pull/2142))
+
+**Pipeline**
+
+- **全新 `pipeline` 模块**：首个成员 `GoalPipeline` 让执行者智能体反复工作，直到验证者智能体认可其结果，适合有明确验收标准的任务。([#2428](https://github.com/agentscope-ai/agentscope/pull/2428))
+
+**Agent**
+
+- **自主上下文压缩**：新增 `CompressContext` 工具，智能体可以在任务间隙自行决定压缩时机，而不必等待硬阈值触发。([#2143](https://github.com/agentscope-ai/agentscope/pull/2143))
+- **迭代耗尽时的收尾总结**：达到最大迭代次数仍无最终文本时，追加一次禁用工具的模型调用生成答复，避免回复为空。([#2443](https://github.com/agentscope-ai/agentscope/pull/2443))
+- **重复工具报错提示**：同一个工具调用连续失败多次后注入提示，引导智能体改换思路而不是原样重试。([#1816](https://github.com/agentscope-ai/agentscope/pull/1816))
+
+**Model**
+
+- **火山方舟（Volcengine Ark）**：新增 `VolcengineChatModel` 与配套的凭证、格式化器，豆包系列模型不再需要走通用的 OpenAI 接入。([#2532](https://github.com/agentscope-ai/agentscope/pull/2532))
+
+**RAG**
+
+- **大模型重排**：`RAGMiddleware` 支持传入重排模型，在向量检索之后按语义相关度重新挑选片段，提升召回质量。([#1975](https://github.com/agentscope-ai/agentscope/pull/1975))
+
+**MCP**
+
+- **运行时更新 HTTP header**：Streamable HTTP 客户端支持在运行中替换请求头，令牌轮换不再需要重建客户端；Docker 工作区中的客户端经网关转发更新。([#2456](https://github.com/agentscope-ai/agentscope/pull/2456))
+
+**Agent Service**
+
+- **交互式渠道凭证绑定**：支持扫码等带外方式交付渠道凭证，不必再把密钥手工粘贴进表单。([#2484](https://github.com/agentscope-ai/agentscope/pull/2484))
+- **调度器由单节点持有**：`create_app` 新增 `enable_scheduler`，多副本部署下一次 cron 只触发一次，不再每个副本各跑一遍。([#2477](https://github.com/agentscope-ai/agentscope/pull/2477))
+
+**WebUI**
+
+- **会话自动命名**：未命名的会话在首次回复后由模型生成标题，取代没有信息量的创建时间。([#2503](https://github.com/agentscope-ai/agentscope/pull/2503))
+- **对话页面优化**：流式回复只重渲染变化的那条消息，并新增消息复制按钮、长间隔的时间标记，以及重新打开上次的智能体与会话。([#2503](https://github.com/agentscope-ai/agentscope/pull/2503))
+- **任务面板自动展开**：一次会话中首次产生任务数据时自动打开任务面板，无需手动展开即可跟踪进度。([#2431](https://github.com/agentscope-ai/agentscope/pull/2431))
+
+### 变更
+
+**Formatter**
+
+- **原生多模态工具结果**：`OpenAIResponseFormatter` 把图片与文件直接写进工具结果，不再提升为合成的用户消息，媒体与工具调用的原生关联得以保留。([#2389](https://github.com/agentscope-ai/agentscope/pull/2389))
+
+**Agent Service**
+
+- **会话来源改为 tagged union**：`SessionRecord.origin` 取代原先的枚举加四个可空 id，读取方不必再自行判断组合是否自洽；旧字段保留为废弃属性。([#2536](https://github.com/agentscope-ai/agentscope/pull/2536))
+
+**渠道**
+
+- **启动中的渠道显示为 connecting**：刚创建、尚未被接管的渠道不再显示为 stopped，避免误以为它需要手动启动。([#2487](https://github.com/agentscope-ai/agentscope/pull/2487))
+
+**Tool**
+
+- **工具参数按 schema 修复**：合法但类型不符的 JSON 参数也会按工具 schema 对齐，减少模型参数类型不匹配导致的调用失败。([#2496](https://github.com/agentscope-ai/agentscope/pull/2496))
+
+**Dependencies**
+
+- **ripgrep 限制在 15 以下**：15.x 缺少 Windows 等平台的 wheel，会让开发环境安装直接失败。([#2526](https://github.com/agentscope-ai/agentscope/pull/2526))
+
+### 修复
+
+**Agent**
+
+- 上下文压缩消耗的 token 现在计入用量统计，此前被直接丢弃。([#2433](https://github.com/agentscope-ai/agentscope/pull/2433))
+
+**Tool**
+
+- 沙箱工作区中 `Read` 之后紧接的 `Edit` / `Write` 不再报“必须先读取文件”。([#2092](https://github.com/agentscope-ai/agentscope/pull/2092))
+- 单条超出上限的读缓存不再挤掉其他条目。([#2534](https://github.com/agentscope-ai/agentscope/pull/2534))
+- 并发命中读缓存不再误删不相干的条目。([#2457](https://github.com/agentscope-ai/agentscope/pull/2457))
+- 任务被标记为完成时会从后继任务的 `blocked_by` 中移除，阻塞已解除的任务不再显示为不可执行。([#2541](https://github.com/agentscope-ai/agentscope/pull/2541))
+
+**Model**
+
+- Gemini 的服务端工具 token 归入输入，此前被算作输出，扭曲了成本与预算核算。([#2406](https://github.com/agentscope-ai/agentscope/pull/2406))
+- Gemini 的工具 schema 中的可空类型数组会先规整再下发，不再被服务端拒绝。([#2437](https://github.com/agentscope-ai/agentscope/pull/2437))
+- OpenAI Responses 的加密推理项在多轮往返中完整保留。([#2426](https://github.com/agentscope-ai/agentscope/pull/2426))
+- xAI 的推理 token 计入输出用量。([#2461](https://github.com/agentscope-ai/agentscope/pull/2461))
+
+**Formatter**
+
+- 音频格式改由媒体类型推导，带签名或无扩展名的音频 URL 不再被拒绝。([#2301](https://github.com/agentscope-ai/agentscope/pull/2301))
+- 多模态工具结果的标识符改用数据块自带的稳定 id，同一段历史反复格式化时输出保持一致，模型服务方的前缀缓存不再失效。([#2165](https://github.com/agentscope-ai/agentscope/pull/2165))
+
+**RAG**
+
+- 距离型度量的检索分数被归一化，Qdrant 与 Milvus Lite 上最相关的结果不再排在最后。([#2486](https://github.com/agentscope-ai/agentscope/pull/2486))
+- `ExcelParser` 转义单元格中的反斜杠与换行，生成的 Markdown 表格不再错列。([#2528](https://github.com/agentscope-ai/agentscope/pull/2528))
+- `WordParser` 保留段落之间的空行。([#2538](https://github.com/agentscope-ai/agentscope/pull/2538))
+
+**MCP**
+
+- 初始化期间被取消的连接会被清理，同一个客户端之后仍能重新连接。([#2499](https://github.com/agentscope-ai/agentscope/pull/2499))
+
+**Agent Service**
+
+- 唤醒队列改为原子出队，多副本下一次触发不再产生多条重复回复。([#2476](https://github.com/agentscope-ai/agentscope/pull/2476))
+- 计划任务在落库前先校验 cron 表达式与时区，非法配置不再写进存储，也不会删掉已有的有效任务。([#2442](https://github.com/agentscope-ai/agentscope/pull/2442))
+- 删除会话时清理收件箱消费者标记，以相同 id 重建的会话不再收不到唤醒。([#2519](https://github.com/agentscope-ai/agentscope/pull/2519))
+- 支持把其他用户共享过来的智能体邀请进团队。([#2326](https://github.com/agentscope-ai/agentscope/pull/2326))
+
+**WebUI**
+
+- 切换智能体后不再显示或请求上一个智能体的会话。([#2429](https://github.com/agentscope-ai/agentscope/pull/2429))
+- 跟随系统深色模式，浏览器深色模式下侧边栏按钮不再不可见。([#2468](https://github.com/agentscope-ai/agentscope/pull/2468))
+- 渠道卡片的开关不再溢出卡片。([#2466](https://github.com/agentscope-ai/agentscope/pull/2466))
+- 回复进行中按 Enter 不再发送消息。([#2529](https://github.com/agentscope-ai/agentscope/pull/2529))
+- 运行中的 MCP 工具调用标签不再空白。([#2490](https://github.com/agentscope-ai/agentscope/pull/2490))
+
+**链路追踪**
+
+- 被中断的模型回复记录为 `interrupted`，此前一律记为 `stop`。([#2450](https://github.com/agentscope-ai/agentscope/pull/2450))
+
+**Pipeline**
+
+- `GoalPipeline` 的 `verifier_reset_context` 真正生效，验证者不再把上一轮的判词带进下一次验证。([#2544](https://github.com/agentscope-ai/agentscope/pull/2544))
+
+**提示词、示例与文档**
+
+- 修复工作区指令、记忆检索指令与 `GoalPipeline` 字段描述中会直接送进模型的文本缺陷。([#2513](https://github.com/agentscope-ai/agentscope/pull/2513))
+- Windows 上关闭示例服务的热重载，内置的 shell 类工具不再报 `NotImplementedError`。([#2434](https://github.com/agentscope-ai/agentscope/pull/2434))
+- 修正包文档字符串、中间件示例中的类名、mem0 示例 README 的链接、`CONTRIBUTING_zh.md` 中的全角冒号，以及中文 NEWS 里指向英文文档的链接。([#2502](https://github.com/agentscope-ai/agentscope/pull/2502)、[#2493](https://github.com/agentscope-ai/agentscope/pull/2493)、[#2438](https://github.com/agentscope-ai/agentscope/pull/2438)、[#2511](https://github.com/agentscope-ai/agentscope/pull/2511)、[#2546](https://github.com/agentscope-ai/agentscope/pull/2546))
+
 ## v2.0.7
 
 *发布于 2026-08-24。*

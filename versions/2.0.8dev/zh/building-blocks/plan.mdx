@@ -102,7 +102,7 @@ await TaskUpdate()(
 # 此时：task "2".blocked_by == ["1"] 且 task "1".blocks == ["2"]
 ```
 
-任务被删除时，其 ID 会从其他所有任务的 `blocks` 与 `blocked_by` 中移除，保证依赖图始终有效。
+任务被删除时，其 ID 会从其他所有任务的 `blocks` 与 `blocked_by` 中移除，保证依赖图始终有效。任务被 `TaskUpdate` 标记为 `completed` 时同理：它的 ID 会从所有后继任务的 `blocked_by` 中移除，因此 `blocked_by` 里剩下的永远是仍未完成的前置任务，阻塞已经解除的任务不会再显示为不可执行。
 
 <Note>
 `TaskList` 会标注每个仍有未解 `blocked_by` 的任务，`TaskGet` 则返回完整的依赖边列表。智能体据此优先选择无阻塞的工作，但**执行层面是仅建议性的** —— 运行时不会阻止模型去做一个被阻塞的任务。

@@ -87,7 +87,9 @@ asyncio.run(main())
 |----------|------|-------------|
 | `executor` | `Agent` | The agent doing the work |
 | `verifier` | `Agent` | The agent judging it |
+| `verifier_reset_context` | `bool`, defaults to `True` | Whether the verifier's conversation is cleared after each refusal |
 | `max_iters` | `int`, defaults to `10` | How many refusals are allowed |
+| `max_retries` | `int`, defaults to `3` | How many times either side is asked again after an invalid structured output |
 
 <Note>
 The goal is not given at construction. It arrives with the task: the first message the pipeline receives is both what the executor is asked to do and what the verifier judges against.
@@ -127,7 +129,9 @@ Two kinds of retry are counted differently, and only the first spends an attempt
 | The verifier returns `fail` | The work genuinely is not good enough | Yes |
 | Either agent returns no valid structured output | The model did not call the tool it was asked to | No, it is reminded and asked again |
 
-The second is a malfunction rather than a judgement; charging it would quietly cost the executor attempts. Once `max_iters` is reached the pipeline stops, the stream ends, and the last `message` stays in the verifier's conversation.
+The second is a malfunction rather than a judgement; charging it would quietly cost the executor attempts. `max_retries` caps how many times it is asked again. Once `max_iters` is reached the pipeline stops, the stream ends, and the last `message` stays in the verifier's conversation.
+
+`verifier_reset_context` decides what context the verifier brings into the next round. It defaults to `True`, clearing the verifier's conversation after each completed `fail` verdict so the next verification sees only this round's output and `report` rather than being steered by earlier verdicts; `False` keeps the accumulated conversation and summary. The option touches the verifier's conversation state alone — executor state, tool and task configuration, middleware state, structured-output retries and HITL resumes are unaffected.
 
 ## Interruption and Resuming
 

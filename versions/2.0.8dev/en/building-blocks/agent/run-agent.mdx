@@ -53,6 +53,10 @@ Besides the text content, the returned `Msg` carries the reply's full outcome. T
 | `error` | `ErrorInfo \| None` | Structured error info, populated only when `finished_reason` is `error` |
 | `finished_at` | `str \| None` | ISO 8601 timestamp when the reply finished |
 
+<Note>
+A reply with `finished_reason` set to `exceed_max_iters` usually still carries usable text: when the iteration budget runs out before the agent has produced a final answer, the framework makes one more model call with tools disabled and asks it to summarize the work and findings so far. That finalization runs at most once; only if it too produces no text does the reply end empty.
+</Note>
+
 See [Message & Event](/versions/2.0.8dev/en/building-blocks/message-and-event) for the complete `Msg` structure and content block types.
 
 ### Streaming Reply

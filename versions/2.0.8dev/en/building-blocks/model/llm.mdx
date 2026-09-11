@@ -245,6 +245,17 @@ model = OpenAIChatModel(
 
 For non-standard payload shapes (e.g. a provider whose API doesn't follow the OpenAI or Anthropic conventions), subclass `FormatterBase` and pass an instance through the same `formatter` argument.
 
+### Multimodal Tool Results
+
+A tool can return images, audio and other `DataBlock`s, and APIs differ in how much of that they can carry, so the formatter decides how those blocks enter the request:
+
+| Formatter | How multimodal tool results are carried |
+|-----------|-----------------------------------------|
+| `OpenAIResponseFormatter` | Written straight into the content array of `function_call_output`, with text, images and files in the order the tool returned them, so the media stays associated with its `call_id`. Text-only results remain string outputs. |
+| Every other formatter | The tool result keeps only text referring to the block, and the block itself is promoted into the user message that follows. The reference uses the `DataBlock`'s own stable `id`, so reformatting the same history produces the same output and provider prefix caching keeps working. |
+
+Both paths fall back to text for a media type the target model does not support: base64 data is written to a file and the tool result carries its path, while URL data is given as the URL.
+
 ## Custom Provider
 
 You can extend AgentScope with your own model provider by implementing a credential and a chat model, then registering the credential.

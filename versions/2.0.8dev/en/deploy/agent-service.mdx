@@ -204,6 +204,18 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 <ParamField path="enable_index_worker" type="bool" default="True">
   When `True` (embedded deployment) the API process starts an `IndexWorker` and `IndexSweeper` in its lifespan and dispatches indexing tasks via an in-process queue. When `False` (dedicated deployment) the API process performs no indexing — a separate worker process is expected to consume tasks from the message bus. No effect when `knowledge_base_manager` is `None`.
 </ParamField>
+<ParamField path="mcp_hubs" type="list[MCPHubBase] | None" default="None">
+  Hubs that supply installable MCPs. Passing them enables the MCP marketplace routes, pages and install flow; `None` leaves the feature off. See [MCP Hub](/versions/2.0.8dev/en/deploy/hub/mcp-hub).
+</ParamField>
+<ParamField path="skill_hubs" type="list[SkillHubBase] | None" default="None">
+  Hubs that supply installable skills. Passing them enables the skill marketplace routes, pages and install flow; `None` leaves the feature off. See [Skill Hub](/versions/2.0.8dev/en/deploy/hub/skill-hub).
+</ParamField>
+<ParamField path="enable_channel_worker" type="bool" default="True">
+  Whether this process holds the channels' long connections. `True` (embedded deployment) suits a desktop build or a single API process; set it `False` on every process when running dedicated channel workers, because a platform gives one bot's events to one connection, so every replica connecting would either waste connections or duplicate messages. The channel API, the client factory and outbound delivery stay available either way — only the connections move.
+</ParamField>
+<ParamField path="enable_scheduler" type="bool" default="True">
+  Whether this process owns the schedule timers. APScheduler's jobstore is in memory, so every process holding the timers fires every cron tick and a schedule runs once per replica — keep exactly one process at `True`. The schedule endpoints and the agent's schedule tools stay available either way: those processes persist the record and notify the owner over the message bus.
+</ParamField>
 <ParamField path="extra_credentials" type="list[Type[CredentialBase]] | None" default="None">
   Additional credential types to register. Each class is registered with `CredentialFactory` before the app starts.
 </ParamField>
@@ -211,7 +223,7 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
   Additional ASGI middlewares (e.g., protocol adapters, CORS, auth).
 </ParamField>
 <ParamField path="extra_agent_middlewares" type="AgentMiddlewareFactory | None" default="None">
-  Async factory `(user_id, agent_id, session_id) -> Awaitable[list[MiddlewareBase]]` invoked once per agent assembly (per chat turn or scheduled trigger). Returned middlewares are appended to the framework-supplied ones (e.g., `ToolOffloadMiddleware`) before the agent runs, so the factory can produce per-user / per-session middlewares such as audit logging, tenant isolation, or custom auth.
+  Async factory `(user_id, agent_id, session_id, workspace) -> Awaitable[list[MiddlewareBase]]` invoked once per agent assembly (per chat turn or scheduled trigger). Returned middlewares are appended to the framework-supplied ones (e.g., `ToolOffloadMiddleware`) before the agent runs, so the factory can produce per-user / per-session middlewares such as audit logging, tenant isolation, or custom auth. `workspace` is the session's resolved `WorkspaceBase`, exposing `workdir` and `get_backend()` for filesystem-backed middleware such as `AgenticMemoryMiddleware`; factories written against the older three-argument signature keep working, since the service probes the signature and only passes `workspace` to those that accept it.
 </ParamField>
 <ParamField path="extra_agent_tools" type="AgentToolFactory | None" default="None">
   Async factory `(user_id, agent_id, session_id) -> Awaitable[list[ToolBase]]` invoked once per agent assembly. Returned tools are merged into the toolkit's `"basic"` group alongside the workspace-derived tools, so tool availability can vary per caller (per-tenant integrations, user-specific credentials).
@@ -221,6 +233,15 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 </ParamField>
 <ParamField path="custom_agent_cls" type="Type[Agent] | None" default="None">
   A custom `Agent` subclass to instantiate on every chat turn instead of the built-in `Agent`. Use this to swap in an agent implementation with different reasoning behaviour while keeping the rest of the service unchanged.
+</ParamField>
+<ParamField path="resource_access_policy" type="ResourceAccessPolicyBase | None" default="None">
+  Policy deciding whether a viewer may use credentials, agents and knowledge bases owned by another user. `None` installs `DenyAllResourceAccessPolicy`, which keeps the strictly owner-isolated behaviour. See [Resource Sharing](/versions/2.0.8dev/en/deploy/sharing).
+</ParamField>
+<ParamField path="channels" type="list[Type[ChannelBase]] | None" default="None">
+  Channel adapter classes this service allows, e.g. `[FeishuChannel, DingTalkChannel, DiscordChannel]`. Each class describes its own `channel_type`, credentials and config, so the service registers it without a separate table; pass a custom `ChannelBase` subclass to add a platform. `None` registers no channel types and leaves the feature off. See [Channels](/versions/2.0.8dev/en/deploy/channel/overview).
+</ParamField>
+<ParamField path="download_secret" type="str | None" default="None">
+  Signs the short-lived tokens that let a browser download a workspace file by navigation. Defaults to a per-process value, which is fine for a single instance but **must be set explicitly behind a load balancer** — otherwise a token minted by one replica is rejected by the next and downloads fail at random.
 </ParamField>
 <ParamField path="title" type="str" default="AgentScope">
   OpenAPI title shown in the docs UI.
@@ -354,6 +375,31 @@ flowchart TB
 <Tip>
 	The shape to remember: **agents are reusable templates, sessions are the unit of runtime state**, and the message bus is what brings idle sessions back to life when something external (a schedule, a teammate, a background tool) has something to say.
 </Tip>
+
+### Session Origin and Naming
+
+Two fields on a `SessionRecord` say why the session exists and who owns its name.
+
+`origin` records where the session came from. It is a tagged union, so once the tag is known the matching ids are there:
+
+| Tag | Type | Carries | Created when |
+|-----|------|---------|--------------|
+| `user` | `UserOrigin` | — | A person opens a session themselves |
+| `schedule` | `ScheduleOrigin` | `schedule_id` | A schedule fires on its due date |
+| `channel` | `ChannelOrigin` | `channel_id`, `chat_id` | A channel receives an inbound platform message |
+| `team` | `TeamOrigin` | — | A team mints a session for a member via `AgentCreate` or `AgentInvite` |
+
+One `isinstance(record.origin, ChannelOrigin)` is enough to identify the origin — no need to check that a tag and its ids agree. Team membership lives on `SessionRecord.team_id` instead: an origin is fixed when the session is created, while membership is granted afterwards and can be revoked.
+
+<Note>
+The old `source` field and `source_schedule_id` / `source_channel_id` / `source_chat_id` remain readable as deprecated properties, and records written earlier are folded into `origin` on load, so no data migration is needed.
+</Note>
+
+`config.name` is the session's display name, and `config.naming.auto` says who owns it. A session created without a name has `auto` set to `true`: once its first reply is on disk, the service hands the opening user message to the session's own model for a short title, falling back to an excerpt of that message when the call fails — nothing is retried and nothing is surfaced. As soon as the name is settled (the title landed, or the user renamed the session through `PATCH /sessions`), `auto` is cleared, so auto-naming happens at most once per session.
+
+<Note>
+`auto` defaults to `false`: the channel, schedule and team flows all create sessions with an explicit name, and records written before this existed carry no `naming` block, so both keep the names they have. When the opening turn carries no text (an image-only message, or a background wakeup), naming is skipped and left for a later turn.
+</Note>
 
 ## API Overview
 
@@ -727,7 +773,7 @@ flowchart TB
 
 ### Lifespan
 
-The lifespan context manager runs once per process. Built with `AsyncExitStack`, it enters resources in order — storage → message bus → workspace manager → optional blob store & knowledge base manager → background task manager → scheduler manager → chat run registry → chat / session / knowledge base services → optional index worker & sweeper → wakeup dispatcher — and tears them down in reverse on shutdown. If any startup step raises, every previously-entered resource is still cleaned up. The scheduler restores persisted cron jobs on entry so they survive restarts.
+The lifespan context manager runs once per process. Built with `AsyncExitStack`, it enters resources in order — storage → message bus → workspace manager → optional blob store & knowledge base manager → background task manager → scheduler manager → chat run registry → chat / session / knowledge base services → optional index worker & sweeper → wakeup dispatcher — and tears them down in reverse on shutdown. If any startup step raises, every previously-entered resource is still cleaned up. The process that owns the timers (`enable_scheduler=True`) reconciles the persisted cron jobs into its job set on entry, so they survive restarts.
 
 ### Managers
 
@@ -739,7 +785,7 @@ The following resources are bound to the FastAPI app state during the lifespan a
 | `WakeupDispatcher` | One per process. Subscribes to the wakeup signal and, for each enqueued wakeup, drives `ChatService.run` for the target session. |
 | `BackgroundTaskManager` | Pure asyncio task registry. `ToolOffloadMiddleware` spawns watcher tasks here; results are pushed back through the message bus (inbox + wakeup), not held in this manager. |
 | `ChatRunRegistry` | Per-process registry that enforces the single-run-per-session rule for `POST /chat`. A double-submit surfaces as HTTP 409. |
-| `SchedulerManager` | APScheduler-backed cron execution. On fire, the trigger pushes a `HintBlock` to the target session's inbox and enqueues a wakeup — no direct call into `ChatService`. |
+| `SchedulerManager` | APScheduler-backed cron execution. On fire, the trigger pushes a `HintBlock` to the target session's inbox and enqueues a wakeup — no direct call into `ChatService`. Only a process with `enable_scheduler=True` holds the timers; the others still construct the manager but run nothing, persisting a schedule and notifying the owner over the message bus, which re-reads storage to reconcile its job set and does so unconditionally every 60s. |
 | `WorkspaceManager` | Workspace lifecycle and TTL-based caching; the isolation grain (`per_agent`, `per_session`, `per_user`) is set on the manager. |
 | `ChatService` | Single entry point for running or interrupting a session. Loads records, assembles the toolkit, builds middlewares, takes the bus session lock, and drives the agent's reply stream. |
 | `SessionService` | Composes storage and the message bus for session-level operations: create / update / delete, probing the unified `SessionStatus`, and dispatching interrupts. |

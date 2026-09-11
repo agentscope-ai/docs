@@ -127,6 +127,12 @@ When creating/editing an agent, you can set if the agent can be invited to join 
 - `Invitable`: If the other agents can invite this agent to join a team.
 - `Invite description`: The description of the agent that will be shown to the leader when inviting this agent to join a team.
 
+Both fields are required. `AgentInvite` builds its candidate pool from the agents **visible** to the leader — its own, plus those granted by the [resource sharing](/versions/2.0.8dev/en/deploy/sharing) policy — and only those with `Invitable` set and a non-empty `Invite description` enter it. When the pool is empty the leader does not receive the `AgentInvite` tool at all.
+
+<Note>
+When another user's agent is invited, the borrowed session takes its workspace and model from the **caller's own** session of that agent, so it never picks up the owner's MCPs, skills, cache or session permissions; the agent's definition (system prompt, context and ReAct configs) still comes from the original record. The target is resolved against the sharing policy again at invite time, so an invite fails if access was revoked in the meantime.
+</Note>
+
 ## Architecture
 
 ### Built-in tools
@@ -139,7 +145,7 @@ A leader session is automatically given these tools. Workers see only `TeamSay`.
 | `AgentCreate` | Spawn a new worker into the team with a name, role description, first task, and permission mode. The worker begins executing as soon as it is created. |
 | `TeamSay`     | Send a message to a named member (or broadcast). The recipient's session receives the message through its inbox and resumes on the next wakeup.        |
 | `TeamDelete`  | Dissolve the team and clean up every member session. Only the leader can call this.                                                                    |
-| `AgentInvite` | Invite an existing agent to join the team. A new session will be created for the invited agent. |
+| `AgentInvite` | Invite an existing agent — your own, or one another user shared with you — to join the team. A new session will be created for the invited agent. |
 
 <Note>
 	When deleting a team, agents created within the team (via `AgentCreate`) will be permanently deleted, while invited agents (via `AgentInvite`) will not be affected — only their association with the team will be removed.

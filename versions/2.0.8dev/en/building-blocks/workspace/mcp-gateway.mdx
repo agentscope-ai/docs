@@ -20,12 +20,16 @@ flowchart LR
     end
 ```
 
-The gateway exposes a small REST surface (`GET /health`, `GET/POST/DELETE /mcps`, `GET /mcps/{name}/tools`, `POST /mcps/{name}/tools/{tool}`) protected by a per-workspace bearer token minted at each `initialize()`. On the host, two adapters preserve the standard interfaces:
+The gateway exposes a small REST surface (`GET /health`, `GET/POST/DELETE /mcps`, `GET /mcps/{name}/tools`, `POST /mcps/{name}/tools/{tool}`, `PUT /mcps/{name}/runtime-headers`) protected by a per-workspace bearer token minted at each `initialize()`. On the host, two adapters preserve the standard interfaces:
 
 | Adapter | Base Class | Role |
 |---------|-----------|------|
-| `GatewayMCPClient` | `MCPClient` | `connect` / `close` / `list_tools` become HTTP requests against the gateway, so the rest of the toolkit cannot tell it apart from a local MCP client |
+| `GatewayMCPClient` | `MCPClient` | `connect` / `close` / `list_tools` become HTTP requests against the gateway, so the rest of the toolkit cannot tell it apart from a local MCP client; `set_runtime_headers` updates the live gateway-side client through `PUT /mcps/{name}/runtime-headers` |
 | `GatewayMCPTool` | `ToolBase` | `__call__` posts to `/mcps/{name}/tools/{tool}` and reconstructs the returned `ToolChunk` |
+
+<Note>
+[Updating HTTP headers at runtime](/versions/2.0.8dev/en/building-blocks/tool/mcp#update-http-headers-at-runtime) works through the gateway proxy too, but the proxy must already be connected, since what changes is the live client on the gateway side. `connect` registers the current runtime headers along with the client, so they survive a reconnect. A `RuntimeError` is raised when the workspace image predates the endpoint or the gateway restarted and holds no live client.
+</Note>
 
 This abstraction keeps the agent-side code identical across every workspace backend: a workspace returns `MCPClient` instances from `list_mcps()` regardless of whether the upstream session lives on the host (`LocalWorkspace`) or inside an isolated environment (all sandboxed workspaces).
 

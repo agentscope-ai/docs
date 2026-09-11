@@ -203,6 +203,18 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 <ParamField path="enable_index_worker" type="bool" default="True">
   为 `True`（嵌入式部署）时，API 进程会在其 lifespan 中启动一个 `IndexWorker` 与 `IndexSweeper`，并通过进程内队列派发索引任务。为 `False`（专用部署）时，API 进程不做索引 —— 需要由独立 worker 进程从消息总线消费任务。`knowledge_base_manager` 为 `None` 时该参数无效。
 </ParamField>
+<ParamField path="mcp_hubs" type="list[MCPHubBase] | None" default="None">
+  提供可安装 MCP 的中心。传入后，MCP 市场的路由、页面与安装流程随之启用；为 `None` 时该功能关闭。参见 [MCP 中心](/versions/2.0.8dev/zh/deploy/hub/mcp-hub)。
+</ParamField>
+<ParamField path="skill_hubs" type="list[SkillHubBase] | None" default="None">
+  提供可安装技能的中心。传入后，技能市场的路由、页面与安装流程随之启用；为 `None` 时该功能关闭。参见[技能中心](/versions/2.0.8dev/zh/deploy/hub/skill-hub)。
+</ParamField>
+<ParamField path="enable_channel_worker" type="bool" default="True">
+  本进程是否持有渠道的长连接。为 `True`（嵌入式部署）适合桌面版或单个 API 进程；部署独立的渠道 worker 时，其余进程都要设为 `False`：平台只会把一个机器人的事件交给一条连接，每个副本都去建连要么白白浪费连接，要么让消息被重复投递。无论取值如何，渠道 API、客户端工厂与出站投递都照常可用，移动的只是长连接本身。
+</ParamField>
+<ParamField path="enable_scheduler" type="bool" default="True">
+  本进程是否持有计划任务的定时器。APScheduler 的 jobstore 在内存中，每个持有定时器的进程都会响应 cron，一个 schedule 因此会在每个副本各跑一遍，所以只保留一个进程为 `True`。无论取值如何，schedule 的 HTTP 端点与智能体的调度工具都照常可用：这些进程持久化记录后，通过消息总线通知持有者。
+</ParamField>
 <ParamField path="extra_credentials" type="list[Type[CredentialBase]] | None" default="None">
   额外注册的凭证类型。每个类在应用启动前被注入 `CredentialFactory`。
 </ParamField>
@@ -210,7 +222,7 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
   额外的 ASGI 中间件（例如协议适配器、CORS、鉴权）。
 </ParamField>
 <ParamField path="extra_agent_middlewares" type="AgentMiddlewareFactory | None" default="None">
-  异步工厂 `(user_id, agent_id, session_id) -> Awaitable[list[MiddlewareBase]]`，在每次组装智能体（即每轮 chat 或每次 schedule 触发）时被调用一次。返回的中间件会在智能体运行前追加到框架自带的中间件（例如 `ToolOffloadMiddleware`）之后，可用于产出按用户 / 会话区分的中间件，比如审计日志、租户隔离或自定义鉴权逻辑。
+  异步工厂 `(user_id, agent_id, session_id, workspace) -> Awaitable[list[MiddlewareBase]]`，在每次组装智能体（即每轮 chat 或每次 schedule 触发）时被调用一次。返回的中间件会在智能体运行前追加到框架自带的中间件（例如 `ToolOffloadMiddleware`）之后，可用于产出按用户 / 会话区分的中间件，比如审计日志、租户隔离或自定义鉴权逻辑。`workspace` 是该会话解析出的 `WorkspaceBase`，提供 `workdir` 与 `get_backend()`，供 `AgenticMemoryMiddleware` 这类依赖文件系统的中间件使用；只接受前三个参数的旧式工厂继续可用，服务会探测签名，只向接受第四个参数的工厂传入 `workspace`。
 </ParamField>
 <ParamField path="extra_agent_tools" type="AgentToolFactory | None" default="None">
   异步工厂 `(user_id, agent_id, session_id) -> Awaitable[list[ToolBase]]`，在每次组装智能体时被调用一次。返回的工具会与工作区派生的工具一起合并到 toolkit 的 `"basic"` 分组里，便于按调用者动态决定可用工具（例如按租户接入、按用户使用各自凭证的工具）。
@@ -220,6 +232,15 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 </ParamField>
 <ParamField path="custom_agent_cls" type="Type[Agent] | None" default="None">
   自定义的 `Agent` 子类，用于替代内置 `Agent` 在每轮 chat 中被实例化。适合在保留其他服务组件不变的前提下换用具有不同推理行为的智能体实现。
+</ParamField>
+<ParamField path="resource_access_policy" type="ResourceAccessPolicyBase | None" default="None">
+  决定一个访问者能否使用其他用户的凭证、智能体与知识库。为 `None` 时安装 `DenyAllResourceAccessPolicy`，即维持按用户严格隔离的行为。参见[资源共享](/versions/2.0.8dev/zh/deploy/sharing)。
+</ParamField>
+<ParamField path="channels" type="list[Type[ChannelBase]] | None" default="None">
+  本服务允许接入的渠道适配器类，例如 `[FeishuChannel, DingTalkChannel, DiscordChannel]`。每个类自带 `channel_type`、凭证与配置声明，服务据此注册，无需额外的类型表；要接入新平台，传入自己的 `ChannelBase` 子类即可。为 `None` 时不注册任何渠道类型，渠道功能保持关闭。参见[渠道](/versions/2.0.8dev/zh/deploy/channel/overview)。
+</ParamField>
+<ParamField path="download_secret" type="str | None" default="None">
+  为浏览器直接下载工作区文件所用的短期令牌签名。默认每个进程各自生成一个，单实例部署没有问题，但**在负载均衡之后必须显式设置**：否则一个副本签发的令牌会被下一个副本拒绝，下载随机失败。
 </ParamField>
 <ParamField path="title" type="str" default="AgentScope">
   OpenAPI 文档界面中显示的标题。
@@ -353,6 +374,31 @@ flowchart TB
 <Tip>
 要记住的形态：**智能体是可复用的模板，会话是运行时状态的承载单位**，而消息总线则是当外部事件（调度、队友、后台工具）有话要说时把空闲会话唤醒的桥梁。
 </Tip>
+
+### 会话的来源与命名
+
+会话记录 `SessionRecord` 上有两个字段说明它因何存在、名字归谁管。
+
+`origin` 记录会话的来源，它是一个带 tag 的联合类型，tag 一旦确定，对应的 id 就一定存在：
+
+| tag | 类型 | 携带字段 | 产生时机 |
+|-----|------|----------|----------|
+| `user` | `UserOrigin` | — | 用户自己打开会话 |
+| `schedule` | `ScheduleOrigin` | `schedule_id` | 计划任务到点触发 |
+| `channel` | `ChannelOrigin` | `channel_id`、`chat_id` | 渠道收到平台的入站消息 |
+| `team` | `TeamOrigin` | — | 团队通过 `AgentCreate` 或 `AgentInvite` 为成员创建会话 |
+
+判断来源用 `isinstance(record.origin, ChannelOrigin)` 这样一次判断即可，不必再确认 tag 与 id 是否自洽。团队归属另由 `SessionRecord.team_id` 表达：来源在会话创建时就已固定，而团队归属是之后被授予、也可以被收回的。
+
+<Note>
+旧字段 `source` 与 `source_schedule_id` / `source_channel_id` / `source_chat_id` 作为废弃属性保留，仍可读取；此前写入的记录在加载时会自动折叠为 `origin`，无需数据迁移。
+</Note>
+
+`config.name` 是会话的展示名，`config.naming.auto` 说明它归谁管。创建时未显式命名的会话，`auto` 为 `true`：首次回复落盘后，服务把用户的开场消息交给该会话自己的模型生成一个短标题，模型调用失败时退回到该消息的摘录，不重试也不额外报错。名字一旦落定（标题生成成功，或用户通过 `PATCH /sessions` 改名），`auto` 被清为 `false`，因此自动命名对每个会话最多发生一次。
+
+<Note>
+`auto` 默认为 `false`：渠道、计划任务与团队流程创建会话时都会带上显式名称，此前写入的记录也没有 `naming` 字段，两者加载后都保持原名。若开场的那一轮没有文本（纯图片消息，或后台唤醒），本轮跳过命名，留给之后有文本的一轮。
+</Note>
 
 ## API 概览
 
@@ -726,7 +772,7 @@ flowchart TB
 
 ### Lifespan
 
-Lifespan context manager 每个进程仅运行一次。基于 `AsyncExitStack` 构建，启动时按顺序进入资源 —— storage → message bus → workspace manager → 可选的 blob store 与 knowledge base manager → background task manager → scheduler manager → chat run registry → chat / session / knowledge base 服务 → 可选的 index worker 与 sweeper → wakeup dispatcher —— 关闭时按相反顺序拆除。如果任何启动步骤抛错，已进入的资源仍会被妥善清理。Scheduler 在进入时会恢复持久化的 cron 任务以保证它们跨重启生效。
+Lifespan context manager 每个进程仅运行一次。基于 `AsyncExitStack` 构建，启动时按顺序进入资源 —— storage → message bus → workspace manager → 可选的 blob store 与 knowledge base manager → background task manager → scheduler manager → chat run registry → chat / session / knowledge base 服务 → 可选的 index worker 与 sweeper → wakeup dispatcher —— 关闭时按相反顺序拆除。如果任何启动步骤抛错，已进入的资源仍会被妥善清理。持有定时器的那个进程（`enable_scheduler=True`）在进入时会把持久化的 cron 任务对齐到自己的任务集中，以保证它们跨重启生效。
 
 ### Manager
 
@@ -738,7 +784,7 @@ Lifespan context manager 每个进程仅运行一次。基于 `AsyncExitStack` �
 | `WakeupDispatcher` | 每个进程一个。订阅唤醒信号，对每条入队的唤醒驱动 `ChatService.run` 处理目标会话。 |
 | `BackgroundTaskManager` | 纯 asyncio 任务注册表。`ToolOffloadMiddleware` 在此派生 watcher 任务；结果通过消息总线（inbox + wakeup）回送，而不是保留在该 manager 中。 |
 | `ChatRunRegistry` | 单进程注册表，为 `POST /chat` 强制“同一会话仅一次运行”规则。重复提交会以 HTTP 409 返回。 |
-| `SchedulerManager` | 基于 APScheduler 的 cron 执行。触发时，trigger 会向目标会话的收件箱推一个 `HintBlock` 并入队一个唤醒 —— 不直接调用 `ChatService`。 |
+| `SchedulerManager` | 基于 APScheduler 的 cron 执行。触发时，trigger 会向目标会话的收件箱推一个 `HintBlock` 并入队一个唤醒 —— 不直接调用 `ChatService`。只有 `enable_scheduler=True` 的进程持有定时器；其余进程照常构造该 manager，但不运行任何任务，写入 schedule 后通过消息总线通知持有者，持有者重新读取存储对齐任务集，并每 60 秒无条件对齐一次。 |
 | `WorkspaceManager` | 工作区生命周期与 TTL 缓存；隔离粒度（`per_agent`、`per_session`、`per_user`）在管理器上配置。 |
 | `ChatService` | 运行或中断会话的唯一入口。加载记录、组装 toolkit、构建中间件、获取消息总线会话锁，并驱动智能体的 reply 流。 |
 | `SessionService` | 组合 storage 与 message bus，处理会话级操作：创建 / 更新 / 删除、探测统一的 `SessionStatus`，以及派发中断。 |

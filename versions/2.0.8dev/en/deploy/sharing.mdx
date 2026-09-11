@@ -59,6 +59,8 @@ The relevant types are:
 
 Developers / deployers implement their business-specific resource-sharing logic by subclassing and implementing `ResourceAccessPolicyBase`.
 
+A shared agent is not limited to direct conversation: as long as it has `Invitable` set, the viewer's leader agent can bring it into a team with `AgentInvite` — see [Set Invitation Scope](/versions/2.0.8dev/en/deploy/agent-team#set-invitation-scope).
+
 <Note>
 The default policy in the Agent Service is `DenyAllResourceAccessPolicy` — no resources are shared across users.
 </Note>

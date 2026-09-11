@@ -7,6 +7,149 @@ description: "Version history of AgentScope 2.x, including new features, changes
 For the full commit-level history and contributor list, see the [GitHub releases page](https://github.com/agentscope-ai/agentscope/releases).
 </Tip>
 
+## v2.0.8
+
+*Released on 2026-09-08.*
+
+<Note>
+**Highlight**: This release adds
+	- a realtime voice agent and the `agentscope.realtime` module,
+	- `A2AAgent` for talking to remote A2A agents,
+	- `GoalPipeline`, a pipeline with a verifier,
+	- context compression the agent triggers itself, and
+	- LLM reranking of RAG results.
+</Note>
+
+### Added
+
+**Realtime**
+
+- **Realtime voice agent**: the new `RealtimeAgent` and `agentscope.realtime` module support spoken conversation with barge-in, tool calls, and per-turn latency metrics. ([#2547](https://github.com/agentscope-ai/agentscope/pull/2547), [#2550](https://github.com/agentscope-ai/agentscope/pull/2550))
+- **Realtime models and audio transport**: DashScope's Qwen-Omni-Realtime and Qwen-Audio-3.0-Realtime models ship built in, along with a transport for the local microphone and speaker. ([#2547](https://github.com/agentscope-ai/agentscope/pull/2547))
+
+**A2A**
+
+- **`A2AAgent`** lets an application drive a remote agent speaking A2A 1.0 as if it were local, holding the remote conversation and Task across turns. ([#2142](https://github.com/agentscope-ai/agentscope/pull/2142))
+
+**Pipeline**
+
+- **New `pipeline` module**: its first member, `GoalPipeline`, runs an executor agent until a verifier agent accepts its work — for tasks with a clear acceptance bar. ([#2428](https://github.com/agentscope-ai/agentscope/pull/2428))
+
+**Agent**
+
+- **Agent-driven context compression**: the new `CompressContext` tool lets an agent compress between tasks instead of waiting for a hard threshold to fire. ([#2143](https://github.com/agentscope-ai/agentscope/pull/2143))
+- **Final summary at the iteration limit**: with no final text when `max_iters` is reached, one more model call runs with tools disabled, so the reply is no longer empty. ([#2443](https://github.com/agentscope-ai/agentscope/pull/2443))
+- **Hint after repeated tool errors** tells the agent to try another approach once the same call keeps failing, instead of letting it retry as-is. ([#1816](https://github.com/agentscope-ai/agentscope/pull/1816))
+
+**Model**
+
+- **Volcengine Ark**: the new `VolcengineChatModel`, credential and formatters give Doubao models first-class support instead of the generic OpenAI integration. ([#2532](https://github.com/agentscope-ai/agentscope/pull/2532))
+
+**RAG**
+
+- **LLM reranking**: `RAGMiddleware` accepts a rerank model that reorders retrieved chunks by semantic relevance after the vector search, improving retrieval quality. ([#1975](https://github.com/agentscope-ai/agentscope/pull/1975))
+
+**MCP**
+
+- **Runtime HTTP headers**: a Streamable HTTP client can swap its request headers while running, so a rotated token no longer means rebuilding the client; in Docker workspaces the update is relayed through the gateway. ([#2456](https://github.com/agentscope-ai/agentscope/pull/2456))
+
+**Agent Service**
+
+- **Interactive channel credential binding** lets a platform hand over its credentials out of band, such as by scanning a QR code, instead of pasting secrets into a form. ([#2484](https://github.com/agentscope-ai/agentscope/pull/2484))
+- **One node owns the schedule timers**: the new `enable_scheduler` argument to `create_app` makes a cron fire once across replicas rather than once per replica. ([#2477](https://github.com/agentscope-ai/agentscope/pull/2477))
+
+**WebUI**
+
+- **Session auto-naming**: a session created without a name gets a model-generated title after its first reply, replacing an uninformative creation timestamp. ([#2503](https://github.com/agentscope-ai/agentscope/pull/2503))
+- **Chat polish**: only the streaming reply re-renders per delta, plus a copy button on every message, a time marker after a long gap, and reopening the last agent and session. ([#2503](https://github.com/agentscope-ai/agentscope/pull/2503))
+- **Task panel opens itself** the first time a session produces task data, so progress is visible without opening the panel by hand. ([#2431](https://github.com/agentscope-ai/agentscope/pull/2431))
+
+### Changed
+
+**Formatter**
+
+- **Native multimodal tool outputs**: `OpenAIResponseFormatter` writes images and files straight into the tool result instead of promoting them into a synthetic user message, keeping media associated with the call that produced it. ([#2389](https://github.com/agentscope-ai/agentscope/pull/2389))
+
+**Agent Service**
+
+- **A session's origin is one tagged union**: `SessionRecord.origin` replaces the old enum plus four nullable ids, so no reader has to check whether the combination makes sense; the old fields remain as deprecated properties. ([#2536](https://github.com/agentscope-ai/agentscope/pull/2536))
+
+**Channel**
+
+- **A channel that is starting reads as connecting**, not stopped, so a freshly created one no longer looks like it needs to be started by hand. ([#2487](https://github.com/agentscope-ai/agentscope/pull/2487))
+
+**Tool**
+
+- **Schema-guided repair of tool arguments** also runs on valid JSON, so arguments whose types do not match the tool schema no longer fail the call. ([#2496](https://github.com/agentscope-ai/agentscope/pull/2496))
+
+**Dependencies**
+
+- **ripgrep is pinned below 15.x**, which ships no wheels for Windows and other platforms and breaks the dev install outright. ([#2526](https://github.com/agentscope-ai/agentscope/pull/2526))
+
+### Fixed
+
+**Agent**
+
+- Tokens spent on context compression are now counted in usage instead of being dropped. ([#2433](https://github.com/agentscope-ai/agentscope/pull/2433))
+
+**Tool**
+
+- `Edit` / `Write` right after a `Read` no longer fails with "you must first read it" in a sandboxed workspace. ([#2092](https://github.com/agentscope-ai/agentscope/pull/2092))
+- A single oversized read-cache entry no longer evicts the others. ([#2534](https://github.com/agentscope-ai/agentscope/pull/2534))
+- Concurrent read-cache hits no longer remove an unrelated entry. ([#2457](https://github.com/agentscope-ai/agentscope/pull/2457))
+- Completing a task clears it from its dependents' `blocked_by`, so a task whose blockers are resolved no longer looks unavailable. ([#2541](https://github.com/agentscope-ai/agentscope/pull/2541))
+
+**Model**
+
+- Gemini's server-side tool tokens count as input rather than output, which had distorted cost and budget accounting. ([#2406](https://github.com/agentscope-ai/agentscope/pull/2406))
+- Nullable type arrays in Gemini tool schemas are sanitized before they are sent, so the API no longer rejects them. ([#2437](https://github.com/agentscope-ai/agentscope/pull/2437))
+- Encrypted reasoning items survive OpenAI Responses round-trips intact. ([#2426](https://github.com/agentscope-ai/agentscope/pull/2426))
+- xAI's reasoning tokens count towards output usage. ([#2461](https://github.com/agentscope-ai/agentscope/pull/2461))
+
+**Formatter**
+
+- Audio format is derived from the media type, so signed and extensionless audio URLs are no longer rejected. ([#2301](https://github.com/agentscope-ai/agentscope/pull/2301))
+- Multimodal tool results reuse the data block's own stable id, so reformatting the same history produces the same output and provider prefix caching keeps working. ([#2165](https://github.com/agentscope-ai/agentscope/pull/2165))
+
+**RAG**
+
+- Distance scores are normalized, so the nearest match no longer ranks last on Qdrant and Milvus Lite. ([#2486](https://github.com/agentscope-ai/agentscope/pull/2486))
+- `ExcelParser` escapes backslashes and line breaks in cells, so the generated Markdown table no longer loses columns. ([#2528](https://github.com/agentscope-ai/agentscope/pull/2528))
+- `WordParser` preserves blank lines between paragraphs. ([#2538](https://github.com/agentscope-ai/agentscope/pull/2538))
+
+**MCP**
+
+- A connection cancelled during initialization is cleaned up, so the same client can reconnect afterwards. ([#2499](https://github.com/agentscope-ai/agentscope/pull/2499))
+
+**Agent Service**
+
+- The wake-up queue drains atomically, so one trigger no longer produces duplicate replies across replicas. ([#2476](https://github.com/agentscope-ai/agentscope/pull/2476))
+- Schedules are validated before they are persisted, so an invalid cron neither lands in storage nor removes an existing working job. ([#2442](https://github.com/agentscope-ai/agentscope/pull/2442))
+- Deleting a session clears its inbox consumer marker, so a session recreated under the same id still receives wake-ups. ([#2519](https://github.com/agentscope-ai/agentscope/pull/2519))
+- An agent shared by another user can now be invited into a team. ([#2326](https://github.com/agentscope-ai/agentscope/pull/2326))
+
+**WebUI**
+
+- Switching agents no longer shows or requests the previous agent's session. ([#2429](https://github.com/agentscope-ai/agentscope/pull/2429))
+- The UI follows system dark mode, so sidebar buttons stay visible under a browser's dark mode. ([#2468](https://github.com/agentscope-ai/agentscope/pull/2468))
+- The channel toggle no longer overflows its card. ([#2466](https://github.com/agentscope-ai/agentscope/pull/2466))
+- Enter no longer sends a message while a reply is in progress. ([#2529](https://github.com/agentscope-ai/agentscope/pull/2529))
+- Running MCP tool-call labels no longer render blank. ([#2490](https://github.com/agentscope-ai/agentscope/pull/2490))
+
+**Tracing**
+
+- An interrupted model response is recorded as `interrupted` rather than `stop`. ([#2450](https://github.com/agentscope-ai/agentscope/pull/2450))
+
+**Pipeline**
+
+- `GoalPipeline` now honors `verifier_reset_context`, so the verifier no longer carries its previous verdict into the next verification. ([#2544](https://github.com/agentscope-ai/agentscope/pull/2544))
+
+**Prompts, Examples and Docs**
+
+- Fixed text defects that reach the model in the workspace instructions, the memory retrieval instructions, and a `GoalPipeline` field description. ([#2513](https://github.com/agentscope-ai/agentscope/pull/2513))
+- Hot reload is disabled on Windows in the example service, so the built-in shell tools no longer raise `NotImplementedError`. ([#2434](https://github.com/agentscope-ai/agentscope/pull/2434))
+- Corrected the package docstring, a class name in a middleware example, the mem0 example README link, full-width colons in `CONTRIBUTING_zh.md`, and Chinese news entries pointing at the English docs. ([#2502](https://github.com/agentscope-ai/agentscope/pull/2502), [#2493](https://github.com/agentscope-ai/agentscope/pull/2493), [#2438](https://github.com/agentscope-ai/agentscope/pull/2438), [#2511](https://github.com/agentscope-ai/agentscope/pull/2511), [#2546](https://github.com/agentscope-ai/agentscope/pull/2546))
+
 ## v2.0.7
 
 *Released on 2026-08-24.*
