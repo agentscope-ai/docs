@@ -11,9 +11,9 @@ AgentScope requires Python 3.10 or higher. You can install from source or pypi.
 ### From PyPI
 
 ```bash
-uv pip install agentscope
+uv pip install "agentscope==1.0.21"
 # or
-# pip install agentscope
+# pip install "agentscope==1.0.21"
 ```
 
 ### From Source
@@ -22,7 +22,7 @@ To install AgentScope from source, you need to clone the repository from
 GitHub and install by the following commands
 
 ```bash
-git clone -b main https://github.com/agentscope-ai/agentscope
+git clone -b v1.0.21 https://github.com/agentscope-ai/agentscope
 cd agentscope
 pip install -e .
 ```
@@ -48,13 +48,13 @@ For example, when installing the full dependencies, the installation command var
 - For Windows users:
 
 ```bash
-pip install agentscope[full]
+pip install "agentscope[full]==1.0.21"
 ```
 
 - For Mac and Linux users:
 
 ```bash
-pip install agentscope\[full\]
+pip install "agentscope[full]==1.0.21"
 ```
 
 ## Simple Example

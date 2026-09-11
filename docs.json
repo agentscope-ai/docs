@@ -152,7 +152,8 @@
                       "versions/2.0.8dev/en/others/change-log"
                     ]
                   }
-                ]
+                ],
+                "tag": "Development"
               },
               {
                 "version": "2.0.7",
@@ -274,7 +275,8 @@
                       "versions/2.0.7/en/others/change-log"
                     ]
                   }
-                ]
+                ],
+                "default": true
               },
               {
                 "version": "2.0.6",
@@ -901,7 +903,8 @@
                       "versions/2.0.8dev/zh/others/change-log"
                     ]
                   }
-                ]
+                ],
+                "tag": "Development"
               },
               {
                 "version": "2.0.7",
@@ -1023,7 +1026,8 @@
                       "versions/2.0.7/zh/others/change-log"
                     ]
                   }
-                ]
+                ],
+                "default": true
               },
               {
                 "version": "2.0.6",
@@ -1592,5 +1596,12 @@
       "github": "https://github.com/agentscope-ai",
       "discord": "https://discord.gg/eYMpfnkG8h"
     }
+  },
+  "markdown": {
+    "instructions": [
+      "For AgentScope Python, use https://docs.agentscope.io/stable/en/index for new projects. For existing projects, check the installed agentscope version and use matching versioned documentation.",
+      "The /latest/ alias points to development documentation. Use it only with the matching development source. Do not mix AgentScope 1.x and 2.x APIs.",
+      "State the AgentScope version when providing installation commands or code examples. ReMe uses its own continuously updated /reme/latest/ documentation."
+    ]
   }
 }

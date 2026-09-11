@@ -53,29 +53,32 @@ AgentScope 通过 `A2AAgent` 类作为 A2A 协议的客户端，可以连接任�
   <Step title="创建 A2AAgent 并对话">
     把卡片交给 `A2AAgent`。它自己持有 A2A 客户端，退出上下文管理器时关闭，因此一个实例服务一段对话，关闭后不能重开。
 
-    对话接口与本地智能体一致：`reply_stream` 实时产出事件，`reply` 在内部消费完事件后返回最终消息。
+    对话接口与本地智能体一致：`reply_stream` 实时产出事件，`reply` 在内部消费完事件后返回最终消息。事件流可以直接交给[终端 UI](/versions/2.0.8dev/zh/building-blocks/console) 的 `ConsoleRenderer` 打印，不必自己分发事件类型。
 
     <CodeGroup>
 
     ```python 流式对话
     from agentscope.agent import A2AAgent
-    from agentscope.event import TextBlockDeltaEvent
+    from agentscope.console import ConsoleRenderer
     from agentscope.message import UserMsg
 
+    renderer = ConsoleRenderer()
+
     async with A2AAgent(card) as agent:
-        # 远端产出的文本随生成实时到达
+        # 远端产出的文本随生成实时打印
         async for event in agent.reply_stream(
             UserMsg(name="user", content="帮我规划一个杭州周末行程。"),
         ):
-            if isinstance(event, TextBlockDeltaEvent):
-                print(event.delta, end="", flush=True)
+            renderer.render(event)
 
         # 第二次调用自动复用同一段远端会话
         async for event in agent.reply_stream(
             UserMsg(name="user", content="改成适合带小孩的。"),
         ):
-            if isinstance(event, TextBlockDeltaEvent):
-                print(event.delta, end="", flush=True)
+            renderer.render(event)
+
+        # 渲染器把事件累积回一条完整的回复消息
+        print(renderer.last_msg.get_text_content())
     ```
 
     ```python 一次性对话
@@ -98,12 +101,12 @@ AgentScope 通过 `A2AAgent` 类作为 A2A 协议的客户端，可以连接任�
     </CodeGroup>
 
     <Note>
-    `A2AAgent.reply_stream` 不支持 `yield_final_msg` 参数：最终消息在流结束后由 `A2AAgent` 自行组装，需要它时请改用 `reply`。
+    `A2AAgent.reply_stream` 不支持本地智能体的 `yield_final_msg` 参数，需要最终消息时用 `renderer.last_msg` 或改用 `reply`。
     </Note>
   </Step>
 
   <Step title="（可选）交给终端 UI">
-    事件流与本地智能体一致，因此远端智能体也可以直接丢进[终端 UI](/versions/2.0.8dev/zh/building-blocks/console) 对话调试。
+    不想自己写循环时，`launch_console` 会把输入、渲染与中断一并接管，远端智能体可以直接丢进去调试。
 
     ```python 在终端与远端智能体对话
     from agentscope.console import launch_console
@@ -169,7 +172,7 @@ A2A 用两个标识组织一段对话，它们与 AgentScope 的概念并不一�
 | URL Part（`url`） | `DataBlock`，保留原始 URL |
 | 其它（如结构化数据 Part） | 不支持，抛出 `ValueError` |
 
-因此事件流中只会出现回复起止事件与文本 / 数据块事件，上面的流式对话示例按 `TextBlockDeltaEvent` 过滤即可覆盖绝大多数文本场景。块结束事件的 `metadata["a2a"]` 中记录了它来自哪个 A2A 对象（`task_id`、`artifact_id`、`message_id`），最终消息的 `metadata["a2a"]` 中记录 `context_id`。
+因此事件流中只会出现回复起止事件与文本 / 数据块事件。不使用 `ConsoleRenderer`、自行分发事件时，处理 `TextBlockDeltaEvent` 与 `DataBlockEndEvent` 两类即可。块结束事件的 `metadata["a2a"]` 中记录了它来自哪个 A2A 对象（`task_id`、`artifact_id`、`message_id`），最终消息的 `metadata["a2a"]` 中记录 `context_id`。
 
 <Note>
 思考块、工具调用块、提示块与推送通知都不在转译范围内：A2A 传递的是最终产物，远端智能体的推理过程与工具调用不会出现在事件流里。
