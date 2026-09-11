@@ -1,0 +1,175 @@
+---
+title: "权限模式"
+description: "根据智能体的部署方式选择合适的全局策略"
+---
+
+权限模式是每次工具调用决策背后的全局策略：它决定哪些决策点生效，以及无人裁决的调用如何收尾。AgentScope 支持五种模式，分别适配不同的部署场景：
+
+| 模式 | 行为 | 适用场景 |
+|------|------|----------|
+| `DEFAULT` | 只读调用自动放行（`Read` / `Glob` / `Grep`，以及 `ls`、`git status`、`cat` 等只读 Bash 命令）；其余操作在没有允许规则命中时都会询问用户。安全 ASK 无法被允许规则覆盖 | 最安全，推荐默认值 |
+| `ACCEPT_EDITS` | `DEFAULT` 放行的一切，**外加**工作目录内的编辑操作无需询问即自动放行：对已配置工作目录下文件的 `Write` / `Edit`，以及**所有目标路径都在工作目录内**的 Bash 文件系统命令（`mkdir`/`touch`/`rm`/`cp`/`mv`/`sed`） | 用户在场的活跃开发 |
+| `EXPLORE` | 放行只读操作，拒绝任何修改。不咨询允许规则与工具的安全检查：只读保证不会被规则放行掉。用户配置的拒绝/询问规则仍然优先于只读自动放行 | 代码探索、规划 |
+| `BYPASS` | 完全信任：拒绝/询问规则与工具返回的 DENY 仍然生效，但**工具的安全 ASK 会被跳过**（`rm -rf /`、写入 `~/.bashrc`、命令注入等都会放行），其余一切均放行。请用拒绝规则保护特定路径 | 沙箱环境或完全可信的运行 |
+| `DONT_ASK` | `ACCEPT_EDITS` 的无人值守版本：只读自动放行、工作目录内编辑自动放行，但任何原本会询问（不在场的）用户的操作都被转为 **DENY**。永不返回 ASK | 无人值守 / 计划任务 |
+
+## 设置模式
+
+可以在创建智能体时通过 `AgentState.permission_context` 设置模式，也可以在运行时切换：
+
+<CodeGroup>
+```python 初始化时配置
+from agentscope.agent import Agent
+from agentscope.state import AgentState
+from agentscope.permission import PermissionContext, PermissionMode
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    state=AgentState(
+        permission_context=PermissionContext(
+            mode=PermissionMode.DEFAULT,
+        )
+    ),
+)
+```
+
+```python 运行时切换
+# 切换到只读模式
+agent.state.permission_context.mode = PermissionMode.EXPLORE
+
+# 切换到无人值守模式以执行批处理
+agent.state.permission_context.mode = PermissionMode.DONT_ASK
+```
+
+```python ACCEPT_EDITS 配合工作目录
+from agentscope.permission import AdditionalWorkingDirectory
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    state=AgentState(
+        permission_context=PermissionContext(
+            mode=PermissionMode.ACCEPT_EDITS,
+            working_directories={
+                "/my/project": AdditionalWorkingDirectory(
+                    path="/my/project",
+                    source="userSettings",
+                )
+            },
+        )
+    ),
+)
+```
+</CodeGroup>
+
+## 各模式的决策流程
+
+每种模式都沿[决策矩阵](/versions/2.0.8/zh/building-blocks/permission-system/overview#决策矩阵)中的决策点依次评估；下面的流程图把每种模式展开为完整的决策流程。ASK 结果会触发用户确认；如果用户接受自动生成的建议规则，规则会被持久化以供后续调用使用。
+
+<Tabs>
+  <Tab title="DEFAULT">
+```mermaid
+flowchart TD
+    A([工具调用]) --> D1{命中拒绝规则?}
+    D1 -->|是| DENY([DENY])
+    D1 -->|否| D2{命中询问规则?}
+    D2 -->|是| ASK([ASK])
+    D2 -->|否| D3{check_read_only?}
+    D3 -->|True| ALLOW([ALLOW])
+    D3 -->|False| D4[工具 check_permissions]
+    D4 -->|ALLOW| ALLOW
+    D4 -->|DENY| DENY
+    D4 -->|"安全 ASK (bypass_immune)"| ASK
+    D4 -->|PASSTHROUGH / 普通 ASK| D5{命中允许规则?}
+    D5 -->|是| ALLOW
+    D5 -->|否| ASK
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="EXPLORE">
+```mermaid
+flowchart TD
+    A([工具调用]) --> E1{命中拒绝规则?}
+    E1 -->|是| DENY([DENY])
+    E1 -->|否| E2{命中询问规则?}
+    E2 -->|是| ASK([ASK])
+    E2 -->|否| E3{check_read_only?}
+    E3 -->|True| ALLOW([ALLOW])
+    E3 -->|False| DENY
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="ACCEPT_EDITS">
+```mermaid
+flowchart TD
+    A([工具调用]) --> AE1{命中拒绝规则?}
+    AE1 -->|是| DENY([DENY])
+    AE1 -->|否| AE2{命中询问规则?}
+    AE2 -->|是| ASK([ASK])
+    AE2 -->|否| AE3{check_read_only?}
+    AE3 -->|True| ALLOW([ALLOW])
+    AE3 -->|False| AE4[工具 check_permissions]
+    AE4 -->|ALLOW| ALLOW
+    AE4 -->|DENY| DENY
+    AE4 -->|"安全 ASK (bypass_immune)"| ASK
+    AE4 -->|PASSTHROUGH / 普通 ASK| AE5{命中允许规则?}
+    AE5 -->|是| ALLOW
+    AE5 -->|否| ASK
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="BYPASS">
+```mermaid
+flowchart TD
+    A([工具调用]) --> B1{命中拒绝规则?}
+    B1 -->|是| DENY([DENY])
+    B1 -->|否| B2{命中询问规则?}
+    B2 -->|是| ASK([ASK])
+    B2 -->|否| B3{check_read_only?}
+    B3 -->|True| ALLOW([ALLOW])
+    B3 -->|False| B4[工具 check_permissions]
+    B4 -->|ALLOW| ALLOW
+    B4 -->|DENY| DENY
+    B4 -->|"任何 ASK (安全 ASK 被跳过) / PASSTHROUGH"| B5{命中允许规则?}
+    B5 -->|是或否| ALLOW
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="DONT_ASK">
+```mermaid
+flowchart TD
+    A([工具调用]) --> DA1{命中拒绝规则?}
+    DA1 -->|是| DENY([DENY])
+    DA1 -->|否| DA2{命中询问规则?}
+    DA2 -->|是| DENY
+    DA2 -->|否| DA3{check_read_only?}
+    DA3 -->|True| ALLOW([ALLOW])
+    DA3 -->|False| DA4[工具 check_permissions]
+    DA4 -->|ALLOW| ALLOW
+    DA4 -->|DENY| DENY
+    DA4 -->|"任何 ASK (含安全 ASK)"| DENY
+    DA4 -->|PASSTHROUGH| DA5{命中允许规则?}
+    DA5 -->|是| ALLOW
+    DA5 -->|否| DENY
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+```
+  </Tab>
+</Tabs>
+
+<Note>
+**拒绝规则**与**显式询问规则**在每种模式下都始终生效（包括 `BYPASS`）。
+
+**工具发出的安全 ASK**（`bypass_immune=True`）在 `DEFAULT`、`ACCEPT_EDITS`、`DONT_ASK` 下被尊重，允许规则无法将其静默。`BYPASS` 模式按设计跳过：BYPASS 的语义是「用户已主动放弃安全提示，只剩拒绝/询问规则作为护栏」。详见[安全检查契约](/versions/2.0.8/zh/building-blocks/permission-system/tool-check#安全检查契约)。
+</Note>

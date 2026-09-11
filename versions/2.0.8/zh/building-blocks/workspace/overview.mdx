@@ -1,0 +1,54 @@
+---
+title: "概述"
+description: "为智能体提供可执行、可持久化的运行环境"
+---
+
+工作区（Workspace）是智能体的运行环境。它提供智能体行动所需的资源，并统一管理其中所有资源的生命周期（MCP 服务器进程、动态添加的技能、卸载的文件）：
+
+| 资源 | 工作区提供的能力 |
+|------|------------------|
+| 工具 | 通过工作区后端执行的内置工具（Bash、Read、Write 等），以及已注册 MCP 服务提供的工具 |
+| 技能 | 存放在 `skills/` 目录下的 Markdown 指令集，供智能体的 `Skill` 查看器读取 |
+| 上下文卸载 | 通过 `Offloader` 协议持久化被压缩的消息与被截断的工具结果 |
+
+AgentScope 提供七种工作区实现，各对应一种运行环境。所有实现共享同一接口，同一份智能体代码可以运行在任意后端上：
+
+| 类 | 运行环境 | 持久化方式 |
+|----|----------|-----------|
+| `LocalWorkspace` | 本机文件系统 | 主机上的 `workdir` 目录 |
+| `BubblewrapWorkspace` | Linux [bubblewrap](https://github.com/containers/bubblewrap) 沙箱 | 主机 `host_workdir` 挂载到沙箱内 `/workspace`；不传则使用关闭时删除的临时目录 |
+| `DockerWorkspace` | Docker 容器 | 主机 `workdir` 挂载到容器内 `/workspace`；不传则为临时容器 |
+| `E2BWorkspace` | [E2B](https://e2b.dev) 云沙箱 | 沙箱文件系统；通过沙箱元数据重新挂接 |
+| `DaytonaWorkspace` | [Daytona](https://www.daytona.io) 沙箱 | 沙箱文件系统；通过沙箱标签重新挂接 |
+| `K8sWorkspace` | Kubernetes Pod | 挂载到 Pod 的 PVC；按工作区标识派生的名称重新挂接 |
+| `OpenSandboxWorkspace` | [OpenSandbox](https://github.com/agentscope-ai/opensandbox) 沙箱 | 沙箱文件系统；通过沙箱元数据重新挂接 |
+
+## 接口
+
+所有实现都派生自 `WorkspaceBase`，其方法可分为四类角色：
+
+| 角色 | 方法 | 调用方 |
+|------|------|--------|
+| 生命周期 | `initialize()` / `close()` / `reset()`，以及 `async with` 协议 | 开发者，或工作区管理器 |
+| 资源发现 | `list_tools()` / `list_mcps()` / `list_skills()` / `get_instructions()` | 装配智能体时，用于构建工具包与系统提示 |
+| 上下文卸载 | `offload_context()` / `offload_tool_result()` | 智能体，在压缩或截断触发时 |
+| 动态管理 | `add_mcp()` / `remove_mcp()` / `add_skill()` / `remove_skill()` | 开发者或服务，在运行时 |
+
+对于沙箱类后端（Bubblewrap、Docker、E2B、Daytona、K8s、OpenSandbox），MCP 服务器运行在隔离环境*内部*，主机通过工作区内的网关访问它们，详见 [MCP 网关](/versions/2.0.8/zh/building-blocks/workspace/mcp-gateway)。
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="运行工作区" icon="play" href="/versions/2.0.8/zh/building-blocks/workspace/run-workspace">
+    在任意后端上创建工作区，并接入智能体。
+  </Card>
+  <Card title="管理资源" icon="boxes-stacked" href="/versions/2.0.8/zh/building-blocks/workspace/manage-resources">
+    在运行时添加、移除 MCP 服务与技能。
+  </Card>
+  <Card title="MCP 网关" icon="tower-broadcast" href="/versions/2.0.8/zh/building-blocks/workspace/mcp-gateway">
+    沙箱类工作区如何把内部的 MCP 服务暴露给主机。
+  </Card>
+  <Card title="工作区管理器" icon="server" href="/versions/2.0.8/zh/deploy/workspace-manager">
+    在服务中按用户、智能体或会话分配与隔离工作区。
+  </Card>
+</CardGroup>

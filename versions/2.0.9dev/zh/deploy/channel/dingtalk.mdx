@@ -1,0 +1,193 @@
+---
+title: "钉钉"
+description: "在钉钉中与智能体服务里的智能体对话。"
+---
+
+钉钉渠道通过官方 Stream 模式建立长连接接入，无需公网回调地址，本地或内网部署也能直接使用。目前钉钉渠道的实现支持：
+
+- **交互式卡片确认**：智能体调用需要审批的工具时，在钉钉里以卡片形式请求确认，点击按钮即可批准或拒绝；
+- **流式回复**：回答在同一张 AI 卡片内逐步更新；
+- **多模态输入**：接收用户发来的图片、文件、语音、视频与图文混排消息，交给智能体处理；
+- **主动发送**：智能体可以查询通讯录与已知聊天，把消息、图片、文件发送到当前会话之外的用户或群。
+
+接入分三步：在[钉钉开放平台](https://open.dingtalk.com/)创建应用并拿到凭据，启动一个智能体服务承载渠道，最后在管理界面添加钉钉渠道。卡片模板不需要准备，渠道自带默认值。
+
+## 前置条件
+
+钉钉渠道依赖 `dingtalk-stream`，随 `channel` 可选依赖安装：
+
+```bash 安装依赖
+pip install "agentscope[channel]"
+```
+
+## 创建应用
+
+在[钉钉开放平台](https://open.dingtalk.com/)完成企业内部应用与机器人的创建配置。
+
+<Steps>
+  <Step title="创建企业内部应用">
+    在开发者后台创建一个"企业内部应用"，填写名称与图标。
+  </Step>
+  <Step title="记录 Client ID 与 Client Secret">
+    在应用的凭证与基础信息页，复制 **Client ID**（AppKey）与 **Client Secret**（AppSecret），稍后填入渠道配置。Client Secret 是机密，请妥善保管。
+  </Step>
+  <Step title="添加机器人能力">
+    在"应用能力"中添加"机器人"，填写机器人名称与图标，机器人才能收发消息。
+  </Step>
+  <Step title="消息接收模式选择 Stream">
+    在机器人配置页，把消息接收模式设为 **Stream 模式**，无需填写 HTTP 回调地址。
+  </Step>
+  <Step title="申请权限">
+    在"权限管理"中申请：企业内机器人发送消息、卡片实例的创建与更新、媒体文件的上传与下载。若需要 `ListUsers` 工具按姓名搜索用户，再申请通讯录的用户搜索与个人信息读取权限。具体权限项以[钉钉官方文档](https://open.dingtalk.com/document/)为准。
+  </Step>
+  <Step title="发布应用">
+    发布应用版本，使其在企业内可用。之后即可把机器人加入群聊，或直接与它私聊。
+  </Step>
+</Steps>
+
+## 启动智能体服务
+
+渠道运行在[智能体服务](/versions/2.0.9dev/zh/deploy/agent-service)之上。用 `create_app` 启动服务，并用 `channels` 参数声明允许接入的渠道类型。渠道依赖消息总线（`message_bus`），单机开发用 `InMemoryMessageBus` 即可，多进程或多节点部署再换成 `RedisMessageBus`。
+
+```python 启动承载渠道的智能体服务
+from agentscope.app import create_app
+from agentscope.app.channel import DingTalkChannel
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.storage import RedisStorage
+from agentscope.app.workspace_manager import LocalWorkspaceManager
+
+app = create_app(
+    storage=RedisStorage(host="localhost", port=6379),
+    # 单机开发用内存消息总线；多节点部署换成 RedisMessageBus
+    message_bus=InMemoryMessageBus(),
+    workspace_manager=LocalWorkspaceManager(basedir="./workspaces"),
+    channels=[DingTalkChannel],   # 本服务允许接入的渠道类型
+)
+# 用 uvicorn 启动后，渠道功能即可用
+# uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+## 添加渠道
+
+在智能体服务的管理界面（参见示例前端 [`examples/web_ui`](https://github.com/agentscope-ai/agentscope/tree/main/examples/web_ui)）中，通过可视化表单添加渠道，无需手写配置。
+
+<Steps>
+  <Step title="新建渠道并选择钉钉">
+    在渠道管理页新建一个渠道，平台类型选择"钉钉"。
+  </Step>
+  <Step title="填入凭据">
+    把上一步拿到的 **Client ID** 与 **Client Secret** 填入凭据表单。
+  </Step>
+  <Step title="配置路由规则">
+    选择消息交给哪个智能体、会话如何划分。路由规则的含义见[会话路由](/versions/2.0.9dev/zh/deploy/channel/routing)。
+  </Step>
+  <Step title="保存并启用">
+    保存后启用渠道，服务立即建立与钉钉的 Stream 连接，机器人上线。把它加入群聊或发起私聊即可开始对话。
+  </Step>
+</Steps>
+
+<Note>
+管理界面的操作对应一组 `/channels` 接口，需要以编程方式批量创建渠道时可直接调用，字段见本章 [API](/versions/2.0.9dev/en/deploy/openapi.json) 部分。
+</Note>
+
+## 平台配置
+
+钉钉渠道的平台专属字段：
+
+| 字段 | 说明 | 默认值 |
+|---|---|---|
+| `only_at_reply` | 群聊中是否仅在被 @ 时才回复。私聊不受影响，始终回复 | `true` |
+| `show_thinking` | 是否把模型的思考过程一并展示在回复里 | `false` |
+| `show_tool_process` | 是否把工具调用与结果一并展示在回复里 | `false` |
+| `max_media_bytes` | 单个收发附件的最大字节数，上限 100 MB | `10485760`（10 MB） |
+| `approval_card_template_id` | 工具审批卡片使用的模板 ID，留空则不下发审批卡片 | 钉钉发布的公共 AI 卡片 |
+| `streaming_card_template_id` | 流式回复使用的 AI 卡片模板 ID，留空则回复走普通 Markdown 消息 | 钉钉发布的流式 AI 卡片 |
+| `streaming_card_key` | AI 卡片流式组件的模板变量名 | `content` |
+
+<Note>
+路由匹配 `chat_type` 时，群聊的值为 `group`，私聊为 `private`。
+</Note>
+
+## 自定义卡片
+
+钉钉渠道会下发两种卡片：智能体调用需要审批的工具时下发**审批卡片**，回复过程中逐步更新的内容承载在**流式卡片**上。两者都使用钉钉内置的公共模板，**接入时不需要做任何卡片相关的配置**。
+
+内置模板的外观是固定的：排版、按钮的配色与宽度都无法调整，也去不掉卡片自带的反馈区。想改这些，就到[卡片平台](https://open-dev.dingtalk.com/fe/card)建一个自己的模板，把模板 ID 填进渠道配置对应的字段：
+
+| 卡片 | 配置字段 | 默认 |
+|---|---|---|
+| 审批卡片 | `approval_card_template_id` | 钉钉发布的通用 AI 卡片 |
+| 流式卡片 | `streaming_card_template_id` | 钉钉发布的流式 AI 卡片 |
+
+换成自己的模板后渠道代码无需改动，但模板需要声明渠道会填充的变量，两种卡片各自的要求见下。
+
+### 审批卡片
+
+渠道下发审批卡片时填充以下变量，模板按需绑定：
+
+| 变量 | 内容 | 示例 |
+|---|---|---|
+| `title` | 由哪个智能体发起 | `Friday 提交的工具执行` |
+| `name` | 待执行的工具名 | `Bash` |
+| `input` | 工具参数，超长时按字节截断 | `{"command": "ls -la"}` |
+| `created_at` | 工具调用的创建时间 | `2026-08-24 18:26:25` |
+| `status` | 卡片状态 | `pending` / `approved` / `denied` |
+
+`name`、`input`、`created_at` 直接取自智能体的工具调用记录（`ToolCallBlock` 的同名字段），因此模板作者不需要学习一套新的字段名。`status` 是卡片自身的状态：下发时为 `pending`，用户做出决定后渠道把它更新为 `approved` 或 `denied`，模板可以用它控制按钮与结果文案的显示。
+
+模板中放置"同意"与"拒绝"两个回传按钮，在按钮的回传参数（`cardPrivateData.params`）里带上 `action`：
+
+| 决定 | `action` 可用取值 |
+|---|---|
+| 批准 | `allow`、`approve`、`approved`、`accept`、`agree` |
+| 拒绝 | `deny`、`denied`、`reject` |
+
+按钮**只需要回传 `action`**，不必携带任何路由信息。渠道用建卡时指定的 `outTrackId` 定位对应的工具调用，用回调自带的会话信息定位聊天。
+
+<Tip>
+仓库里提供了一份可直接导入的模板：[`assets/dingtalk/tool_approval_card.json`](https://github.com/agentscope-ai/agentscope/blob/main/assets/dingtalk/tool_approval_card.json)。在卡片平台新建模板时导入该文件，**发布**后把模板 ID 填入 `approval_card_template_id`。忘记发布会导致建卡失败并返回 `param.templateUnpublished`。
+</Tip>
+
+<Warning>
+把 `approval_card_template_id` 置空会关闭审批卡片。此时需要确认的工具调用无法在钉钉里得到答复，渠道会在聊天中提示模板为空，会话停在等待确认的状态。
+</Warning>
+
+### 流式卡片
+
+流式卡片的模板里要有一个 AI 卡片流式组件，渠道把逐步生成的 Markdown 写进它。把该组件的变量名填到渠道配置的 `streaming_card_key`，使用内置模板时这个名字是 `content`。
+
+## 智能体工具
+
+渠道会向智能体额外提供一组钉钉工具，用于把消息发到当前会话之外的用户或群。发送目标由查询类工具返回，形如 `user:<staffId>` 或 `group:<openConversationId>`，智能体原样传给发送类工具即可。
+
+| 工具 | 作用 | 权限 |
+|---|---|---|
+| `ListConversations` | 列出本进程收到过消息的聊天，分离部署下始终为空 | 只读，直接放行 |
+| `ListUsers` | 在企业通讯录中按姓名搜索用户 | 只读，直接放行 |
+| `SendMessage` | 向指定用户或群发送 Markdown 文本 | 需用户确认 |
+| `SendImage` | 把工作区里的图片发送到指定用户或群，在聊天中直接渲染 | 需用户确认 |
+| `SendFile` | 把工作区里的文件发送到指定用户或群，支持 doc、docx、pdf、rar、xlsx、zip | 需用户确认 |
+
+<Warning>
+钉钉的企业内部机器人无法枚举自己加入的全部群聊，而且回答这次调用的进程并不是持有机器人连接的那个，因此在分离部署下 `ListConversations` 的结果始终为空。请把空结果当作常态，直接向用户询问目标。
+</Warning>
+
+## 验证与排查
+
+- 在管理界面查看渠道状态，或调用 `GET /channels/{id}/status` 确认 Stream 连接已建立。
+- 若机器人在群里不响应，先确认 `only_at_reply` 与 @ 行为是否符合预期，再检查发送消息权限是否已申请并随版本发布。
+- 若机器人完全不上线，检查 Client ID / Client Secret 是否正确、消息接收模式是否设为 Stream。
+- 若点击卡片按钮没有反应，检查按钮是否配成了回传请求，以及回传参数里的 `action` 取值是否在上表中。
+- 若群聊正常而私聊发送失败并返回 `chatbotId.notAllow.sendOTO`，说明机器人的单聊消息能力未启用，在开发者后台启用机器人并发布应用版本。
+- 若附件发送失败，检查文件是否超过 `max_media_bytes`，以及扩展名是否在钉钉支持的范围内。
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="会话路由" icon="route" href="/versions/2.0.9dev/zh/deploy/channel/routing" cta="查看详情" arrow>
+    把不同的群路由到不同的智能体。
+  </Card>
+  <Card title="飞书" icon="comment" href="/versions/2.0.9dev/zh/deploy/channel/feishu" cta="查看详情" arrow>
+    用同一套流程接入飞书。
+  </Card>
+</CardGroup>

@@ -1,0 +1,35 @@
+---
+title: "Overview"
+description: "Talk to an agent by voice, and let it call tools while the conversation runs"
+---
+
+<Warning>
+Realtime agents are experimental. The interfaces may change in future releases.
+</Warning>
+
+A realtime agent (`RealtimeAgent`) takes speech in and sends speech back: it listens continuously, answers out loud, and calls tools mid-conversation, instead of waiting for a complete text message before replying.
+
+Two implementations exist, differing in how audio reaches the model:
+
+| Implementation | How it works |
+|----------------|--------------|
+| Speech-to-speech | Audio flows straight in and out of one end-to-end speech model, which handles recognition, understanding, and synthesis internally |
+| Cascaded (ASR + LLM + TTS) | Speech recognition turns the user's voice into text for an `Agent`, and speech synthesis speaks the reply |
+
+AgentScope supports the speech-to-speech implementation today; the cascaded one is coming soon. Both share the following capabilities:
+
+| Capability | Description |
+|------------|-------------|
+| Turn detection | Voice activity detection (VAD) decides when the user starts and stops speaking, which marks the turn boundaries. The provider API can do this, or you can plug in a local VAD |
+| Barge-in | The moment the user speaks, the current reply stops, and the context keeps only the part the user actually heard. Your code can interrupt as well |
+| Tool calling | Works with `Toolkit` and the permission system, so tools run during the voice conversation |
+| Human-in-the-loop | The agent can ask the user to confirm a tool call without pausing the audio stream |
+| Automatic reconnection | After the provider API closes a session, the user's next utterance reconnects it, with the conversation history kept in the agent's state |
+
+Each implementation has its own page:
+
+<CardGroup cols={2}>
+  <Card title="Speech-to-Speech" icon="waveform-lines" href="/versions/2.0.9dev/en/building-blocks/realtime/speech-to-speech" cta="Learn more" arrow>
+    Hold a realtime voice conversation through an end-to-end speech model, with barge-in, tool calling, and automatic reconnection.
+  </Card>
+</CardGroup>

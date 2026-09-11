@@ -1,0 +1,85 @@
+---
+title: "Manage Resources"
+description: "Add and remove MCP servers and skills at runtime"
+---
+
+A workspace's resources are not fixed at creation time. MCP servers and skills can be added or removed while the workspace is running, and every change is persisted so it survives restarts. The lifecycle methods round out the picture, taking a workspace from provisioned to released.
+
+## Manage MCP Servers
+
+MCP declarations are isolated by `agent_id + session_id`. Even when several sessions share one workspace, the connections, cookies and login state of a stateful MCP never leak into another session. The client is only connected the first time that session calls `list_mcps`:
+
+```python
+from agentscope.mcp import MCPClient, HttpMCPConfig
+
+# Register a new MCP server; raises ValueError if the name already exists
+await workspace.add_mcp(
+    MCPClient(
+        name="amap",
+        is_stateful=False,
+        mcp_config=HttpMCPConfig(url="https://mcp.amap.com/mcp?key=..."),
+    ),
+    agent_id="coder",
+    session_id="session-1",
+)
+
+# Deregister by name; unknown names log a warning and return silently
+await workspace.remove_mcp(
+    "amap",
+    agent_id="coder",
+    session_id="session-1",
+)
+
+# Enumerate the currently registered clients
+mcps = await workspace.list_mcps(
+    agent_id="coder",
+    session_id="session-1",
+)
+```
+
+<Note>
+Persistence follows the workspace's own model: an ephemeral `DockerWorkspace` without a host `workdir` keeps the MCP list in memory only, and it is lost when the container goes away.
+</Note>
+
+## Manage Skills
+
+Skills are isolated by `agent_id`. `skill_paths` first populates the `skills/.seed` template; the workspace creates a private partition for an agent the first time it accesses skills. `add_skill`, `remove_skill` and `list_skills` only operate on the given agent's partition:
+
+```python
+# Copy a local skill directory into the workspace;
+# raises ValueError if SKILL.md is missing or the directory already exists
+await workspace.add_skill("./skills/web-search", agent_id="coder")
+
+# Delete by the skill's front-matter name; raises KeyError if not found
+await workspace.remove_skill("web-search", agent_id="coder")
+
+# Enumerate the available skills (parsed from each SKILL.md)
+skills = await workspace.list_skills(agent_id="coder")
+```
+
+## Manage the Lifecycle
+
+Three methods take a workspace through its life, and the `async with` protocol wraps `initialize` / `close` for scoped use:
+
+| Method | Effect |
+|--------|--------|
+| `initialize()` | Provision the backend (start the container / sandbox / Pod), restore MCP declarations, and prepare the skill seed |
+| `reset()` | Return the workspace to an empty state: close and remove all MCPs, delete all skills, and wipe per-session state |
+| `close()` | Release all resources and connections |
+
+```python
+async with LocalWorkspace(workdir="./ws") as workspace:
+    ...  # initialize() on entry, close() on exit
+```
+
+<Warning>
+`reset()` deletes the MCP declarations, skill partitions and session state of every session. Afterwards, a session inherits `default_mcps` again the next time it accesses MCPs, but `skill_paths` is **not** re-seeded.
+</Warning>
+
+## Allocate Workspaces in a Service
+
+In a multi-tenant service, deciding which request gets which workspace (per user, per agent, or per session), caching live instances, and evicting idle ones is the job of the **workspace manager**, a separate service-side component. See its dedicated chapter:
+
+<Card title="Workspace Manager" icon="server" href="/versions/2.0.8/en/deploy/workspace-manager" cta="View deployment docs" arrow>
+  Allocation, isolation policies, TTL eviction, and integration with the Agent Service.
+</Card>

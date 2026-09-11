@@ -1,0 +1,238 @@
+---
+title: "Run Agent"
+description: "Run agents and work with their replies, context, and state"
+---
+
+The `Agent` class abstracts what an agent does into a small set of behaviors, each suited to a different goal:
+
+| Behavior | Interface | Use It For |
+|----------|-----------|------------|
+| [Reply](#reply) | `reply`, `reply_stream` | Drive the reasoning-acting loop, in one shot or as a real-time event stream |
+| [Structured Output](#structured-output) | `structured_schema` parameter | Require the reply to produce fields conforming to a JSON schema |
+| [Observation](#message-observation) | `observe` | Inject messages into context without triggering a reply |
+| [Context Compression](#context-compression) | `compress_context` | Keep long conversations within the model's context window |
+| [State Persistence](#state-persistence) | `agent.state` plus a storage backend | Pause a session in one process and resume it in another |
+
+## Reply
+
+`reply` and `reply_stream` drive the same reasoning-acting loop over the same `inputs`; they differ only in how results are delivered. The `inputs` parameter accepts:
+
+| Input | Effect |
+|-------|--------|
+| A single `Msg` or a list of `Msg` | Start a new reply |
+| `UserConfirmResultEvent`, `ExternalExecutionResultEvent` | Resume from a paused state (see [Human-in-the-Loop](/versions/2.0.8/en/building-blocks/agent/human-in-the-loop)) |
+| `UserInterruptEvent` | Abort a paused reply (see [Interrupt Agent](/versions/2.0.8/en/building-blocks/agent/interrupt-agent)) |
+| `None` | Continue from the current state without new input |
+
+### Basic Reply
+
+One call in, one final `Msg` out: the simplest way to run the agent, suited for automation where intermediate events don't matter.
+
+`reply` consumes all events internally and returns the final `Msg` when the agent finishes. If the reply pauses for outside interaction, it returns a waiting notice whose `finished_reason` is `None`, meaning the reply is not finished yet.
+
+```python
+import asyncio
+from agentscope.message import UserMsg
+
+async def main():
+    msg = UserMsg(name="user", content="What files are in the current directory?")
+    result = await agent.reply(msg)
+    print(result.get_text_content())
+
+asyncio.run(main())
+```
+
+Besides the text content, the returned `Msg` carries the reply's full outcome. The fields worth checking after each call:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | `list[ContentBlock]` | All blocks produced across the iterations (text, thinking, tool calls, and tool results) |
+| `finished_reason` | `ReplyFinishedReason \| None` | How the reply ended: `completed`, `interrupted`, `exceed_max_iters`, or `error`; `None` means paused, not finished |
+| `structured_output` | `dict \| None` | The validated result when a `structured_schema` was required (see [Structured Output](#structured-output)) |
+| `usage` | `Usage \| None` | Total input/output tokens accumulated over all model calls in this reply |
+| `error` | `ErrorInfo \| None` | Structured error info, populated only when `finished_reason` is `error` |
+| `finished_at` | `str \| None` | ISO 8601 timestamp when the reply finished |
+
+<Note>
+A reply with `finished_reason` set to `exceed_max_iters` usually still carries usable text: when the iteration budget runs out before the agent has produced a final answer, the framework makes one more model call with tools disabled and asks it to summarize the work and findings so far. That finalization runs at most once; only if it too produces no text does the reply end empty.
+</Note>
+
+See [Message & Event](/versions/2.0.8/en/building-blocks/message-and-event) for the complete `Msg` structure and content block types.
+
+### Streaming Reply
+
+The agent emits text deltas, tool call progress, and lifecycle events in real time, which is the basis for interactive UIs.
+
+`reply_stream` yields `AgentEvent` objects as they are produced:
+
+```python
+async def main():
+    msg = UserMsg(name="user", content="Summarize the README.")
+    async for event in agent.reply_stream(msg):
+        if hasattr(event, "delta"):
+            print(event.delta, end="", flush=True)
+
+asyncio.run(main())
+```
+
+Pass `yield_final_msg=True` to additionally yield the final `Msg` as the last item of the stream. This is useful when you need the assembled reply message (e.g. its `structured_output` attribute) besides the events:
+
+```python
+from agentscope.message import Msg
+
+async for chunk in agent.reply_stream(msg, yield_final_msg=True):
+    if isinstance(chunk, Msg):
+        print("Final message:", chunk.get_text_content())
+```
+
+## Structured Output
+
+A reply can be required to produce fields conforming to a JSON schema, which is typical for generating reports or emitting control fields that drive a workflow.
+
+Pass a Pydantic model class via `structured_schema`. The agent equips a builtin `GenerateStructuredOutput` tool whose input schema is your schema: it reasons and calls other tools freely first, then submits the result through this tool. Validation errors are fed back to the model for retry, and the validated result lands on the final message's `structured_output` attribute as a plain dict (the message text is only a placeholder).
+
+<CodeGroup>
+
+```python Basic Reply
+from pydantic import BaseModel, Field
+from agentscope.message import UserMsg
+
+class WeatherReport(BaseModel):
+    city: str = Field(description="The city name")
+    temperature: float = Field(description="Temperature in Celsius")
+
+result = await agent.reply(
+    UserMsg(name="user", content="What's the weather in Hangzhou?"),
+    structured_schema=WeatherReport,
+)
+print(result.structured_output)  # {"city": "Hangzhou", "temperature": ...}
+```
+
+```python Streaming Reply
+from agentscope.message import Msg, UserMsg
+
+async for chunk in agent.reply_stream(
+    UserMsg(name="user", content="What's the weather in Hangzhou?"),
+    structured_schema=WeatherReport,
+    yield_final_msg=True,
+):
+    if isinstance(chunk, Msg):
+        print(chunk.structured_output)
+```
+
+</CodeGroup>
+
+The requirement is scoped to one reply and survives human-in-the-loop pauses, state persistence, and process restarts, because the schema is stored in the agent state as a plain dict. When resuming a parked reply, do not pass `structured_schema` again; the reply continues with the schema it was parked with.
+
+<Note>
+- Validation adapts to how the reply runs. In process, the class itself validates the output: defaults (including `default_factory`) are filled, extra fields are dropped, and custom validators are executed. After reloading a serialized state, only the JSON schema remains: schema-declared defaults are filled, extra fields are kept, and custom validators are skipped.
+- On reaching `max_iters` without output, the agent forces the `GenerateStructuredOutput` call within `structured_output_grace_iters` extra iterations (default 5). If it still fails, the reply ends with `finished_reason=EXCEED_MAX_ITERS` and `structured_output` is `None`; check for `None` before use.
+</Note>
+
+## Message Observation
+
+Messages can be injected into the agent's context without triggering a reply. This is useful in multi-agent setups where one agent needs to see another's output.
+
+```python
+await agent.observe(other_agent_msg)
+```
+
+## Context Compression
+
+Long conversations are kept within the model's context window by summarizing older messages, triggered automatically or on demand.
+
+The agent compresses its context when the token count exceeds `context_config.trigger_ratio × model.context_length`, and offloads the summarized messages to disk if an `offloader` is configured.
+
+`compress_context` takes two optional arguments: a `context_config` that overrides the default thresholds for this call, and an `instructions` `HintBlock` that is injected into the compression context to guide the summarization (for example, what must be preserved):
+
+```python
+from agentscope.agent import ContextConfig
+from agentscope.message import HintBlock
+
+# Use the agent's default config
+await agent.compress_context()
+
+# Or pass a custom config for this call only
+await agent.compress_context(
+    ContextConfig(trigger_ratio=0.6, reserve_ratio=0.2)
+)
+
+# Or inject instructions to guide the summarization
+await agent.compress_context(
+    instructions=HintBlock(
+        hint="Keep every file path and API signature mentioned so far.",
+    ),
+)
+```
+
+Tool results that exceed `tool_result_limit` tokens are truncated automatically; with an `offloader`, the truncated portion is offloaded and the agent receives a path reference it can read on demand. See [Context](/versions/2.0.8/en/building-blocks/context/overview) for the full compression pipeline and offloading.
+
+<Note>
+If the system prompt alone exceeds the compression threshold, `compress_context` raises a `RuntimeError`. Keep system prompts concise or increase the model's context length.
+</Note>
+
+## State Persistence
+
+The complete agent state serializes to JSON, so a reply can pause in one process and resume in another. This is the basis for multi-session services.
+
+`AgentState` holds everything needed to resume exactly where the agent left off: conversation context, compression summary, permission rules, tool state, and the current reply position. `RedisStorage` is the built-in storage backend, organising state under a `(user_id, agent_id, session_id)` key hierarchy:
+
+| Method | Description |
+|--------|-------------|
+| `get_session(user_id, agent_id, session_id)` | Load a `SessionRecord` whose `.state` field is the saved `AgentState` |
+| `update_session_state(user_id, agent_id, session_id, state)` | Persist the updated `AgentState` back to Redis after a reply |
+
+```python
+import asyncio
+from agentscope.agent import Agent
+from agentscope.state import AgentState
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+from agentscope.app.storage import RedisStorage
+
+USER_ID = "user_123"
+AGENT_ID = "agent_456"
+SESSION_ID = "session_789"
+
+async def main():
+    async with RedisStorage(host="localhost", port=6379) as storage:
+        # Load state from storage, fall back to a fresh state if not found
+        record = await storage.get_session(
+            user_id=USER_ID,
+            agent_id=AGENT_ID,
+            session_id=SESSION_ID,
+        )
+        state = record.state if record else AgentState()
+
+        # Create the agent with the restored state
+        agent = Agent(
+            name="my_agent",
+            system_prompt="You are a helpful assistant.",
+            model=DashScopeChatModel(
+                credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+                model="qwen-max",
+            ),
+            state=state,
+        )
+
+        # Run a reply turn
+        result = await agent.reply(
+            UserMsg(name="user", content="Continue where we left off."),
+        )
+        print(result.get_text_content())
+
+        # Persist the updated state back to Redis
+        await storage.update_session_state(
+            user_id=USER_ID,
+            agent_id=AGENT_ID,
+            session_id=SESSION_ID,
+            state=agent.state,
+        )
+
+asyncio.run(main())
+```
+
+<Note>
+`update_session_state` raises `KeyError` if the session does not exist yet. Use `upsert_session` to create the session record on the first turn, then switch to `update_session_state` for subsequent turns.
+</Note>

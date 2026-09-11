@@ -1,0 +1,267 @@
+---
+title: "运行工作区"
+description: "在任意后端上创建工作区，并接入智能体"
+---
+
+运行一个工作区分两步：在与目标环境匹配的后端上创建工作区，再把它的资源交给智能体。
+
+## 创建工作区
+
+每种后端有各自的持久化模型与目录布局，选择与目标环境匹配的标签页：
+
+<Tabs>
+  <Tab title="本地">
+    `LocalWorkspace` 把状态直接持久化在主机文件系统的 `workdir` 之下，重启后重新打开同一目录即可。目录布局如下：
+
+    ```
+    {workdir}/
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态内容（按 SHA-256 去重）
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 各会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import LocalWorkspace
+
+    workspace = LocalWorkspace(
+        workdir="/data/my-workspace",
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="Bubblewrap">
+    `BubblewrapWorkspace` 通过 [bubblewrap](https://github.com/containers/bubblewrap)（`bwrap`）执行每一条命令，无需守护进程或云端账号，只要 Linux 主机上装有 `bwrap` 即可。`host_workdir` 以读写方式挂载到沙箱内的 `/workspace`，用于保存状态；不传该参数则使用临时目录，关闭时一并删除。
+
+    ```
+    {host_workdir}/    # 主机目录，挂载到沙箱内的 /workspace
+    ├── .agentscope    # 网关虚拟环境与运行时文件
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态数据
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 每个会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import BubblewrapWorkspace
+
+    workspace = BubblewrapWorkspace(
+        host_workdir="/data/bwrap-workspaces/agent-1",  # 挂载到 /workspace
+        host_cache_dir=None,        # None 表示使用工作区私有的包缓存目录
+        gateway_port=None,          # None 表示自动选择可用的回环端口
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+
+    <Warning>
+    该工作区**不隔离网络**。MCP 网关需要在多次 `bwrap` 执行之间通过主机回环地址访问，因此 `share_net` 必须保持为 `True`，沙箱内的代码与主机共享网络命名空间：主机能访问的服务它都能访问，包括其他回环服务与云环境的元数据地址。除网络命名空间外，bubblewrap 仍然隔离其余命名空间与挂载的文件系统。如果业务同时需要网络隔离，请改用 Docker、K8s 或云沙箱。
+    </Warning>
+
+    显式传入的 `host_cache_dir` 不能与 `host_workdir` 重叠；多个工作区共用同一缓存目录会以隔离性换取更快的初始化速度，仅建议在互相信任的工作区之间使用。
+  </Tab>
+
+  <Tab title="Docker">
+    `DockerWorkspace` 把主机 `workdir` 挂载到容器内的 `/workspace`，因此下面的目录位于主机上，容器重启后依然存在。不传 `workdir` 则得到一个纯临时容器，可写层随容器一起消失。
+
+    ```
+    {workdir}/         # 主机目录，挂载到容器内 /workspace
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态内容
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 各会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import DockerWorkspace
+
+    workspace = DockerWorkspace(
+        base_image="python:3.11-slim",
+        workdir="/data/docker-workspaces/agent-1",  # 挂载到 /workspace
+        node_version="20",
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="E2B">
+    `E2BWorkspace` 以沙箱文件系统本身作为持久化层，没有主机 `workdir`。每个沙箱的 E2B 元数据中记录了 `workspace_id`；重启后工作区通过 `AsyncSandbox.list(...)` 查找并用 `connect(sandbox_id=...)` 重连。暂停会保留磁盘状态，恢复后原样还原。
+
+    ```
+    $workdir/          # 沙箱内部
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态内容
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 各会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import E2BWorkspace
+
+    workspace = E2BWorkspace(
+        template="base",
+        api_key="your-e2b-api-key",   # 或设置 E2B_API_KEY 环境变量
+        timeout_seconds=300,
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="Daytona">
+    `DaytonaWorkspace` 面向 [Daytona](https://www.daytona.io) 部署，以沙箱文件系统作为持久化层，没有主机 `workdir`。每个沙箱的 Daytona 标签中记录了 `workspace_id`；重启后工作区按该标签重新挂接，沿用沙箱的磁盘状态。
+
+    ```
+    $workdir/          # 沙箱内部
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态内容
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 各会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import DaytonaWorkspace
+
+    workspace = DaytonaWorkspace(
+        api_key="your-daytona-api-key",  # "" 时读取 SDK 的环境配置
+        api_url="",                      # 可选，用于自建部署
+        timeout_seconds=300,
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="Kubernetes">
+    `K8sWorkspace` 在 Kubernetes 集群上为每个工作区运行一个 Pod，并挂载一个 PVC 作为持久化层，下面的文件系统在 Pod 重启后依然存在。重启后工作区按工作区标识派生的名称重新挂接 Pod 与 PVC。设置 `delete_pvc_on_close=True` 可在关闭工作区时一并删除 PVC。
+
+    ```
+    /workspace/        # Pod 内部，由 PVC 支撑
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态内容
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 各会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import K8sWorkspace
+
+    workspace = K8sWorkspace(
+        namespace="agentscope",       # Pod 与 PVC 所在的命名空间
+        kubeconfig=None,              # None 时使用集群内配置
+        image="python:3.11-slim",     # 容器镜像
+        storage_size="1Gi",           # 支撑文件系统的 PVC 大小
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+  </Tab>
+
+  <Tab title="OpenSandbox">
+    `OpenSandboxWorkspace` 面向 [OpenSandbox](https://github.com/agentscope-ai/opensandbox) 部署，以沙箱文件系统作为持久化层，没有主机 `workdir`。每个沙箱在 `agentscope.workspace.id` 元数据键下记录了 `workspace_id`；重启后工作区按该键过滤 `list_sandbox_infos(...)`，恢复匹配的沙箱并原样还原磁盘状态。
+
+    ```
+    /workspace/        # 沙箱内部（SANDBOX_WORKDIR）
+    ├── .mcp           # 按智能体/会话保存的 MCP 声明
+    ├── data/          # 卸载的多模态内容
+    ├── skills/        # .seed 模板及按智能体隔离的技能目录
+    └── sessions/      # 各会话的 context.jsonl 与工具结果文件
+    ```
+
+    ```python
+    from agentscope.workspace import OpenSandboxWorkspace
+
+    workspace = OpenSandboxWorkspace(
+        image="python:3.11-slim",
+        api_key="your-opensandbox-api-key",  # 或使用 SDK 的环境变量回退
+        domain="your-opensandbox-domain",    # 可选，用于自建部署
+        protocol="http",
+        timeout_seconds=300,
+        extra_pip=["numpy", "pandas"],
+        default_mcps=[],
+        skill_paths=["./skills/web-search"],
+    )
+    await workspace.initialize()
+    ```
+
+    网关虚拟环境在首次 `initialize()` 时在沙箱内自举，`extra_pip` 的包会与网关基础依赖一并装入。由于精简基础镜像冷启动时要执行数分钟的 `apt-get` + `uv` + `pip`，自举命令使用更长的单命令超时；除非确认镜像已预装环境，否则请保持 `request_timeout_seconds` 的默认值（与自举预算一致）。
+  </Tab>
+</Tabs>
+
+<Note>
+`default_mcps` 与 `skill_paths` 是种子输入，但不会让资源在共享工作区内混用。每个智能体/会话在首次访问 MCP 时获得独立客户端实例；每个智能体在首次访问技能时，从 `skills/.seed` 复制出自己的技能分区。后续添加或删除只影响对应的智能体/会话。
+</Note>
+
+## 集成智能体
+
+工作区从两条路径接入 `Agent`：作为工具、MCP 与技能的来源，以及作为上下文压缩的卸载器：
+
+```python
+from agentscope.agent import Agent
+from agentscope.tool import Toolkit
+from agentscope.workspace import LocalWorkspace
+
+workspace = LocalWorkspace(workdir="./my-workspace")
+await workspace.initialize()
+
+agent_id = "coder"
+session_id = "session-1"
+
+agent = Agent(
+    name="coder",
+    system_prompt="你是一个编程助手。",
+    model=model,
+    toolkit=Toolkit(
+        tools=await workspace.list_tools(),
+        mcps=await workspace.list_mcps(
+            agent_id=agent_id,
+            session_id=session_id,
+        ),
+        skills_or_loaders=await workspace.list_skills(agent_id=agent_id),
+    ),
+    offloader=workspace,
+)
+```
+
+| 路径 | 接入方式 | 智能体获得的能力 |
+|------|----------|------------------|
+| 资源 | `Toolkit(tools=..., mcps=..., skills_or_loaders=...)` | 工作区中可用的内置工具、MCP 工具与技能 |
+| 卸载 | `Agent(offloader=workspace)` | 上下文压缩触发或工具结果超限时，智能体调用 `workspace.offload_context()` / `offload_tool_result()`，并以返回的引用路径替代原始内容 |
+
+`list_tools()` 返回的工具已绑定到工作区的执行后端，在沙箱类工作区上会在容器或沙箱内部运行。若要把自己构造的工具绑定到同一环境，通过 `workspace.get_backend()` 获取后端并传给工具构造函数，参见[切换工具后端](/versions/2.0.8/zh/building-blocks/tool/python-tool#切换工具后端)。
+
+<Tip>
+工作区以扁平列表的形式暴露资源，当工具过多、无法全部保持激活时，可以把它们划分为若干 `ToolGroup`。将分组传入 `Toolkit(tool_groups=[...])` 后，智能体通过内置的[元工具](/versions/2.0.8/zh/building-blocks/tool/manage-tools)按需激活；只有保留的 `basic` 组始终在线。
+
+```python
+from agentscope.tool import Toolkit, ToolGroup
+
+mcps = await workspace.list_mcps(
+    agent_id=agent_id,
+    session_id=session_id,
+)
+skills = await workspace.list_skills(agent_id=agent_id)
+
+toolkit = Toolkit(
+    tools=await workspace.list_tools(),         # 始终激活（basic 组）
+    tool_groups=[
+        ToolGroup(name="search", description="Web 搜索与检索。",
+                  mcps=[m for m in mcps if m.name.startswith("search")]),
+        ToolGroup(name="coding", description="代码编辑技能。",
+                  skills_or_loaders=skills),
+    ],
+)
+```
+</Tip>

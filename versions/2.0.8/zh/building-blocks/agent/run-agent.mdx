@@ -1,0 +1,238 @@
+---
+title: "运行智能体"
+description: "运行智能体，处理它的回复、上下文与状态"
+---
+
+`Agent` 类将智能体的行为抽象为一组接口，分别适用于不同的目标：
+
+| 行为 | 接口 | 适用场景 |
+|------|------|----------|
+| [回复](#回复) | `reply`、`reply_stream` | 驱动推理-行动循环，一次性返回结果或实时产出事件流 |
+| [结构化输出](#结构化输出) | `structured_schema` 参数 | 要求回复产出符合 JSON schema 的字段 |
+| [观察消息](#观察消息) | `observe` | 将消息注入上下文而不触发回复 |
+| [压缩上下文](#压缩上下文) | `compress_context` | 把长对话控制在模型的上下文窗口之内 |
+| [持久化状态](#持久化状态) | `agent.state` 搭配存储后端 | 在一个进程中暂停会话，在另一个进程中恢复 |
+
+## 回复
+
+`reply` 和 `reply_stream` 都接受相同的 `inputs` 参数，驱动相同的推理-行动循环，区别只在结果的交付方式。`inputs` 参数支持：
+
+| 输入 | 效果 |
+|------|------|
+| 单个 `Msg` 或 `Msg` 列表 | 开始一次新的回复 |
+| `UserConfirmResultEvent`、`ExternalExecutionResultEvent` | 从暂停状态恢复（参见[人机交互](/versions/2.0.8/zh/building-blocks/agent/human-in-the-loop)） |
+| `UserInterruptEvent` | 终止一次暂停中的回复（参见[中断智能体](/versions/2.0.8/zh/building-blocks/agent/interrupt-agent)） |
+| `None` | 不输入新内容，从当前状态继续 |
+
+### 基础回复
+
+一次调用返回一条最终 `Msg`：运行智能体最简单的方式，适合不关心中间事件的自动化场景。
+
+`reply` 在内部消费所有事件，并在智能体完成后返回最终 `Msg`。如果回复因等待外部交互而暂停，它会返回一条 `finished_reason` 为 `None` 的等待提示消息，表示回复尚未结束。
+
+```python
+import asyncio
+from agentscope.message import UserMsg
+
+async def main():
+    msg = UserMsg(name="user", content="当前目录有哪些文件？")
+    result = await agent.reply(msg)
+    print(result.get_text_content())
+
+asyncio.run(main())
+```
+
+除文本内容外，返回的 `Msg` 还携带本次回复的完整结果。每次调用后值得检查的字段如下：
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `content` | `list[ContentBlock]` | 各轮迭代产出的全部内容块（文本、思考、工具调用与工具结果） |
+| `finished_reason` | `ReplyFinishedReason \| None` | 回复的结束方式：`completed`、`interrupted`、`exceed_max_iters` 或 `error`；`None` 表示暂停中、尚未结束 |
+| `structured_output` | `dict \| None` | 传入 `structured_schema` 时经过校验的结果（参见[结构化输出](#结构化输出)） |
+| `usage` | `Usage \| None` | 本次回复所有模型调用累计的输入/输出 token 数 |
+| `error` | `ErrorInfo \| None` | 结构化错误信息，仅当 `finished_reason` 为 `error` 时填充 |
+| `finished_at` | `str \| None` | 回复结束时间（ISO 8601 时间戳） |
+
+<Note>
+`finished_reason` 为 `exceed_max_iters` 时，消息里通常仍有可用的文本答复：迭代预算用尽而智能体还没有给出最终文本时，框架会追加一次禁用工具的模型调用，要求它把已完成的工作与结论总结出来。这次收尾调用最多一次，它也没有产出文本时，回复才会以空文本结束。
+</Note>
+
+完整的 `Msg` 结构与内容块类型参见[消息与事件](/versions/2.0.8/zh/building-blocks/message-and-event)。
+
+### 流式回复
+
+智能体实时产出文本增量、工具调用进度和生命周期事件，这是构建交互式界面的基础。
+
+`reply_stream` 逐一产出 `AgentEvent` 对象：
+
+```python
+async def main():
+    msg = UserMsg(name="user", content="总结一下 README 的内容。")
+    async for event in agent.reply_stream(msg):
+        if hasattr(event, "delta"):
+            print(event.delta, end="", flush=True)
+
+asyncio.run(main())
+```
+
+传入 `yield_final_msg=True` 可以让流的最后一项额外产出最终 `Msg`。当你在事件之外还需要组装好的回复消息（例如它的 `structured_output` 属性）时很有用：
+
+```python
+from agentscope.message import Msg
+
+async for chunk in agent.reply_stream(msg, yield_final_msg=True):
+    if isinstance(chunk, Msg):
+        print("最终消息:", chunk.get_text_content())
+```
+
+## 结构化输出
+
+可以要求一次回复产出符合 JSON schema 的字段，典型场景是生成报告，或输出用于驱动工作流的控制字段。
+
+通过 `structured_schema` 传入一个 Pydantic 模型类。智能体会装配一个内置的 `GenerateStructuredOutput` 工具，其输入 schema 就是你的 schema：智能体先自由推理和调用其他工具，最后通过该工具提交结果。校验错误会反馈给模型重试，通过校验的结果以普通 dict 的形式落在最终消息的 `structured_output` 属性上（消息文本只是占位内容）。
+
+<CodeGroup>
+
+```python 基础回复
+from pydantic import BaseModel, Field
+from agentscope.message import UserMsg
+
+class WeatherReport(BaseModel):
+    city: str = Field(description="城市名")
+    temperature: float = Field(description="摄氏温度")
+
+result = await agent.reply(
+    UserMsg(name="user", content="杭州今天天气怎么样？"),
+    structured_schema=WeatherReport,
+)
+print(result.structured_output)  # {"city": "杭州", "temperature": ...}
+```
+
+```python 流式回复
+from agentscope.message import Msg, UserMsg
+
+async for chunk in agent.reply_stream(
+    UserMsg(name="user", content="杭州今天天气怎么样？"),
+    structured_schema=WeatherReport,
+    yield_final_msg=True,
+):
+    if isinstance(chunk, Msg):
+        print(chunk.structured_output)
+```
+
+</CodeGroup>
+
+结构化输出的要求以单次回复为作用域，并且能跨越人机交互暂停、状态持久化和进程重启，因为 schema 会以普通 dict 的形式存入智能体状态。恢复一次暂停的回复时，不要再次传入 `structured_schema`；回复会沿用暂停时保存的 schema 继续。
+
+<Note>
+- 校验方式随回复的运行方式自适应。进程内运行时，由模型类本身校验输出：默认值（含 `default_factory`）会被填充、多余字段被丢弃、自定义校验器会执行。从序列化状态恢复后，只剩下 JSON schema：schema 中声明的默认值会被填充、多余字段被保留、自定义校验器被跳过。
+- 达到 `max_iters` 仍无输出时，智能体会在 `structured_output_grace_iters`（默认 5）次额外迭代内强制调用 `GenerateStructuredOutput`。若仍失败，回复以 `finished_reason=EXCEED_MAX_ITERS` 结束且 `structured_output` 为 `None`，使用前请先判空。
+</Note>
+
+## 观察消息
+
+可以把消息注入智能体上下文而不触发回复。在多智能体场景中，让一个智能体看到另一个智能体的输出时非常有用。
+
+```python
+await agent.observe(other_agent_msg)
+```
+
+## 压缩上下文
+
+通过对较早的消息做摘要，长对话得以保持在模型的上下文窗口之内，既可自动触发，也可按需手动触发。
+
+当 token 数量超过 `context_config.trigger_ratio × model.context_length` 时，智能体会自动压缩上下文；若配置了 `offloader`，被摘要的消息还会被卸载到磁盘。
+
+`compress_context` 接受两个可选参数：`context_config` 为本次调用覆盖默认阈值；`instructions` 传入一个 `HintBlock`，注入压缩上下文来引导摘要行为（例如指定必须保留的信息）：
+
+```python
+from agentscope.agent import ContextConfig
+from agentscope.message import HintBlock
+
+# 使用智能体的默认配置
+await agent.compress_context()
+
+# 或为本次调用传入自定义配置
+await agent.compress_context(
+    ContextConfig(trigger_ratio=0.6, reserve_ratio=0.2)
+)
+
+# 或注入指令来引导摘要行为
+await agent.compress_context(
+    instructions=HintBlock(
+        hint="保留至今提到的所有文件路径与 API 签名。",
+    ),
+)
+```
+
+超过 `tool_result_limit` token 的工具结果会被自动截断；若配置了 `offloader`，截断的部分会被卸载，智能体会收到一个可按需读取的路径引用。完整的压缩流程与卸载机制参见[上下文管理](/versions/2.0.8/zh/building-blocks/context/overview)。
+
+<Note>
+如果系统提示词本身就超过了压缩阈值，`compress_context` 会抛出 `RuntimeError`。请保持系统提示词简洁，或增大模型的上下文长度。
+</Note>
+
+## 持久化状态
+
+完整的智能体状态可以序列化为 JSON，因此一次回复可以在一个进程中暂停、在另一个进程中恢复。这是构建多会话服务的基础。
+
+`AgentState` 保存了从断点精确恢复所需的全部信息：对话上下文、压缩摘要、权限规则、工具状态和当前回复位置。`RedisStorage` 是内置的存储后端，以 `(user_id, agent_id, session_id)` 为键层级组织状态：
+
+| 方法 | 描述 |
+|------|------|
+| `get_session(user_id, agent_id, session_id)` | 加载 `SessionRecord`，其 `.state` 字段即为保存的 `AgentState` |
+| `update_session_state(user_id, agent_id, session_id, state)` | 在回复结束后将更新后的 `AgentState` 持久化回 Redis |
+
+```python
+import asyncio
+from agentscope.agent import Agent
+from agentscope.state import AgentState
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+from agentscope.app.storage import RedisStorage
+
+USER_ID = "user_123"
+AGENT_ID = "agent_456"
+SESSION_ID = "session_789"
+
+async def main():
+    async with RedisStorage(host="localhost", port=6379) as storage:
+        # 从存储中加载状态，若不存在则使用全新状态
+        record = await storage.get_session(
+            user_id=USER_ID,
+            agent_id=AGENT_ID,
+            session_id=SESSION_ID,
+        )
+        state = record.state if record else AgentState()
+
+        # 使用恢复的状态创建智能体
+        agent = Agent(
+            name="my_agent",
+            system_prompt="你是一个有帮助的助手。",
+            model=DashScopeChatModel(
+                credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+                model="qwen-max",
+            ),
+            state=state,
+        )
+
+        # 执行一轮回复
+        result = await agent.reply(
+            UserMsg(name="user", content="继续之前的任务。"),
+        )
+        print(result.get_text_content())
+
+        # 将更新后的状态持久化回 Redis
+        await storage.update_session_state(
+            user_id=USER_ID,
+            agent_id=AGENT_ID,
+            session_id=SESSION_ID,
+            state=agent.state,
+        )
+
+asyncio.run(main())
+```
+
+<Note>
+若 session 尚不存在，`update_session_state` 会抛出 `KeyError`。首次创建时请使用 `upsert_session` 建立 session 记录，后续轮次再切换为 `update_session_state`。
+</Note>

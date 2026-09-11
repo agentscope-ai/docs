@@ -1,0 +1,420 @@
+---
+title: "Workspace Manager"
+description: "Manage the lifecycle of agent harness workspace"
+---
+
+The **workspace manager** owns the isolation policy and lifecycle of the [`Workspace`](/versions/2.0.8/en/building-blocks/workspace/overview) instances the Agent Service hands to each agent. It is the service-side counterpart of the `agentscope.workspace` module: for every workspace subclass there is one matching manager class that provisions, caches, and evicts it.
+
+Highlights:
+
+- **Configurable isolation grain** — `PER_AGENT` (default), `PER_SESSION`, or `PER_USER` — decides how workspaces are shared or isolated across the `(user_id, agent_id, session_id)` dimensions, so one deployment can serve many tenants cleanly.
+- **Pluggable sandbox backends** — the same lifecycle contract wraps a local directory, a bubblewrap sandbox, a Docker container, an E2B or Daytona or OpenSandbox cloud sandbox, or a Kubernetes Pod. Swapping backend is a one-line change in `create_app`.
+
+## Available managers
+
+| Class | Description |
+|-------|-------------|
+| `LocalWorkspaceManager` | Bare-metal workspaces under a host directory. Zero infra, no sandboxing — the agent runs against your host filesystem. |
+| `BubblewrapWorkspaceManager` | One [bubblewrap](https://github.com/containers/bubblewrap) sandbox per workspace, under a host directory. Needs only the `bwrap` binary on a Linux host, but shares the host network namespace. |
+| `DockerWorkspaceManager` | One Docker container per workspace, host directory bind-mounted for persistence. Requires a reachable Docker daemon. |
+| `E2BWorkspaceManager` | Managed cloud sandboxes via [E2B](https://e2b.dev). Sandboxes auto-suspend when idle and resume on next access. |
+| `DaytonaWorkspaceManager` | Managed cloud sandboxes via [Daytona](https://www.daytona.io). Reattachment is by sandbox label, and `user_id` / `agent_id` are forwarded as extra labels for dashboard filtering. |
+| `OpenSandboxWorkspaceManager` | Managed cloud sandboxes via [OpenSandbox](https://github.com/agentscope-ai/opensandbox). Sandboxes carry their own filesystem across pause/resume; reattachment is by sandbox metadata, so any service replica can reconnect. |
+| `K8sWorkspaceManager` | One Pod + PVC per workspace on a Kubernetes cluster. Fits production clusters where you already run other workloads. |
+
+Every manager caches its workspaces and evicts them `ttl` seconds after the last access (3600 by default). `LocalWorkspaceManager` collects expired entries on the next `get_workspace()` call; the sandboxed managers additionally run a background sweeper every `sweep_interval` seconds, so an idle container, sandbox, or Pod is released without waiting for the next request.
+
+<Tip>
+For an in-depth look at what a workspace *is* (filesystem layout, gateway, MCP wiring, builtin tools), see the [Workspace](/versions/2.0.8/en/building-blocks/workspace/overview) building-block chapter.
+</Tip>
+
+## Integrate with Agent Service
+
+Pick the manager that matches where you want the agent's tools to execute and pass it to `create_app`.
+
+<CodeGroup>
+
+```python Local
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    IsolationPolicy,
+    LocalWorkspaceManager,
+)
+
+workspace_manager = LocalWorkspaceManager(
+    # Host root; per-agent workdirs live at `<basedir>/<user_id>/<agent_id>`.
+    basedir="/data/workspaces",
+    # `PER_AGENT` (default): sessions of the same agent share one workspace.
+    # `PER_SESSION` / `PER_USER` change the grain; see below.
+    isolation=IsolationPolicy.PER_AGENT,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+```python Bubblewrap
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    BubblewrapWorkspaceManager,
+    IsolationPolicy,
+)
+
+workspace_manager = BubblewrapWorkspaceManager(
+    # Host root; each workspace gets `<basedir>/<hashed user_id>/<hashed workspace_id>`,
+    # mounted at `/workspace` inside the sandbox.
+    basedir="/data/workspaces",
+    isolation=IsolationPolicy.PER_AGENT,
+    # `None` lets each workspace pick an available loopback port for its gateway.
+    gateway_port=None,
+    # Extra requirements installed into the in-sandbox gateway venv.
+    extra_pip=[],
+    ttl=3600.0,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+```python Docker
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    DockerWorkspaceManager,
+    IsolationPolicy,
+)
+
+workspace_manager = DockerWorkspaceManager(
+    # Host root bind-mounted to `/workspace` inside each container.
+    basedir="/data/workspaces",
+    isolation=IsolationPolicy.PER_AGENT,
+    # Base image; must ship `python3`. The image is content-hashed and
+    # rebuilt only when the Dockerfile inputs change.
+    base_image="python:3.11-slim",
+    # Node.js major version baked into the image (needed by npx-based MCPs).
+    node_version="20",
+    # Seconds an idle container stays cached before the sweeper evicts it.
+    ttl=3600.0,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+```python E2B
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    E2BWorkspaceManager,
+    IsolationPolicy,
+)
+
+workspace_manager = E2BWorkspaceManager(
+    isolation=IsolationPolicy.PER_AGENT,
+    # E2B template id that ships the runtime the agent needs.
+    template="base",
+    # `""` falls back to the `E2B_API_KEY` environment variable.
+    api_key="",
+    # Sandbox keep-alive timeout on the E2B side.
+    timeout_seconds=300,
+    ttl=3600.0,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+```python Daytona
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    DaytonaWorkspaceManager,
+    IsolationPolicy,
+)
+
+workspace_manager = DaytonaWorkspaceManager(
+    isolation=IsolationPolicy.PER_AGENT,
+    # `""` lets the Daytona SDK read credentials from the environment.
+    api_key="",
+    # Optional API URL and target/region, for self-hosted deployments.
+    api_url="",
+    target="",
+    # Sandbox operation timeout on the Daytona side.
+    timeout_seconds=300,
+    ttl=3600.0,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+```python OpenSandbox
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    IsolationPolicy,
+    OpenSandboxWorkspaceManager,
+)
+
+workspace_manager = OpenSandboxWorkspaceManager(
+    isolation=IsolationPolicy.PER_AGENT,
+    # Image the sandbox boots from; the gateway venv is bootstrapped on top.
+    image="python:3.11-slim",
+    # `""` lets the `opensandbox` SDK fall back to its env-based config.
+    api_key="",
+    # Optional server domain, for self-hosted / on-prem deployments.
+    domain="",
+    protocol="http",
+    # Sandbox keep-alive timeout on the OpenSandbox side.
+    timeout_seconds=300,
+    ttl=3600.0,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+```python Kubernetes
+from agentscope.app import create_app
+from agentscope.app.workspace_manager import (
+    IsolationPolicy,
+    K8sWorkspaceManager,
+)
+
+workspace_manager = K8sWorkspaceManager(
+    isolation=IsolationPolicy.PER_AGENT,
+    # K8s namespace for the workspace Pods and PVCs.
+    namespace="agentscope",
+    # `None` uses the in-cluster config; set a path for out-of-cluster use.
+    kubeconfig=None,
+    # Container image for each Pod.
+    image="python:3.11-slim",
+    # PVC size backing the workspace filesystem.
+    storage_size="1Gi",
+    ttl=3600.0,
+)
+
+app = create_app(
+    # ...existing code...
+    workspace_manager=workspace_manager,
+)
+```
+
+</CodeGroup>
+
+## Isolation grain
+
+`isolation` decides how workspaces are shared or isolated across the `(user_id, agent_id, session_id)` triple. The manager mints a `workspace_id` at session-creation time under the selected policy; every request carrying the same `workspace_id` lands in the same underlying workspace.
+
+| Value | Sharing rule | Typical use |
+|-------|--------------|-------------|
+| `PER_AGENT` (default) | All sessions of the same `(user_id, agent_id)` share one workspace | Give each agent a persistent, per-user working directory across chats — files, skills, MCP registrations survive between sessions. |
+| `PER_SESSION` | Every session gets its own workspace | Sessions must not leak state to each other — e.g. one-shot sandboxed evaluations or short-lived automation runs. |
+| `PER_USER` | All sessions of the same `user_id` share one workspace, regardless of which agent | Multiple agents of the same user collaborate on one filesystem (rare; use with care). |
+
+<Note>
+Explicit `workspace_id` on the session-creation request always overrides the policy. This is what the built-in team tools (`AgentCreate` / `AgentInvite`) rely on to make a sub-agent's session share the team leader's workspace.
+</Note>
+
+## How it works in the Agent Service
+
+The workspace manager is a **singleton application-scoped resource**: one instance per Agent Service process, shared across every request. Its job is to (a) *decide* which workspace a request belongs to under the configured `isolation` policy, and (b) *serve* that workspace as a cheap dependency to the routers and services that need it.
+
+### Wiring
+
+The instance you pass to `create_app(workspace_manager=...)` is attached to `app.state` and exposed to the rest of the codebase through a FastAPI dependency:
+
+```python
+# agentscope/app/_app.py
+app.state.workspace_manager = workspace_manager
+
+# agentscope/app/deps.py
+async def get_workspace_manager(request: Request) -> WorkspaceManagerBase:
+    return request.app.state.workspace_manager
+```
+
+Every router, service, and built-in tool that touches a workspace consumes it via this dependency (or via constructor injection for the services):
+
+- **Routers** — `/session`, `/workspace/*` (MCP, skills). They call `Depends(get_workspace_manager)` and then `manager.get_workspace(...)` to resolve the caller's workspace.
+- **`ChatService`** — receives the manager in its constructor from the lifespan and calls `get_workspace` on every chat run to obtain the workspace the agent will act inside.
+- **Built-in team tools** (`AgentCreate` / `AgentInvite`) — receive the manager to call `assign_workspace_id(...)` when spinning up sub-agent sessions, so the sub-agent lands in the same workspace as the leader.
+
+### Lifecycle
+
+The manager is an **async context manager**. The application's `lifespan` enters it on startup and exits it on shutdown through a single `AsyncExitStack`, so any background machinery it owns (e.g. the idle-TTL sweeper in the `Bubblewrap` / `Docker` / `E2B` / `Daytona` / `OpenSandbox` / `K8s` managers) starts and stops in lockstep with the rest of the service:
+
+```python
+# agentscope/app/_lifespan.py (excerpt)
+workspace_manager = app.state.workspace_manager
+async with AsyncExitStack() as stack:
+    await stack.enter_async_context(storage)
+    await stack.enter_async_context(message_bus)
+    await stack.enter_async_context(workspace_manager)  # ← here
+    ...
+    yield
+# ← on exit, `__aexit__` calls `close_all()` and tears down every cached workspace.
+```
+
+### End-to-end request flow
+
+Once the service is running, a typical interaction goes:
+
+1. **Session creation** — the `/session` router computes the workspace id once and persists it on the session record:
+
+   ```python
+   # agentscope/app/_router/_session.py (excerpt)
+   resolved_workspace_id = body.workspace_id or (
+       workspace_manager.assign_workspace_id(
+           user_id=user_id,
+           agent_id=agent_id,
+           session_id=session_id,
+       )
+   )
+   ```
+
+   An explicit `body.workspace_id` always wins (that's how team tools make a sub-agent share the leader's workspace); otherwise the manager mints one under the configured `isolation` policy. `assign_workspace_id` is a pure function — no I/O, no cache lookup — so it is cheap to call on the hot path.
+
+2. **Every subsequent request** carrying that session — chat runs, MCP registration, skill upload, … — pulls the stored `workspace_id` off the session record and asks the manager to materialise it:
+
+   ```python
+   workspace = await workspace_manager.get_workspace(
+       user_id, agent_id, session_id, session_record.config.workspace_id,
+   )
+   ```
+
+   `get_workspace` is the cache-hit path. It looks up `workspace_id` in the manager's internal `dict`, refreshes the last-access timestamp, and returns the initialised `Workspace` in O(1). Only on a miss does it acquire an `asyncio.Lock`, provision the backend (build the Docker image, start the E2B or OpenSandbox sandbox, create the K8s Pod, …), and cache the result — the lock prevents concurrent requests for the same id from racing to spin up two backends.
+
+3. **Idle eviction** — the sandbox-backed managers run a background sweeper (started in `__aenter__`) that periodically walks the cache, closes any workspace whose last-access time exceeds `ttl`, and drops it. The next request for that id re-provisions transparently.
+
+4. **Shutdown** — the lifespan exits the manager, which calls `close_all()` and tears down every cached workspace and its background sweeper.
+
+<Note>
+Because `workspace_id` is minted **once at session creation** and stored, changing the `isolation` policy on a running deployment does **not** re-partition existing sessions — they keep the id they were assigned. New sessions pick up the new policy.
+</Note>
+
+## Core APIs
+
+Every manager implements the following contract from `WorkspaceManagerBase`. Custom subclasses only need to fill in the abstract methods; the isolation logic in `assign_workspace_id` is inherited from the base and driven by the `isolation` constructor argument.
+
+| Method | Purpose |
+|--------|---------|
+| `assign_workspace_id(*, user_id, agent_id, session_id) -> str` | Mint a workspace id for a fresh session under the configured `isolation` policy. Pure function, no I/O. Called by the session-creation flow when the client omits `workspace_id`. |
+| `get_workspace(user_id, agent_id, session_id, workspace_id=None) -> WorkspaceBase` | Return an initialized workspace bound to `workspace_id`. Cache-hit path on the hot request loop; on miss the manager provisions the underlying backend and caches the result. `workspace_id=None` falls back to `assign_workspace_id`. |
+| `create_workspace(user_id, agent_id, session_id) -> WorkspaceBase` | Provision a brand-new workspace and track it. Used when the caller has no persisted id yet. |
+| `close(workspace_id)` | Evict one workspace from the cache and tear down its backend. |
+| `close_all()` | Evict every cached workspace — called on service shutdown. |
+| `async with manager: ...` | Enter/exit the manager's lifetime. Enter starts background machinery (e.g. the TTL sweeper); exit calls `close_all`. |
+
+## Custom manager
+
+Any workspace class you build against [`WorkspaceBase`](/versions/2.0.8/en/building-blocks/workspace/overview) can be surfaced to the Agent Service by pairing it with a `WorkspaceManagerBase` subclass. In most cases you only need to fill in a small provisioning + cache scaffold — the isolation policy is inherited.
+
+```python Custom manager
+import asyncio
+import time
+from typing import Self
+
+from agentscope.app.workspace_manager import (
+    IsolationPolicy,
+    WorkspaceManagerBase,
+)
+from agentscope.workspace import WorkspaceBase
+
+
+class MyWorkspaceManager(WorkspaceManagerBase):
+    """Thin manager over a custom `MyWorkspace` backend."""
+
+    def __init__(
+        self,
+        *,
+        isolation: IsolationPolicy = IsolationPolicy.PER_AGENT,
+        ttl: float = 3600.0,
+    ) -> None:
+        super().__init__(isolation=isolation)
+        self._ttl = ttl
+        # workspace_id -> (workspace, last_access_monotonic)
+        self._cache: dict[str, tuple[WorkspaceBase, float]] = {}
+        self._lock = asyncio.Lock()
+
+    async def get_workspace(
+        self,
+        user_id: str,
+        agent_id: str,
+        session_id: str,
+        workspace_id: str | None = None,
+    ) -> WorkspaceBase:
+        # Fall back to the manager's isolation policy when no explicit
+        # binding was persisted for this session.
+        if workspace_id is None:
+            workspace_id = self.assign_workspace_id(
+                user_id=user_id,
+                agent_id=agent_id,
+                session_id=session_id,
+            )
+        async with self._lock:
+            hit = self._cache.get(workspace_id)
+            if hit is not None:
+                ws, _ = hit
+                self._cache[workspace_id] = (ws, time.monotonic())
+                return ws
+            ws = MyWorkspace(workspace_id=workspace_id)  # your backend
+            await ws.initialize()
+            self._cache[workspace_id] = (ws, time.monotonic())
+            return ws
+
+    async def create_workspace(
+        self,
+        user_id: str,
+        agent_id: str,
+        session_id: str,
+    ) -> WorkspaceBase:
+        ws = MyWorkspace()  # let the workspace mint its own id
+        await ws.initialize()
+        async with self._lock:
+            self._cache[ws.workspace_id] = (ws, time.monotonic())
+        return ws
+
+    async def close(self, workspace_id: str) -> None:
+        async with self._lock:
+            entry = self._cache.pop(workspace_id, None)
+        if entry is not None:
+            await entry[0].close()
+
+    async def close_all(self) -> None:
+        async with self._lock:
+            entries = list(self._cache.values())
+            self._cache.clear()
+        await asyncio.gather(
+            *(ws.close() for ws, _ in entries),
+            return_exceptions=True,
+        )
+```
+
+Pass an instance of `MyWorkspaceManager` to `create_app(workspace_manager=...)` and the service will use it exactly like the built-in ones.
+
+<Tip>
+If your backend needs a background sweeper for idle eviction or long-running provisioning, override `__aenter__` / `__aexit__` to start/stop that machinery — see the source of `DockerWorkspaceManager` for a full example.
+</Tip>
+
+## Distributed deployment
+
+`LocalWorkspaceManager`, `BubblewrapWorkspaceManager`, and `DockerWorkspaceManager` are **single-node** — the workspace state lives on the host running the service process. In a horizontally scaled deployment (multiple Agent Service worker nodes behind a load balancer) a request for the same `workspace_id` can land on any node, and none of these managers can reach a workspace provisioned on another node.
+
+For distributed deployments use a **cloud-managed sandbox backend**:
+
+- **`E2BWorkspaceManager`** — sandboxes are addressable by metadata across nodes; the service simply reattaches to the existing sandbox on cache miss.
+- **`DaytonaWorkspaceManager`** — sandboxes carry the `agentscope.workspace.id` label; any service replica reattaches by that label on cache miss.
+- **`OpenSandboxWorkspaceManager`** — sandboxes carry the `agentscope.workspace.id` metadata tag; any service replica reattaches by filtering `list_sandbox_infos(...)` on cache miss, no host-local state involved.
+- **`K8sWorkspaceManager`** — Pods and PVCs are cluster-scoped resources; any service replica in the cluster reattaches to the same Pod by workspace-id-derived name.
+
+<Tip>
+Keep `LocalWorkspaceManager` for local development, `BubblewrapWorkspaceManager` or `DockerWorkspaceManager` for a single-host production box, and pick E2B, Daytona, OpenSandbox, or K8s once you scale out.
+</Tip>

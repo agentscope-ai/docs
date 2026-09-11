@@ -1,0 +1,242 @@
+---
+title: "Configure Agent"
+description: "Assemble an agent from a model, tools, and configuration"
+---
+
+An agent is assembled entirely at initialization: pass the model, toolkit, and config objects to `Agent(...)` and it is ready to reply. The examples below cover the most common setups.
+
+<CodeGroup>
+
+```python Minimal Setup
+from agentscope.agent import Agent
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="You are a helpful assistant.",
+    model=DashScopeChatModel(
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+)
+```
+
+```python With Tools/MCPs/Skills
+import os
+from agentscope.agent import Agent
+from agentscope.tool import Toolkit, Bash, Edit, Grep, Read, Write
+from agentscope.mcp import MCPClient, HttpMCPConfig
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="You are a helpful assistant.",
+    model=DashScopeChatModel(
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+    toolkit=Toolkit(
+        tools=[Bash(), Edit(), Grep(), Read(), Write()],
+        mcps=[
+            MCPClient(
+                name="amap",
+                is_stateful=False,
+                mcp_config=HttpMCPConfig(
+                    url=f"https://mcp.amap.com/mcp?key={os.environ['AMAP_API_KEY']}",
+                ),
+            ),
+        ],
+        skills_or_loaders=["./skills"],
+    ),
+)
+```
+
+```python With Custom Context Config
+from agentscope.agent import Agent
+from agentscope.agent import ContextConfig
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="You are a helpful assistant.",
+    model=DashScopeChatModel(
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+    context_config=ContextConfig(
+        trigger_ratio=0.7,       # compress when 70% of context is used
+        reserve_ratio=0.2,       # keep the most recent 20% after compression
+        tool_result_limit=1000,  # truncate tool results at 1000 tokens
+        max_image_num=5,         # keep only the 5 most recent images
+    ),
+)
+```
+
+```python With Custom ReAct Config
+from agentscope.agent import Agent
+from agentscope.agent import ReActConfig
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="You are a helpful assistant.",
+    model=DashScopeChatModel(
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+    react_config=ReActConfig(
+        max_iters=30,                     # at most 30 reasoning-acting iterations
+        structured_output_grace_iters=3,  # extra iterations to finish structured output
+        stop_on_reject=True,              # stop replying when tool calls are rejected
+    ),
+)
+```
+
+</CodeGroup>
+
+## Parameters
+
+All configuration enters through the `Agent(...)` constructor. The table below lists every parameter, with the tunable knobs grouped into config objects:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | required | Agent identifier, used in messages and logs |
+| `system_prompt` | `str` | required | The agent's base system prompt |
+| `model` | `ChatModelBase` | required | The LLM used for reasoning |
+| `toolkit` | `Toolkit \| None` | `None` | Manages tools, MCP clients, skills, and tool groups |
+| `state` | `AgentState \| None` | auto-created | Holds context, permission context, and session state |
+| `offloader` | `Offloader \| None` | `None` | Offloads compressed context and tool results; must implement the `Offloader` protocol |
+| `middlewares` | `list[MiddlewareBase] \| None` | `None` | Applied at reply, reasoning, acting, model call, and system prompt hooks |
+| `model_config` | `ModelConfig` | default | Retry count and fallback model |
+| `context_config` | `ContextConfig` | default | Context compression thresholds, image count and tool result limits |
+| `injection_config` | `InjectionConfig` | default | Runtime state injection: time, tasks, and context usage (see [Environment Awareness](/versions/2.0.9dev/en/building-blocks/context/environment-awareness)) |
+| `react_config` | `ReActConfig` | default | Max iterations, structured output grace iterations, and rejection handling |
+
+## Switch Models
+
+Switching the LLM provider only changes the `model` argument: every provider follows the same `Model(credential=..., model=...)` pattern, and the rest of the agent stays untouched.
+
+<CodeGroup>
+
+```python DashScope
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+    model="qwen-max",
+)
+```
+
+```python OpenAI
+from agentscope.model import OpenAIChatModel
+from agentscope.credential import OpenAICredential
+
+model = OpenAIChatModel(
+    credential=OpenAICredential(api_key="YOUR_API_KEY"),
+    model="gpt-4o",
+)
+```
+
+```python Anthropic
+from agentscope.model import AnthropicChatModel
+from agentscope.credential import AnthropicCredential
+
+model = AnthropicChatModel(
+    credential=AnthropicCredential(api_key="YOUR_API_KEY"),
+    model="claude-sonnet-4-5",
+)
+```
+
+```python Gemini
+from agentscope.model import GeminiChatModel
+from agentscope.credential import GeminiCredential
+
+model = GeminiChatModel(
+    credential=GeminiCredential(api_key="YOUR_API_KEY"),
+    model="gemini-2.5-pro",
+)
+```
+
+```python Ollama
+from agentscope.model import OllamaChatModel
+from agentscope.credential import OllamaCredential
+
+model = OllamaChatModel(
+    credential=OllamaCredential(host="http://localhost:11434"),
+    model="qwen3:8b",
+)
+```
+
+</CodeGroup>
+
+## Support Multi-Entity Conversations
+
+An agent is not limited to one-user-one-agent chat. In an agent team, a group chat, or a game with NPCs, messages from **multiple named entities** share the same context, and the agent must know who said what.
+
+In AgentScope, each speaker is identified by the `name` field of its `Msg`. A multi-entity conversation is simply a list of messages with different names fed into the agent:
+
+```python
+from agentscope.message import UserMsg
+
+msgs = [
+    UserMsg(name="Alice", content="I vote for the beach."),
+    UserMsg(name="Bob", content="I'd rather go hiking."),
+    UserMsg(name="user", content="Friday, summarize everyone's preference."),
+]
+result = await agent.reply(msgs)
+```
+
+Whether these identities survive is decided by the **formatter**, the component that converts `Msg` objects into the provider's API format before each model call. The default chat formatter maps messages onto the API's bare `user`/`assistant` roles, which fits one-user-one-agent chat but drops the names, leaving the speakers indistinguishable.
+
+For multi-entity conversations, each provider ships a `MultiAgentFormatter`. It merges the history into a single named transcript (`Alice: ...`, `Bob: ...`) carried in a user message, so the LLM sees each speaker's identity. Switch by passing it to the model:
+
+```python
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.formatter import DashScopeMultiAgentFormatter
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+    model="qwen-max",
+    formatter=DashScopeMultiAgentFormatter(),
+)
+```
+
+<Tip>
+In multi-entity conversations, state the agent's own name in its system prompt, so the LLM knows which speaker it is playing.
+</Tip>
+
+Each provider has a matching pair:
+
+| Provider  | Chat formatter (default) | Multi-agent formatter          |
+|-----------|--------------------------|--------------------------------|
+| DashScope | `DashScopeChatFormatter` | `DashScopeMultiAgentFormatter` |
+| OpenAI    | `OpenAIChatFormatter`    | `OpenAIMultiAgentFormatter`    |
+| Anthropic | `AnthropicChatFormatter` | `AnthropicMultiAgentFormatter` |
+| Gemini    | `GeminiChatFormatter`    | `GeminiMultiAgentFormatter`    |
+| Ollama    | `OllamaChatFormatter`    | `OllamaMultiAgentFormatter`    |
+| DeepSeek  | `DeepSeekChatFormatter`  | `DeepSeekMultiAgentFormatter`  |
+| Moonshot  | `MoonshotChatFormatter`  | `MoonshotMultiAgentFormatter`  |
+| XAI       | `XAIChatFormatter`       | `XAIMultiAgentFormatter`       |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tool" icon="wrench" href="/versions/2.0.9dev/en/building-blocks/tool/overview">
+    How to build tools, and connect MCP servers and skills.
+  </Card>
+  <Card title="Middleware" icon="layer-group" href="/versions/2.0.9dev/en/building-blocks/middleware">
+    How to hook into reply, reasoning, acting, and model calls.
+  </Card>
+  <Card title="Workspace" icon="box" href="/versions/2.0.9dev/en/building-blocks/workspace/overview">
+    How to work in different sandboxes.
+  </Card>
+  <Card title="Permission System" icon="lock" href="/versions/2.0.9dev/en/building-blocks/permission-system/overview">
+    How to control which tool calls run, ask, or are denied.
+  </Card>
+</CardGroup>

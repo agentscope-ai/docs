@@ -1,0 +1,175 @@
+---
+title: "Permission Mode"
+description: "Pick the global policy that fits how your agent is deployed"
+---
+
+A permission mode is the global policy behind every tool-call decision: it selects which decision points are active and what happens to calls nothing else resolves. AgentScope supports five modes, each suited to a different deployment scenario:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `DEFAULT` | Read-only invocations are auto-allowed (`Read` / `Glob` / `Grep`, and read-only Bash commands like `ls`, `git status`, `cat`, ...); everything else prompts unless an allow rule matches. Safety ASKs cannot be overridden by allow rules | Most secure, recommended default |
+| `ACCEPT_EDITS` | Everything `DEFAULT` allows, **plus** edits within a working directory are auto-allowed without prompting: `Write` / `Edit` on files under a configured working directory, and Bash filesystem commands (`mkdir`/`touch`/`rm`/`cp`/`mv`/`sed`) **when every target path resolves inside a working directory** | Active development with user present |
+| `EXPLORE` | Read-only operations allowed; all modifications denied. Allow rules and the tool's safety checks are not consulted: the read-only guarantee cannot be granted away by a rule. User-configured DENY/ASK rules still take precedence over the read-only auto-allow | Code exploration, planning |
+| `BYPASS` | Fully trusted: deny/ask rules and tool DENYs still apply, but **tool safety ASKs are skipped** (`rm -rf /`, writes to `~/.bashrc`, command injection, etc. all pass through) and everything else is allowed. Use deny rules to protect specific paths | Sandboxed environments or fully trusted runs |
+| `DONT_ASK` | The unattended counterpart of `ACCEPT_EDITS`: read-only auto-allowed, working-directory edits auto-allowed, but anything that would otherwise prompt the (absent) user is **DENIED** instead of asked. Never returns ASK | Unattended / scheduled execution |
+
+## Set the Mode
+
+Set the mode via `AgentState.permission_context` when creating the agent, or update it at runtime:
+
+<CodeGroup>
+```python At initialization
+from agentscope.agent import Agent
+from agentscope.state import AgentState
+from agentscope.permission import PermissionContext, PermissionMode
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    state=AgentState(
+        permission_context=PermissionContext(
+            mode=PermissionMode.DEFAULT,
+        )
+    ),
+)
+```
+
+```python At runtime
+# Switch to read-only mode on the fly
+agent.state.permission_context.mode = PermissionMode.EXPLORE
+
+# Switch to unattended mode for batch execution
+agent.state.permission_context.mode = PermissionMode.DONT_ASK
+```
+
+```python ACCEPT_EDITS with working directory
+from agentscope.permission import AdditionalWorkingDirectory
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    state=AgentState(
+        permission_context=PermissionContext(
+            mode=PermissionMode.ACCEPT_EDITS,
+            working_directories={
+                "/my/project": AdditionalWorkingDirectory(
+                    path="/my/project",
+                    source="userSettings",
+                )
+            },
+        )
+    ),
+)
+```
+</CodeGroup>
+
+## Decision Flow per Mode
+
+Every mode walks the decision points summarized in the [decision matrix](/versions/2.0.8/en/building-blocks/permission-system/overview#decision-matrix); the flowcharts below expand each mode into its full decision flow. ASK outcomes trigger user confirmation; if the user accepts the auto-generated suggested rule, it is persisted for future calls.
+
+<Tabs>
+  <Tab title="DEFAULT">
+```mermaid
+flowchart TD
+    A([Tool Call]) --> D1{Deny Rules?}
+    D1 -->|Match| DENY([DENY])
+    D1 -->|No| D2{Ask Rules?}
+    D2 -->|Match| ASK([ASK])
+    D2 -->|No| D3{check_read_only?}
+    D3 -->|True| ALLOW([ALLOW])
+    D3 -->|False| D4[Tool check_permissions]
+    D4 -->|ALLOW| ALLOW
+    D4 -->|DENY| DENY
+    D4 -->|"Safety ASK (bypass_immune)"| ASK
+    D4 -->|PASSTHROUGH / other ASK| D5{Allow Rules?}
+    D5 -->|Match| ALLOW
+    D5 -->|No| ASK
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="EXPLORE">
+```mermaid
+flowchart TD
+    A([Tool Call]) --> E1{Deny Rules?}
+    E1 -->|Match| DENY([DENY])
+    E1 -->|No| E2{Ask Rules?}
+    E2 -->|Match| ASK([ASK])
+    E2 -->|No| E3{check_read_only?}
+    E3 -->|True| ALLOW([ALLOW])
+    E3 -->|False| DENY
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="ACCEPT_EDITS">
+```mermaid
+flowchart TD
+    A([Tool Call]) --> AE1{Deny Rules?}
+    AE1 -->|Match| DENY([DENY])
+    AE1 -->|No| AE2{Ask Rules?}
+    AE2 -->|Match| ASK([ASK])
+    AE2 -->|No| AE3{check_read_only?}
+    AE3 -->|True| ALLOW([ALLOW])
+    AE3 -->|False| AE4[Tool check_permissions]
+    AE4 -->|ALLOW| ALLOW
+    AE4 -->|DENY| DENY
+    AE4 -->|"Safety ASK (bypass_immune)"| ASK
+    AE4 -->|PASSTHROUGH / other ASK| AE5{Allow Rules?}
+    AE5 -->|Match| ALLOW
+    AE5 -->|No| ASK
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="BYPASS">
+```mermaid
+flowchart TD
+    A([Tool Call]) --> B1{Deny Rules?}
+    B1 -->|Match| DENY([DENY])
+    B1 -->|No| B2{Ask Rules?}
+    B2 -->|Match| ASK([ASK])
+    B2 -->|No| B3{check_read_only?}
+    B3 -->|True| ALLOW([ALLOW])
+    B3 -->|False| B4[Tool check_permissions]
+    B4 -->|ALLOW| ALLOW
+    B4 -->|DENY| DENY
+    B4 -->|"Any ASK (safety ignored) / PASSTHROUGH"| B5{Allow Rules?}
+    B5 -->|Match or No| ALLOW
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+    style ASK fill:#ffd43b,color:#333
+```
+  </Tab>
+  <Tab title="DONT_ASK">
+```mermaid
+flowchart TD
+    A([Tool Call]) --> DA1{Deny Rules?}
+    DA1 -->|Match| DENY([DENY])
+    DA1 -->|No| DA2{Ask Rules?}
+    DA2 -->|Match| DENY
+    DA2 -->|No| DA3{check_read_only?}
+    DA3 -->|True| ALLOW([ALLOW])
+    DA3 -->|False| DA4[Tool check_permissions]
+    DA4 -->|ALLOW| ALLOW
+    DA4 -->|DENY| DENY
+    DA4 -->|"Any ASK (incl. safety)"| DENY
+    DA4 -->|PASSTHROUGH| DA5{Allow Rules?}
+    DA5 -->|Match| ALLOW
+    DA5 -->|No| DENY
+    style DENY fill:#ff6b6b,color:#fff
+    style ALLOW fill:#51cf66,color:#fff
+```
+  </Tab>
+</Tabs>
+
+<Note>
+**Deny rules** and **explicit ask rules** are always honored, in every mode (including `BYPASS`).
+
+**Tool-emitted safety ASKs** (`bypass_immune=True`) are honored in `DEFAULT`, `ACCEPT_EDITS`, and `DONT_ASK`; they cannot be silenced by allow rules. In `BYPASS` mode they are skipped on purpose: BYPASS's contract is "the user has opted out of safety prompts; only deny/ask rules remain as guardrails." See the [safety check contract](/versions/2.0.8/en/building-blocks/permission-system/tool-check#safety-check-contract).
+</Note>

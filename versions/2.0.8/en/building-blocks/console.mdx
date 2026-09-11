@@ -1,0 +1,142 @@
+---
+title: "Console"
+description: "Quickly test and verify agent behavior in the terminal"
+---
+
+When you need to quickly try out or debug an agent, the `agentscope.console` module lets you chat with it and inspect its full event stream directly in the terminal, without launching the web service or hand-dispatching the dozens of event types that `reply_stream` produces.
+
+The console module ships two entries, one per usage scenario:
+
+| Entry | When to use |
+|-------|-------------|
+| `launch_console` | Interactive chat with a single agent: input loop, tool-call confirmation, and interruption handling built in, zero UI code |
+| `ConsoleRenderer` | Embedded in your own code: renders the event stream to the terminal, while inputs and orchestration stay under your control |
+
+## Launch an Interactive Chat
+
+`launch_console` takes a constructed agent and handles the entire terminal interaction:
+
+```python Chat with an agent in the terminal
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import Bash, Read, Toolkit, Write
+
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You're a helpful assistant named Friday.",
+        model=DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.environ["DASHSCOPE_API_KEY"],
+            ),
+            model="qwen3.7-max",
+        ),
+        toolkit=Toolkit(tools=[Bash(), Read(), Write()]),
+    )
+
+    # Enter the terminal chat; type exit/quit or press Ctrl+D to leave
+    await launch_console(agent)
+
+
+asyncio.run(main())
+```
+
+Each part of the interaction behaves as follows:
+
+| Interaction | Behavior |
+|-------------|----------|
+| Message input | Reads input at the `user>` prompt; type `exit`, `quit`, or press Ctrl+D to leave |
+| Streamed rendering | Reply text and thinking print live; tool calls and results print as whole blocks |
+| Tool confirmation | When a tool call requires confirmation, each one is asked in turn: `y` allows once, `a` also accepts the suggested permission rules (matching calls won't ask again), anything else denies |
+| Interruption | Ctrl+C during streaming interrupts the current reply; Ctrl+C at a confirmation prompt aborts the reply waiting for confirmation |
+
+`launch_console` accepts the following parameters:
+
+<ParamField path="agent" type="Agent | PipelineProtocol" required>
+  The agent to interact with, or any pipeline satisfying
+  [`PipelineProtocol`](/versions/2.0.8/en/building-blocks/pipeline/overview).
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  The sender name attached to the user's messages, also used as the
+  input prompt.
+</ParamField>
+
+<ParamField path="verbosity" type="str" default="default">
+  Output verbosity, one of `"quiet"`, `"default"`, or `"debug"`. See
+  [Control the Output Verbosity](#control-the-output-verbosity).
+</ParamField>
+
+<ParamField path="max_tool_result_lines" type="int | None" default="20">
+  Maximum number of printed lines per tool result; the excess collapses
+  into a hint line. `None` disables truncation.
+</ParamField>
+
+<Note>
+`launch_console` involves no session management or persistence: the conversation lives in `agent.state` and ends with the process. For multi-user, multi-session, and persistent deployments, use the [agent service](/versions/2.0.8/en/deploy/agent-service).
+</Note>
+
+## Embed the Event Renderer
+
+When you own the run logic yourself (an agent pipeline, a test script), use `ConsoleRenderer` for printing only. The renderer is passive: how events are produced, and how inputs and confirmations are handled, are entirely up to the caller.
+
+```python Render the event stream in your own code
+from agentscope.console import ConsoleRenderer
+from agentscope.message import UserMsg
+
+renderer = ConsoleRenderer()
+
+# Hand every event from reply_stream to the renderer
+async for event in agent.reply_stream(UserMsg("user", "Hi!")):
+    renderer.render(event)
+
+# The renderer also accumulates the events back into a complete reply
+final_msg = renderer.last_msg
+```
+
+The renderer attributes events by reply id, so multiple agents speaking in sequence can share one instance:
+
+```python Render a multi-agent pipeline
+renderer = ConsoleRenderer()
+
+msg = UserMsg("user", "Draft a product intro")
+for agent in [writer, reviewer]:
+    async for event in agent.reply_stream(msg):
+        renderer.render(event)
+    # The previous agent's full reply feeds the next one
+    msg = renderer.last_msg
+```
+
+The renderer applies the following rules per content type:
+
+| Content | Rendering |
+|---------|-----------|
+| Reply text, thinking | Streamed live; thinking is dimmed |
+| Tool calls, tool results | Printed as whole blocks on their end events, so concurrently-streamed results never interleave; long results truncate by line count |
+| Hint blocks | Shown in a bordered panel, e.g. the injected runtime state (time, task reminders) |
+| Binary data | Images, audio, etc. print as placeholders (e.g. `[data: image/png, ~34KB]`) instead of raw base64 |
+| Token usage | One line of input/output token counts after each model call |
+
+<Tip>
+For events that need a human in the loop (tool confirmation, external execution), the renderer only displays the notice; collecting the results and resuming the reply is the caller's job. See [Human-in-the-Loop](/versions/2.0.8/en/building-blocks/agent/human-in-the-loop).
+</Tip>
+
+## Control the Output Verbosity
+
+Both `launch_console` and `ConsoleRenderer` take a `verbosity` parameter with three increasing levels:
+
+| Level | What's shown |
+|-------|--------------|
+| `quiet` | Only the reply text and errors |
+| `default` | Plus thinking, tool calls/results, hint blocks, token usage, and confirmation notices |
+| `debug` | Plus lifecycle events (model call start, reply finish reason, etc.) and tool result metadata |
+
+<Note>
+Unknown event types are skipped silently (`debug` prints one line with the type name), so new event types in the protocol never break existing rendering.
+</Note>

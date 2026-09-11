@@ -1,0 +1,113 @@
+---
+title: "Environment Awareness"
+description: "Keep the agent aware of time, tasks, context usage, and failing tools as they change"
+---
+
+An agent stays aware of its changing environment through **runtime state injection**: before each reasoning step, information that changes across turns (current time, plan tasks, context usage, repeated tool failures) is injected into the context as a `HintBlock`, configured via the `injection_config` parameter of `Agent(...)`.
+
+The injection covers four dimensions, each with its own timing rule:
+
+| Dimension | Injected Content | When It Is Injected |
+|-----------|------------------|---------------------|
+| Time | The current wall-clock time and its timezone | No time is recorded in the context (the first reply, or right after a context compression), or the elapsed time since the recorded one exceeds `time_interval` hours |
+| Plan tasks | The counts of in-progress and pending tasks, with a reminder to call `TaskList` | Uncompleted tasks exist while the context contains neither task-related tool calls (e.g. compressed away) nor a previous tasks injection |
+| Context usage | The current input tokens and the compression threshold; with [agentic compression](/versions/2.0.8/en/building-blocks/context/compress-context#compress-agentically) enabled and no task in progress, it also tells the agent it may compress right away | At the first iteration of a reply, when the input tokens come within `context_buffer_ratio` of the compression threshold, letting the agent perceive that a compression is near |
+| Tool failures | A reminder to stop retrying and try another approach | The last `tool_retries_limit` tool results in a row all failed, for the same tool with the same arguments (compared after normalization, so key order does not matter); one success in between resets the count |
+
+The `context_buffer_ratio` behind the context usage dimension lives in the [context config](/versions/2.0.8/en/building-blocks/context/compress-context#configure-compression); the other three dimensions are governed by `InjectionConfig`.
+
+## How Injection Works
+
+Each injected field is wrapped as `<key>value</key>`, and all fields are joined and placed into the `template` (a `<system-reminder>` wrapper by default). A typical injected hint looks like:
+
+```text Example Injected Hint
+<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:
+<current-time>2026-07-22T10:30:00</current-time>
+<timezone>Asia/Shanghai</timezone>
+<tasks>You have 1 in-progress tasks and 2 pending tasks. Use `TaskList` to view them if you don't know.</tasks>
+<tool-error>The last 3 calls to 'Bash' with the same arguments all failed. Stop retrying the same call as-is, check the error message and try a different approach.</tool-error>
+</system-reminder>
+```
+
+Three design decisions are worth knowing:
+
+- The injection is **not ephemeral**: it is appended to the persistent context on purpose, so the agent can perceive how time elapses and what it did at each step, building a sense of time.
+- The hint is attached as a `HintBlock` instead of mutating the system prompt, so prompt caching still works while the agent stays aware of the changing state.
+- Only information that **changes** within a conversation is injected. Fixed information (the agent's identity, standing instructions) belongs in the system prompt.
+
+When an injection happens and `emit_hint_event` is enabled, `reply_stream` also yields a `HintBlockEvent`, so a frontend can render the injected hint.
+
+## Configure Injection
+
+Pass an `InjectionConfig` to the agent constructor to tune the injection behavior:
+
+```python
+from agentscope.agent import Agent, InjectionConfig
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="You are a helpful assistant.",
+    model=DashScopeChatModel(
+        credential=DashScopeCredential(api_key="YOUR_API_KEY"),
+        model="qwen-max",
+    ),
+    injection_config=InjectionConfig(
+        timezone="Asia/Shanghai",  # inject the time of this timezone
+        time_interval=1.0,         # refresh the time at most once per hour
+    ),
+)
+```
+
+The fields of `InjectionConfig`:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `inject_runtime_state` | `True` | Master switch; set `False` to disable runtime state injection entirely |
+| `timezone` | `"UTC"` | Timezone of the injected time, in the standard timezone database format (e.g. `"Asia/Shanghai"`) |
+| `time_format` | `"%Y-%m-%dT%H:%M:%S"` | Format of the injected time; must carry the date part so the recorded time round-trips as a full timestamp |
+| `time_interval` | `0.5` | Minimum elapsed time in hours from the recorded time to trigger a new time injection |
+| `tool_retries_limit` | `3` | How many consecutive failures of the same tool call trigger the tool-failure hint; minimum `3` |
+| `tool_retries_hint` | The wording shown in the example above | Template of the tool-failure hint, with two placeholders: `{tool_name}` (the failing tool) and `{count}` (the number of consecutive failures) |
+| `template` | A `<system-reminder>` wrapper | Template around the injected fields; must contain the `{runtime_state}` placeholder |
+| `injection_source` | `{"label": "System", "sublabel": "Runtime State"}` | The `source` of the injected `HintBlock`, used to recognize the agent's own previous injections when scanning the context |
+| `task_tool_names` | `TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate` | Tool names whose calls in the context indicate the agent is already aware of the tasks, suppressing the tasks injection |
+| `extra_fields` | `{}` | Custom fields attached to every injection (see [Inject Custom Fields](#inject-custom-fields)) |
+| `emit_hint_event` | `True` | Whether to emit a `HintBlockEvent` when an injection happens |
+
+<Note>
+`context_buffer_ratio` on `InjectionConfig` is deprecated; use the field of the same name in the [context config](/versions/2.0.8/en/building-blocks/context/compress-context#configure-compression) instead. Passing it here still works and overrides the value from the context config, along with a `DeprecationWarning`.
+</Note>
+
+## Inject Custom Fields
+
+Beyond the built-in dimensions, `extra_fields` injects developer-defined information, such as sensor readings or deployment metadata:
+
+```python
+from agentscope.agent import InjectionConfig
+
+injection_config = InjectionConfig(
+    extra_fields={
+        "battery-level": "78%",       # injected as <battery-level>78%</battery-level>
+        "location": "Hangzhou office",
+    },
+)
+```
+
+Extra fields are attached to **every** injection but never trigger one by themselves: they ride along whenever the time, tasks, context usage, or tool failure dimension fires.
+
+## Customize the Template
+
+The `template` field controls how the injected fields are presented to the LLM. It must contain the `{runtime_state}` placeholder, which is replaced by the joined `<key>value</key>` fields:
+
+```python
+from agentscope.agent import InjectionConfig
+
+injection_config = InjectionConfig(
+    template=(
+        "[Runtime update] The following reflects the current environment:\n"
+        "{runtime_state}"
+    ),
+)
+```

@@ -1,0 +1,85 @@
+---
+title: "管理资源"
+description: "在运行时添加、移除 MCP 服务与技能"
+---
+
+工作区的资源并非在创建时就固定不变。MCP 服务与技能都可以在工作区运行期间添加或移除，且每次变更都会持久化，重启后依然生效。生命周期方法则负责把工作区从开通带到释放。
+
+## 管理 MCP 服务
+
+MCP 声明按 `agent_id + session_id` 隔离。即使多个会话共用同一个工作区，状态型 MCP 的连接、Cookie 和登录状态也不会串到其他会话。客户端在该会话首次调用 `list_mcps` 时才会建立连接：
+
+```python
+from agentscope.mcp import MCPClient, HttpMCPConfig
+
+# 注册新的 MCP 服务；名称已存在时抛出 ValueError
+await workspace.add_mcp(
+    MCPClient(
+        name="amap",
+        is_stateful=False,
+        mcp_config=HttpMCPConfig(url="https://mcp.amap.com/mcp?key=..."),
+    ),
+    agent_id="coder",
+    session_id="session-1",
+)
+
+# 按名称注销；名称不存在时记录警告并静默返回
+await workspace.remove_mcp(
+    "amap",
+    agent_id="coder",
+    session_id="session-1",
+)
+
+# 枚举当前已注册的客户端
+mcps = await workspace.list_mcps(
+    agent_id="coder",
+    session_id="session-1",
+)
+```
+
+<Note>
+持久化遵循工作区自身的模型：未挂载主机 `workdir` 的临时 `DockerWorkspace` 只在内存中保存 MCP 列表，容器销毁后即丢失。
+</Note>
+
+## 管理技能
+
+技能按 `agent_id` 隔离。`skill_paths` 先写入 `skills/.seed` 模板；智能体首次访问时，工作区为它创建独立分区。`add_skill`、`remove_skill` 与 `list_skills` 只操作指定智能体的分区：
+
+```python
+# 把本地技能目录复制进工作区；
+# 缺少 SKILL.md 或目录已存在时抛出 ValueError
+await workspace.add_skill("./skills/web-search", agent_id="coder")
+
+# 按 frontmatter 中的名称删除；找不到时抛出 KeyError
+await workspace.remove_skill("web-search", agent_id="coder")
+
+# 枚举可用技能（从各 SKILL.md 解析）
+skills = await workspace.list_skills(agent_id="coder")
+```
+
+## 管理生命周期
+
+三个方法贯穿工作区的一生，`async with` 协议则把 `initialize` / `close` 包装为作用域用法：
+
+| 方法 | 效果 |
+|------|------|
+| `initialize()` | 开通后端（启动容器 / 沙箱 / Pod）、恢复 MCP 声明、准备技能种子 |
+| `reset()` | 把工作区恢复为空状态：关闭并移除全部 MCP、删除全部技能、清空各会话状态 |
+| `close()` | 释放全部资源与连接 |
+
+```python
+async with LocalWorkspace(workdir="./ws") as workspace:
+    ...  # 进入时 initialize()，退出时 close()
+```
+
+<Warning>
+`reset()` 会删除所有会话的 MCP 声明、技能分区和会话状态。此后会话再次访问 MCP 时会重新继承 `default_mcps`；`skill_paths` 则不会重新播种。
+</Warning>
+
+## 在服务中分配工作区
+
+在多租户服务中，决定哪个请求使用哪个工作区（按用户、智能体或会话）、缓存活跃实例、淘汰空闲实例，是**工作区管理器**的职责，它是独立的服务侧组件，有专门的章节介绍：
+
+<Card title="工作区管理器" icon="server" href="/versions/2.0.9dev/zh/deploy/workspace-manager" cta="查看部署文档" arrow>
+  分配与隔离策略、TTL 淘汰，以及与智能体服务的集成。
+</Card>

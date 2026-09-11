@@ -18,142 +18,280 @@
             "tab": "AgentScope",
             "versions": [
               {
-                "version": "2.0.8dev",
+                "version": "2.0.9dev",
                 "groups": [
                   {
                     "group": "Get Started",
                     "pages": [
-                      "versions/2.0.8dev/en/index",
-                      "versions/2.0.8dev/en/quickstart",
-                      "versions/2.0.8dev/en/release-notes"
+                      "versions/2.0.9dev/en/index",
+                      "versions/2.0.9dev/en/quickstart",
+                      "versions/2.0.9dev/en/release-notes"
                     ]
                   },
                   {
                     "group": "Building Blocks",
                     "pages": [
-                      "versions/2.0.8dev/en/building-blocks/message-and-event",
+                      "versions/2.0.9dev/en/building-blocks/message-and-event",
                       {
                         "group": "Agent",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/agent/overview",
-                          "versions/2.0.8dev/en/building-blocks/agent/configure-agent",
-                          "versions/2.0.8dev/en/building-blocks/agent/run-agent",
-                          "versions/2.0.8dev/en/building-blocks/agent/interrupt-agent",
-                          "versions/2.0.8dev/en/building-blocks/agent/human-in-the-loop"
+                          "versions/2.0.9dev/en/building-blocks/agent/overview",
+                          "versions/2.0.9dev/en/building-blocks/agent/configure-agent",
+                          "versions/2.0.9dev/en/building-blocks/agent/run-agent",
+                          "versions/2.0.9dev/en/building-blocks/agent/interrupt-agent",
+                          "versions/2.0.9dev/en/building-blocks/agent/human-in-the-loop"
                         ]
                       },
                       {
                         "group": "Model",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/model/overview",
-                          "versions/2.0.8dev/en/building-blocks/model/llm",
-                          "versions/2.0.8dev/en/building-blocks/model/tts",
-                          "versions/2.0.8dev/en/building-blocks/model/embedding"
+                          "versions/2.0.9dev/en/building-blocks/model/overview",
+                          "versions/2.0.9dev/en/building-blocks/model/llm",
+                          "versions/2.0.9dev/en/building-blocks/model/tts",
+                          "versions/2.0.9dev/en/building-blocks/model/embedding"
                         ]
                       },
                       {
                         "group": "Context",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/context/overview",
-                          "versions/2.0.8dev/en/building-blocks/context/environment-awareness",
-                          "versions/2.0.8dev/en/building-blocks/context/compress-context",
-                          "versions/2.0.8dev/en/building-blocks/context/offload-context"
+                          "versions/2.0.9dev/en/building-blocks/context/overview",
+                          "versions/2.0.9dev/en/building-blocks/context/environment-awareness",
+                          "versions/2.0.9dev/en/building-blocks/context/compress-context",
+                          "versions/2.0.9dev/en/building-blocks/context/offload-context"
                         ]
                       },
                       {
                         "group": "Tool",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/tool/overview",
-                          "versions/2.0.8dev/en/building-blocks/tool/python-tool",
-                          "versions/2.0.8dev/en/building-blocks/tool/mcp",
-                          "versions/2.0.8dev/en/building-blocks/tool/skill",
-                          "versions/2.0.8dev/en/building-blocks/tool/manage-tools"
+                          "versions/2.0.9dev/en/building-blocks/tool/overview",
+                          "versions/2.0.9dev/en/building-blocks/tool/python-tool",
+                          "versions/2.0.9dev/en/building-blocks/tool/mcp",
+                          "versions/2.0.9dev/en/building-blocks/tool/skill",
+                          "versions/2.0.9dev/en/building-blocks/tool/manage-tools"
                         ]
                       },
-                      "versions/2.0.8dev/en/building-blocks/plan",
+                      "versions/2.0.9dev/en/building-blocks/plan",
                       {
                         "group": "Pipeline",
                         "tag": "EXP",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/pipeline/overview",
-                          "versions/2.0.8dev/en/building-blocks/pipeline/goal"
+                          "versions/2.0.9dev/en/building-blocks/pipeline/overview",
+                          "versions/2.0.9dev/en/building-blocks/pipeline/goal"
                         ]
                       },
                       {
                         "group": "Permission System",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/permission-system/overview",
-                          "versions/2.0.8dev/en/building-blocks/permission-system/permission-mode",
-                          "versions/2.0.8dev/en/building-blocks/permission-system/permission-rule",
-                          "versions/2.0.8dev/en/building-blocks/permission-system/tool-check"
+                          "versions/2.0.9dev/en/building-blocks/permission-system/overview",
+                          "versions/2.0.9dev/en/building-blocks/permission-system/permission-mode",
+                          "versions/2.0.9dev/en/building-blocks/permission-system/permission-rule",
+                          "versions/2.0.9dev/en/building-blocks/permission-system/tool-check"
                         ]
                       },
-                      "versions/2.0.8dev/en/building-blocks/middleware",
-                      "versions/2.0.8dev/en/building-blocks/rag",
-                      "versions/2.0.8dev/en/building-blocks/long-term-memory",
+                      "versions/2.0.9dev/en/building-blocks/middleware",
+                      "versions/2.0.9dev/en/building-blocks/rag",
+                      "versions/2.0.9dev/en/building-blocks/long-term-memory",
                       {
                         "group": "Workspace",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/workspace/overview",
-                          "versions/2.0.8dev/en/building-blocks/workspace/run-workspace",
-                          "versions/2.0.8dev/en/building-blocks/workspace/manage-resources",
-                          "versions/2.0.8dev/en/building-blocks/workspace/mcp-gateway"
+                          "versions/2.0.9dev/en/building-blocks/workspace/overview",
+                          "versions/2.0.9dev/en/building-blocks/workspace/run-workspace",
+                          "versions/2.0.9dev/en/building-blocks/workspace/manage-resources",
+                          "versions/2.0.9dev/en/building-blocks/workspace/mcp-gateway"
                         ]
                       },
                       {
                         "group": "Realtime Agent",
                         "tag": "EXP",
                         "pages": [
-                          "versions/2.0.8dev/en/building-blocks/realtime/overview",
-                          "versions/2.0.8dev/en/building-blocks/realtime/speech-to-speech"
+                          "versions/2.0.9dev/en/building-blocks/realtime/overview",
+                          "versions/2.0.9dev/en/building-blocks/realtime/speech-to-speech"
                         ]
                       },
-                      "versions/2.0.8dev/en/building-blocks/console",
-                      "versions/2.0.8dev/en/building-blocks/a2a"
+                      "versions/2.0.9dev/en/building-blocks/console",
+                      "versions/2.0.9dev/en/building-blocks/a2a"
                     ]
                   },
                   {
                     "group": "Agent as Service",
                     "pages": [
-                      "versions/2.0.8dev/en/deploy/agent-service",
-                      "versions/2.0.8dev/en/deploy/agent-team",
-                      "versions/2.0.8dev/en/deploy/sharing",
-                      "versions/2.0.8dev/en/deploy/rag",
-                      "versions/2.0.8dev/en/deploy/workspace-manager",
+                      "versions/2.0.9dev/en/deploy/agent-service",
+                      "versions/2.0.9dev/en/deploy/agent-team",
+                      "versions/2.0.9dev/en/deploy/sharing",
+                      "versions/2.0.9dev/en/deploy/rag",
+                      "versions/2.0.9dev/en/deploy/workspace-manager",
                       {
                         "group": "MCP & Skill Hub",
                         "pages": [
-                          "versions/2.0.8dev/en/deploy/hub/overview",
-                          "versions/2.0.8dev/en/deploy/hub/mcp-hub",
-                          "versions/2.0.8dev/en/deploy/hub/skill-hub"
+                          "versions/2.0.9dev/en/deploy/hub/overview",
+                          "versions/2.0.9dev/en/deploy/hub/mcp-hub",
+                          "versions/2.0.9dev/en/deploy/hub/skill-hub"
                         ]
                       },
                       {
                         "group": "Channel",
                         "pages": [
-                          "versions/2.0.8dev/en/deploy/channel/overview",
-                          "versions/2.0.8dev/en/deploy/channel/routing",
-                          "versions/2.0.8dev/en/deploy/channel/feishu",
-                          "versions/2.0.8dev/en/deploy/channel/dingtalk",
-                          "versions/2.0.8dev/en/deploy/channel/discord",
-                          "versions/2.0.8dev/en/deploy/channel/custom"
+                          "versions/2.0.9dev/en/deploy/channel/overview",
+                          "versions/2.0.9dev/en/deploy/channel/routing",
+                          "versions/2.0.9dev/en/deploy/channel/feishu",
+                          "versions/2.0.9dev/en/deploy/channel/dingtalk",
+                          "versions/2.0.9dev/en/deploy/channel/discord",
+                          "versions/2.0.9dev/en/deploy/channel/custom"
                         ]
                       },
                       {
                         "group": "API",
-                        "openapi": "versions/2.0.8dev/en/deploy/openapi.json"
+                        "openapi": "versions/2.0.9dev/en/deploy/openapi.json"
                       }
                     ]
                   },
                   {
                     "group": "Others",
                     "pages": [
-                      "versions/2.0.8dev/en/others/faq",
-                      "versions/2.0.8dev/en/others/change-log"
+                      "versions/2.0.9dev/en/others/faq",
+                      "versions/2.0.9dev/en/others/change-log"
                     ]
                   }
                 ],
                 "tag": "Development"
+              },
+              {
+                "version": "2.0.8",
+                "groups": [
+                  {
+                    "group": "Get Started",
+                    "pages": [
+                      "versions/2.0.8/en/index",
+                      "versions/2.0.8/en/quickstart",
+                      "versions/2.0.8/en/release-notes"
+                    ]
+                  },
+                  {
+                    "group": "Building Blocks",
+                    "pages": [
+                      "versions/2.0.8/en/building-blocks/message-and-event",
+                      {
+                        "group": "Agent",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/agent/overview",
+                          "versions/2.0.8/en/building-blocks/agent/configure-agent",
+                          "versions/2.0.8/en/building-blocks/agent/run-agent",
+                          "versions/2.0.8/en/building-blocks/agent/interrupt-agent",
+                          "versions/2.0.8/en/building-blocks/agent/human-in-the-loop"
+                        ]
+                      },
+                      {
+                        "group": "Model",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/model/overview",
+                          "versions/2.0.8/en/building-blocks/model/llm",
+                          "versions/2.0.8/en/building-blocks/model/tts",
+                          "versions/2.0.8/en/building-blocks/model/embedding"
+                        ]
+                      },
+                      {
+                        "group": "Context",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/context/overview",
+                          "versions/2.0.8/en/building-blocks/context/environment-awareness",
+                          "versions/2.0.8/en/building-blocks/context/compress-context",
+                          "versions/2.0.8/en/building-blocks/context/offload-context"
+                        ]
+                      },
+                      {
+                        "group": "Tool",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/tool/overview",
+                          "versions/2.0.8/en/building-blocks/tool/python-tool",
+                          "versions/2.0.8/en/building-blocks/tool/mcp",
+                          "versions/2.0.8/en/building-blocks/tool/skill",
+                          "versions/2.0.8/en/building-blocks/tool/manage-tools"
+                        ]
+                      },
+                      "versions/2.0.8/en/building-blocks/plan",
+                      {
+                        "group": "Pipeline",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/pipeline/overview",
+                          "versions/2.0.8/en/building-blocks/pipeline/goal"
+                        ]
+                      },
+                      {
+                        "group": "Permission System",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/permission-system/overview",
+                          "versions/2.0.8/en/building-blocks/permission-system/permission-mode",
+                          "versions/2.0.8/en/building-blocks/permission-system/permission-rule",
+                          "versions/2.0.8/en/building-blocks/permission-system/tool-check"
+                        ]
+                      },
+                      "versions/2.0.8/en/building-blocks/middleware",
+                      "versions/2.0.8/en/building-blocks/rag",
+                      "versions/2.0.8/en/building-blocks/long-term-memory",
+                      {
+                        "group": "Workspace",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/workspace/overview",
+                          "versions/2.0.8/en/building-blocks/workspace/run-workspace",
+                          "versions/2.0.8/en/building-blocks/workspace/manage-resources",
+                          "versions/2.0.8/en/building-blocks/workspace/mcp-gateway"
+                        ]
+                      },
+                      {
+                        "group": "Realtime Agent",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8/en/building-blocks/realtime/overview",
+                          "versions/2.0.8/en/building-blocks/realtime/speech-to-speech"
+                        ]
+                      },
+                      "versions/2.0.8/en/building-blocks/console",
+                      "versions/2.0.8/en/building-blocks/a2a"
+                    ]
+                  },
+                  {
+                    "group": "Agent as Service",
+                    "pages": [
+                      "versions/2.0.8/en/deploy/agent-service",
+                      "versions/2.0.8/en/deploy/agent-team",
+                      "versions/2.0.8/en/deploy/sharing",
+                      "versions/2.0.8/en/deploy/rag",
+                      "versions/2.0.8/en/deploy/workspace-manager",
+                      {
+                        "group": "MCP & Skill Hub",
+                        "pages": [
+                          "versions/2.0.8/en/deploy/hub/overview",
+                          "versions/2.0.8/en/deploy/hub/mcp-hub",
+                          "versions/2.0.8/en/deploy/hub/skill-hub"
+                        ]
+                      },
+                      {
+                        "group": "Channel",
+                        "pages": [
+                          "versions/2.0.8/en/deploy/channel/overview",
+                          "versions/2.0.8/en/deploy/channel/routing",
+                          "versions/2.0.8/en/deploy/channel/feishu",
+                          "versions/2.0.8/en/deploy/channel/dingtalk",
+                          "versions/2.0.8/en/deploy/channel/discord",
+                          "versions/2.0.8/en/deploy/channel/custom"
+                        ]
+                      },
+                      {
+                        "group": "API",
+                        "openapi": "versions/2.0.8/en/deploy/openapi.json"
+                      }
+                    ]
+                  },
+                  {
+                    "group": "Others",
+                    "pages": [
+                      "versions/2.0.8/en/others/faq",
+                      "versions/2.0.8/en/others/change-log"
+                    ]
+                  }
+                ],
+                "default": true
               },
               {
                 "version": "2.0.7",
@@ -275,8 +413,7 @@
                       "versions/2.0.7/en/others/change-log"
                     ]
                   }
-                ],
-                "default": true
+                ]
               },
               {
                 "version": "2.0.6",
@@ -769,142 +906,280 @@
             "tab": "AgentScope",
             "versions": [
               {
-                "version": "2.0.8dev",
+                "version": "2.0.9dev",
                 "groups": [
                   {
                     "group": "快速开始",
                     "pages": [
-                      "versions/2.0.8dev/zh/index",
-                      "versions/2.0.8dev/zh/quickstart",
-                      "versions/2.0.8dev/zh/release-notes"
+                      "versions/2.0.9dev/zh/index",
+                      "versions/2.0.9dev/zh/quickstart",
+                      "versions/2.0.9dev/zh/release-notes"
                     ]
                   },
                   {
                     "group": "核心模块",
                     "pages": [
-                      "versions/2.0.8dev/zh/building-blocks/message-and-event",
+                      "versions/2.0.9dev/zh/building-blocks/message-and-event",
                       {
                         "group": "智能体",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/agent/overview",
-                          "versions/2.0.8dev/zh/building-blocks/agent/configure-agent",
-                          "versions/2.0.8dev/zh/building-blocks/agent/run-agent",
-                          "versions/2.0.8dev/zh/building-blocks/agent/interrupt-agent",
-                          "versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop"
+                          "versions/2.0.9dev/zh/building-blocks/agent/overview",
+                          "versions/2.0.9dev/zh/building-blocks/agent/configure-agent",
+                          "versions/2.0.9dev/zh/building-blocks/agent/run-agent",
+                          "versions/2.0.9dev/zh/building-blocks/agent/interrupt-agent",
+                          "versions/2.0.9dev/zh/building-blocks/agent/human-in-the-loop"
                         ]
                       },
                       {
                         "group": "模型",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/model/overview",
-                          "versions/2.0.8dev/zh/building-blocks/model/llm",
-                          "versions/2.0.8dev/zh/building-blocks/model/tts",
-                          "versions/2.0.8dev/zh/building-blocks/model/embedding"
+                          "versions/2.0.9dev/zh/building-blocks/model/overview",
+                          "versions/2.0.9dev/zh/building-blocks/model/llm",
+                          "versions/2.0.9dev/zh/building-blocks/model/tts",
+                          "versions/2.0.9dev/zh/building-blocks/model/embedding"
                         ]
                       },
                       {
                         "group": "上下文管理",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/context/overview",
-                          "versions/2.0.8dev/zh/building-blocks/context/environment-awareness",
-                          "versions/2.0.8dev/zh/building-blocks/context/compress-context",
-                          "versions/2.0.8dev/zh/building-blocks/context/offload-context"
+                          "versions/2.0.9dev/zh/building-blocks/context/overview",
+                          "versions/2.0.9dev/zh/building-blocks/context/environment-awareness",
+                          "versions/2.0.9dev/zh/building-blocks/context/compress-context",
+                          "versions/2.0.9dev/zh/building-blocks/context/offload-context"
                         ]
                       },
                       {
                         "group": "工具",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/tool/overview",
-                          "versions/2.0.8dev/zh/building-blocks/tool/python-tool",
-                          "versions/2.0.8dev/zh/building-blocks/tool/mcp",
-                          "versions/2.0.8dev/zh/building-blocks/tool/skill",
-                          "versions/2.0.8dev/zh/building-blocks/tool/manage-tools"
+                          "versions/2.0.9dev/zh/building-blocks/tool/overview",
+                          "versions/2.0.9dev/zh/building-blocks/tool/python-tool",
+                          "versions/2.0.9dev/zh/building-blocks/tool/mcp",
+                          "versions/2.0.9dev/zh/building-blocks/tool/skill",
+                          "versions/2.0.9dev/zh/building-blocks/tool/manage-tools"
                         ]
                       },
-                      "versions/2.0.8dev/zh/building-blocks/plan",
+                      "versions/2.0.9dev/zh/building-blocks/plan",
                       {
                         "group": "流水线",
                         "tag": "EXP",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/pipeline/overview",
-                          "versions/2.0.8dev/zh/building-blocks/pipeline/goal"
+                          "versions/2.0.9dev/zh/building-blocks/pipeline/overview",
+                          "versions/2.0.9dev/zh/building-blocks/pipeline/goal"
                         ]
                       },
                       {
                         "group": "权限系统",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/permission-system/overview",
-                          "versions/2.0.8dev/zh/building-blocks/permission-system/permission-mode",
-                          "versions/2.0.8dev/zh/building-blocks/permission-system/permission-rule",
-                          "versions/2.0.8dev/zh/building-blocks/permission-system/tool-check"
+                          "versions/2.0.9dev/zh/building-blocks/permission-system/overview",
+                          "versions/2.0.9dev/zh/building-blocks/permission-system/permission-mode",
+                          "versions/2.0.9dev/zh/building-blocks/permission-system/permission-rule",
+                          "versions/2.0.9dev/zh/building-blocks/permission-system/tool-check"
                         ]
                       },
-                      "versions/2.0.8dev/zh/building-blocks/middleware",
-                      "versions/2.0.8dev/zh/building-blocks/rag",
-                      "versions/2.0.8dev/zh/building-blocks/long-term-memory",
+                      "versions/2.0.9dev/zh/building-blocks/middleware",
+                      "versions/2.0.9dev/zh/building-blocks/rag",
+                      "versions/2.0.9dev/zh/building-blocks/long-term-memory",
                       {
                         "group": "工作区",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/workspace/overview",
-                          "versions/2.0.8dev/zh/building-blocks/workspace/run-workspace",
-                          "versions/2.0.8dev/zh/building-blocks/workspace/manage-resources",
-                          "versions/2.0.8dev/zh/building-blocks/workspace/mcp-gateway"
+                          "versions/2.0.9dev/zh/building-blocks/workspace/overview",
+                          "versions/2.0.9dev/zh/building-blocks/workspace/run-workspace",
+                          "versions/2.0.9dev/zh/building-blocks/workspace/manage-resources",
+                          "versions/2.0.9dev/zh/building-blocks/workspace/mcp-gateway"
                         ]
                       },
                       {
                         "group": "实时语音智能体",
                         "tag": "EXP",
                         "pages": [
-                          "versions/2.0.8dev/zh/building-blocks/realtime/overview",
-                          "versions/2.0.8dev/zh/building-blocks/realtime/speech-to-speech"
+                          "versions/2.0.9dev/zh/building-blocks/realtime/overview",
+                          "versions/2.0.9dev/zh/building-blocks/realtime/speech-to-speech"
                         ]
                       },
-                      "versions/2.0.8dev/zh/building-blocks/console",
-                      "versions/2.0.8dev/zh/building-blocks/a2a"
+                      "versions/2.0.9dev/zh/building-blocks/console",
+                      "versions/2.0.9dev/zh/building-blocks/a2a"
                     ]
                   },
                   {
                     "group": "智能体即服务",
                     "pages": [
-                      "versions/2.0.8dev/zh/deploy/agent-service",
-                      "versions/2.0.8dev/zh/deploy/agent-team",
-                      "versions/2.0.8dev/zh/deploy/sharing",
-                      "versions/2.0.8dev/zh/deploy/rag",
-                      "versions/2.0.8dev/zh/deploy/workspace-manager",
+                      "versions/2.0.9dev/zh/deploy/agent-service",
+                      "versions/2.0.9dev/zh/deploy/agent-team",
+                      "versions/2.0.9dev/zh/deploy/sharing",
+                      "versions/2.0.9dev/zh/deploy/rag",
+                      "versions/2.0.9dev/zh/deploy/workspace-manager",
                       {
                         "group": "MCP 与技能中心",
                         "pages": [
-                          "versions/2.0.8dev/zh/deploy/hub/overview",
-                          "versions/2.0.8dev/zh/deploy/hub/mcp-hub",
-                          "versions/2.0.8dev/zh/deploy/hub/skill-hub"
+                          "versions/2.0.9dev/zh/deploy/hub/overview",
+                          "versions/2.0.9dev/zh/deploy/hub/mcp-hub",
+                          "versions/2.0.9dev/zh/deploy/hub/skill-hub"
                         ]
                       },
                       {
                         "group": "消息渠道",
                         "pages": [
-                          "versions/2.0.8dev/zh/deploy/channel/overview",
-                          "versions/2.0.8dev/zh/deploy/channel/routing",
-                          "versions/2.0.8dev/zh/deploy/channel/feishu",
-                          "versions/2.0.8dev/zh/deploy/channel/dingtalk",
-                          "versions/2.0.8dev/zh/deploy/channel/discord",
-                          "versions/2.0.8dev/zh/deploy/channel/custom"
+                          "versions/2.0.9dev/zh/deploy/channel/overview",
+                          "versions/2.0.9dev/zh/deploy/channel/routing",
+                          "versions/2.0.9dev/zh/deploy/channel/feishu",
+                          "versions/2.0.9dev/zh/deploy/channel/dingtalk",
+                          "versions/2.0.9dev/zh/deploy/channel/discord",
+                          "versions/2.0.9dev/zh/deploy/channel/custom"
                         ]
                       },
                       {
                         "group": "API",
-                        "openapi": "versions/2.0.8dev/en/deploy/openapi.json"
+                        "openapi": "versions/2.0.9dev/en/deploy/openapi.json"
                       }
                     ]
                   },
                   {
                     "group": "其他",
                     "pages": [
-                      "versions/2.0.8dev/zh/others/faq",
-                      "versions/2.0.8dev/zh/others/change-log"
+                      "versions/2.0.9dev/zh/others/faq",
+                      "versions/2.0.9dev/zh/others/change-log"
                     ]
                   }
                 ],
                 "tag": "Development"
+              },
+              {
+                "version": "2.0.8",
+                "groups": [
+                  {
+                    "group": "快速开始",
+                    "pages": [
+                      "versions/2.0.8/zh/index",
+                      "versions/2.0.8/zh/quickstart",
+                      "versions/2.0.8/zh/release-notes"
+                    ]
+                  },
+                  {
+                    "group": "核心模块",
+                    "pages": [
+                      "versions/2.0.8/zh/building-blocks/message-and-event",
+                      {
+                        "group": "智能体",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/agent/overview",
+                          "versions/2.0.8/zh/building-blocks/agent/configure-agent",
+                          "versions/2.0.8/zh/building-blocks/agent/run-agent",
+                          "versions/2.0.8/zh/building-blocks/agent/interrupt-agent",
+                          "versions/2.0.8/zh/building-blocks/agent/human-in-the-loop"
+                        ]
+                      },
+                      {
+                        "group": "模型",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/model/overview",
+                          "versions/2.0.8/zh/building-blocks/model/llm",
+                          "versions/2.0.8/zh/building-blocks/model/tts",
+                          "versions/2.0.8/zh/building-blocks/model/embedding"
+                        ]
+                      },
+                      {
+                        "group": "上下文管理",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/context/overview",
+                          "versions/2.0.8/zh/building-blocks/context/environment-awareness",
+                          "versions/2.0.8/zh/building-blocks/context/compress-context",
+                          "versions/2.0.8/zh/building-blocks/context/offload-context"
+                        ]
+                      },
+                      {
+                        "group": "工具",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/tool/overview",
+                          "versions/2.0.8/zh/building-blocks/tool/python-tool",
+                          "versions/2.0.8/zh/building-blocks/tool/mcp",
+                          "versions/2.0.8/zh/building-blocks/tool/skill",
+                          "versions/2.0.8/zh/building-blocks/tool/manage-tools"
+                        ]
+                      },
+                      "versions/2.0.8/zh/building-blocks/plan",
+                      {
+                        "group": "流水线",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/pipeline/overview",
+                          "versions/2.0.8/zh/building-blocks/pipeline/goal"
+                        ]
+                      },
+                      {
+                        "group": "权限系统",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/permission-system/overview",
+                          "versions/2.0.8/zh/building-blocks/permission-system/permission-mode",
+                          "versions/2.0.8/zh/building-blocks/permission-system/permission-rule",
+                          "versions/2.0.8/zh/building-blocks/permission-system/tool-check"
+                        ]
+                      },
+                      "versions/2.0.8/zh/building-blocks/middleware",
+                      "versions/2.0.8/zh/building-blocks/rag",
+                      "versions/2.0.8/zh/building-blocks/long-term-memory",
+                      {
+                        "group": "工作区",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/workspace/overview",
+                          "versions/2.0.8/zh/building-blocks/workspace/run-workspace",
+                          "versions/2.0.8/zh/building-blocks/workspace/manage-resources",
+                          "versions/2.0.8/zh/building-blocks/workspace/mcp-gateway"
+                        ]
+                      },
+                      {
+                        "group": "实时语音智能体",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8/zh/building-blocks/realtime/overview",
+                          "versions/2.0.8/zh/building-blocks/realtime/speech-to-speech"
+                        ]
+                      },
+                      "versions/2.0.8/zh/building-blocks/console",
+                      "versions/2.0.8/zh/building-blocks/a2a"
+                    ]
+                  },
+                  {
+                    "group": "智能体即服务",
+                    "pages": [
+                      "versions/2.0.8/zh/deploy/agent-service",
+                      "versions/2.0.8/zh/deploy/agent-team",
+                      "versions/2.0.8/zh/deploy/sharing",
+                      "versions/2.0.8/zh/deploy/rag",
+                      "versions/2.0.8/zh/deploy/workspace-manager",
+                      {
+                        "group": "MCP 与技能中心",
+                        "pages": [
+                          "versions/2.0.8/zh/deploy/hub/overview",
+                          "versions/2.0.8/zh/deploy/hub/mcp-hub",
+                          "versions/2.0.8/zh/deploy/hub/skill-hub"
+                        ]
+                      },
+                      {
+                        "group": "消息渠道",
+                        "pages": [
+                          "versions/2.0.8/zh/deploy/channel/overview",
+                          "versions/2.0.8/zh/deploy/channel/routing",
+                          "versions/2.0.8/zh/deploy/channel/feishu",
+                          "versions/2.0.8/zh/deploy/channel/dingtalk",
+                          "versions/2.0.8/zh/deploy/channel/discord",
+                          "versions/2.0.8/zh/deploy/channel/custom"
+                        ]
+                      },
+                      {
+                        "group": "API",
+                        "openapi": "versions/2.0.8/en/deploy/openapi.json"
+                      }
+                    ]
+                  },
+                  {
+                    "group": "其他",
+                    "pages": [
+                      "versions/2.0.8/zh/others/faq",
+                      "versions/2.0.8/zh/others/change-log"
+                    ]
+                  }
+                ],
+                "default": true
               },
               {
                 "version": "2.0.7",
@@ -1026,8 +1301,7 @@
                       "versions/2.0.7/zh/others/change-log"
                     ]
                   }
-                ],
-                "default": true
+                ]
               },
               {
                 "version": "2.0.6",
@@ -1463,11 +1737,11 @@
   "redirects": [
     {
       "source": "/latest/:slug*",
-      "destination": "/versions/2.0.8dev/:slug*"
+      "destination": "/versions/2.0.9dev/:slug*"
     },
     {
       "source": "/stable/:slug*",
-      "destination": "/versions/2.0.7/:slug*"
+      "destination": "/versions/2.0.8/:slug*"
     },
     {
       "source": "/reme/:version/en/index",

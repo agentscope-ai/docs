@@ -1,0 +1,56 @@
+---
+title: "Overview"
+description: "Equip agents with tools, MCP servers, and skills through the toolkit"
+---
+
+Tools are how an agent acts on the world: running shell commands, reading files, calling APIs. Each tool exposes itself to the LLM as a JSON Schema, and the agent invokes it through a unified streaming interface.
+
+AgentScope organizes tool-related building blocks under three concepts:
+
+| Concept | Role |
+|---------|------|
+| **Tool** | Any class that satisfies the `ToolBase` interface, including the built-ins shipped with AgentScope and the `FunctionTool` / `MCPTool` adapters that wrap plain functions or MCP-server tools |
+| **Toolkit** | The container that registers tools, MCP clients, and skills, exposes their JSON schemas to the model, and dispatches each tool call to the right tool object |
+| **Tool Group** | A named bundle of tools, MCP clients, and skills that can be activated or deactivated as a unit; the agent toggles groups at runtime via the built-in meta tool |
+
+A minimal `Toolkit` takes a list of tool instances:
+
+```python
+from agentscope.tool import Toolkit, Bash, Read, Write, Edit
+
+toolkit = Toolkit(
+    tools=[Bash(), Read(), Write(), Edit()],
+)
+```
+
+A `Toolkit` created with `tools` alone exposes those tools in the special `"basic"` group, which is always active. Adding `mcps`, `skills_or_loaders`, or extra `tool_groups` extends what the agent can reach.
+
+## Next Steps
+
+Each capability source has its own page:
+
+<CardGroup cols={2}>
+  <Card title="Python Tool" icon="code" href="/versions/2.0.9dev/en/building-blocks/tool/python-tool">
+    Built-in tools, custom tools, function wrapping, and tool middleware.
+  </Card>
+  <Card title="MCP" icon="plug" href="/versions/2.0.9dev/en/building-blocks/tool/mcp">
+    Connect MCP servers and use their tools.
+  </Card>
+  <Card title="Skill" icon="book-open" href="/versions/2.0.9dev/en/building-blocks/tool/skill">
+    Extend agent capabilities with markdown instruction sets.
+  </Card>
+  <Card title="Meta Tool" icon="toggle-on" href="/versions/2.0.9dev/en/building-blocks/tool/manage-tools">
+    Let the agent activate and deactivate tool groups at runtime.
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Agent" icon="robot" href="/versions/2.0.9dev/en/building-blocks/agent/overview">
+    How agents orchestrate tool calls in the ReAct loop.
+  </Card>
+  <Card title="Permission System" icon="shield" href="/versions/2.0.9dev/en/building-blocks/permission-system/overview">
+    Fine-grained control over which tools can execute and when.
+  </Card>
+</CardGroup>

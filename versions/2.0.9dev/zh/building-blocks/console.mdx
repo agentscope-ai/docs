@@ -1,0 +1,140 @@
+---
+title: "终端 UI"
+description: "在终端快速测试、验证智能体运行逻辑"
+---
+
+当开发者需要快速验证或调试一个智能体时，可以使用 `agentscope.console` 模块直接在终端中与智能体对话、查看完整的事件流，无需启动 Web 服务，也无需手动分发 `reply_stream` 产出的数十种事件。
+
+终端 UI（Console）模块提供两个接口，分别对应两类使用场景：
+
+| 接口 | 适用场景 |
+|------|----------|
+| `launch_console` | 与单个智能体交互式对话：内置输入循环、工具调用确认与中断处理，零界面代码 |
+| `ConsoleRenderer` | 嵌入开发者自己的代码：只负责把事件流渲染为终端输出，输入与编排逻辑由调用方掌控 |
+
+## 启动交互对话
+
+`launch_console` 接收一个构造完成的智能体，接管终端交互的全部环节：
+
+```python 与智能体在终端中对话
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import Bash, Read, Toolkit, Write
+
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You're a helpful assistant named Friday.",
+        model=DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.environ["DASHSCOPE_API_KEY"],
+            ),
+            model="qwen3.7-max",
+        ),
+        toolkit=Toolkit(tools=[Bash(), Read(), Write()]),
+    )
+
+    # 进入终端对话，输入 exit/quit 或按 Ctrl+D 退出
+    await launch_console(agent)
+
+
+asyncio.run(main())
+```
+
+运行后各交互环节的行为如下：
+
+| 环节 | 行为 |
+|------|------|
+| 消息输入 | 以 `user>` 提示符读取输入，输入 `exit`、`quit` 或按 Ctrl+D 退出 |
+| 流式渲染 | 回复文本与思考过程实时打印，工具调用与结果整块输出 |
+| 工具确认 | 工具调用需要确认时逐个询问：`y` 允许一次，`a` 同时接受建议的权限规则（后续匹配的调用不再询问），其余输入拒绝 |
+| 中断 | 流式输出过程中按 Ctrl+C 中断当前回复；在确认提示处按 Ctrl+C 终止等待确认的回复 |
+
+`launch_console` 支持以下参数：
+
+<ParamField path="agent" type="Agent | PipelineProtocol" required>
+  要交互的智能体，或任意满足
+  [`PipelineProtocol`](/versions/2.0.9dev/zh/building-blocks/pipeline/overview)
+  的流水线。
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  用户消息的发送者名称，同时用作输入提示符。
+</ParamField>
+
+<ParamField path="verbosity" type="str" default="default">
+  输出详细程度，取值为 `"quiet"`、`"default"` 或 `"debug"`，详见[控制输出详细程度](#控制输出详细程度)。
+</ParamField>
+
+<ParamField path="max_tool_result_lines" type="int | None" default="20">
+  单条工具结果的最大打印行数，超出部分折叠为提示行，`None` 表示不截断。
+</ParamField>
+
+<Note>
+`launch_console` 不包含会话管理与持久化：对话状态保存在 `agent.state` 中，随进程退出而结束。若需要多用户、多会话与持久化存储，请使用[智能体服务](/versions/2.0.9dev/zh/deploy/agent-service)。
+</Note>
+
+## 嵌入事件渲染器
+
+当开发者自己掌控运行逻辑（例如多智能体流水线、测试脚本）时，可以只使用 `ConsoleRenderer` 完成打印。渲染器是被动的：事件如何产生、输入与确认如何处理，均由调用方决定。
+
+```python 在自己的代码中渲染事件流
+from agentscope.console import ConsoleRenderer
+from agentscope.message import UserMsg
+
+renderer = ConsoleRenderer()
+
+# 把 reply_stream 产出的每个事件交给渲染器
+async for event in agent.reply_stream(UserMsg("user", "你好！")):
+    renderer.render(event)
+
+# 渲染器会把事件累积回一条完整的回复消息
+final_msg = renderer.last_msg
+```
+
+渲染器按回复标识区分事件的归属，因此多个智能体顺序发言时可以复用同一个实例：
+
+```python 渲染多智能体流水线
+renderer = ConsoleRenderer()
+
+msg = UserMsg("user", "写一段产品介绍")
+for agent in [writer, reviewer]:
+    async for event in agent.reply_stream(msg):
+        renderer.render(event)
+    # 上一个智能体的完整回复作为下一个的输入
+    msg = renderer.last_msg
+```
+
+渲染器对各类事件的处理规则如下：
+
+| 内容 | 渲染方式 |
+|------|----------|
+| 回复文本、思考过程 | 实时流式打印，思考内容以暗色显示 |
+| 工具调用、工具结果 | 结束事件到达时整块打印，并发执行的多个工具结果不会交错；超长结果按行数截断 |
+| 提示块 | 以带边框的面板展示，例如运行时状态注入的时间与任务提醒 |
+| 二进制数据 | 图片、音频等以占位符显示（如 `[data: image/png, ~34KB]`），不打印 base64 内容 |
+| token 用量 | 每次模型调用结束后打印一行输入/输出 token 数 |
+
+<Tip>
+工具确认、外部执行等需要人工介入的事件，渲染器只负责显示提醒；如何收集确认结果并继续回复由调用方实现，可参考[人机协作](/versions/2.0.9dev/zh/building-blocks/agent/human-in-the-loop)。
+</Tip>
+
+## 控制输出详细程度
+
+`launch_console` 与 `ConsoleRenderer` 均通过 `verbosity` 参数控制输出的详细程度，三档依次递增：
+
+| 档位 | 显示内容 |
+|------|----------|
+| `quiet` | 仅回复文本与错误信息 |
+| `default` | 增加思考过程、工具调用与结果、提示块、token 用量、确认提醒 |
+| `debug` | 增加生命周期事件（模型调用开始、回复结束原因等）与工具结果元数据 |
+
+<Note>
+渲染器会静默跳过未知的事件类型（`debug` 档打印一行类型名），因此事件协议新增类型不会影响既有的渲染逻辑。
+</Note>

@@ -1,0 +1,165 @@
+---
+title: "压缩上下文"
+description: "将上下文长度维护在预设的长度内"
+---
+
+当上下文窗口被填满时，AgentScope 通过 `ContextConfig` 控制的两套自动机制保持其形态：**上下文压缩**（汇总较早消息）与**工具结果截断**（截断过大的工具输出）。两者均透明运行，智能体不会因此中断。除此之外，开发者可以随时手动压缩，也可以把压缩的时机交给智能体自己决定。
+
+## 配置压缩
+
+`ContextConfig` 在创建智能体时传入：
+
+```python
+from agentscope.agent import Agent, ContextConfig
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    toolkit=toolkit,
+    context_config=ContextConfig(
+        trigger_ratio=0.8,
+        reserve_ratio=0.1,
+        tool_result_limit=3000,
+        max_image_num=5,
+    ),
+)
+```
+
+可用字段：
+
+| 参数                  | 类型      | 说明                                                                       |
+|----------------------|-----------|----------------------------------------------------------------------------|
+| `trigger_ratio`      | `float`   | 当 token 用量超过该比例 × 模型上下文长度时触发压缩（上限 `0.9`）             |
+| `reserve_ratio`      | `float`   | 压缩后作为最近消息保留的上下文 token 比例                                  |
+| `tool_result_limit`  | `int`     | 单条工具结果的最大 token 数，超出则截断                                    |
+| `max_image_num`      | `int`     | 上下文中保留的最大图片数，默认为 `5`                                 |
+| `context_buffer_ratio` | `float` | 压缩阈值前的缓冲区，默认 `0.2`；当触发比例为 0.8、缓冲为 0.2 时，输入 token 数超过模型上下文的 60% 即开始[注入上下文用量](/versions/2.0.9dev/zh/building-blocks/context/environment-awareness)，也是智能体自主压缩的生效区间 |
+| `compression_tool_enabled` | `bool` | 是否向智能体暴露 `CompressContext` 工具，让它自行决定压缩时机，默认 `False` |
+| `compression_fallback_to_truncation` | `bool` | 摘要生成失败时是否退化为截断最早的消息，默认 `True`；设为 `False` 则直接抛出错误 |
+| `compression_prompt` | `str`     | 引导模型生成摘要的提示词                                                   |
+| `summary_template`   | `str`     | 把摘要拼回上下文时使用的字符串模板                                         |
+| `summary_schema`     | `dict`    | 约束模型结构化摘要输出的 JSON Schema                                       |
+
+<Note>
+`context_buffer_ratio` 必须小于 `trigger_ratio`，以保证上下文用量在硬压缩发生之前注入、智能体也来得及自行压缩。否则智能体构造函数会抛出 `ValueError`。
+</Note>
+
+## 自动压缩
+
+压缩在每次推理步骤前自动执行，流程如下：
+
+<Steps>
+  <Step title="计算 token 数">
+    智能体累计系统提示、摘要、上下文与工具 schema 的全部 token。
+  </Step>
+  <Step title="判断阈值">
+    若总数超过 `trigger_ratio × context_size`，触发压缩；否则跳过此步，正常发起模型调用。
+  </Step>
+  <Step title="切分消息">
+    较早消息标记为待压缩；落在 `reserve_ratio × context_size` 内的最近消息保留。工具调用 / 结果对在切分时保持成对，不会被拆开。
+  </Step>
+  <Step title="生成摘要">
+    模型基于较早消息生成一份结构化摘要，包含五个字段：`task_overview`、`current_state`、`important_discoveries`、`next_steps`、`context_to_preserve`。
+  </Step>
+  <Step title="更新状态">
+    摘要替换被压缩的消息，保留下来的最近消息成为新的上下文。智能体随后继续完成本次推理步骤。
+  </Step>
+</Steps>
+
+<Note>
+`trigger_ratio`（最高 `0.9`）与完整上下文之间的剩余 10% 是给压缩调用本身预留的：模型需要空间生成摘要。
+</Note>
+
+摘要生成会重试若干次，全部失败后的行为由 `compression_fallback_to_truncation` 决定：默认丢弃最早的消息并在摘要位置留下一条截断说明，让智能体带着缩短的上下文继续运行；设为 `False` 则抛出错误，上下文原样保留，代价是可能超出模型上下文长度。
+
+## 手动压缩
+
+也可以调用智能体的 `compress_context()` 方法手动触发压缩。不传参数时使用智能体自身的 `context_config`；可通过传入一份临时的 `ContextConfig` 进行覆盖，或传入 `instructions`（一个 `HintBlock`）来引导摘要行为：
+
+```python
+# 使用智能体默认配置进行检查
+await agent.compress_context()
+
+# 或针对单次调用覆盖配置（例如更激进地压缩）
+from agentscope.agent import ContextConfig
+
+await agent.compress_context(
+    context_config=ContextConfig(trigger_ratio=0.5, reserve_ratio=0.1),
+)
+
+# 或注入指令来引导摘要行为
+from agentscope.message import HintBlock
+
+await agent.compress_context(
+    instructions=HintBlock(
+        hint="保留至今提到的所有文件路径与 API 签名。",
+    ),
+)
+```
+
+当 token 用量低于 `trigger_ratio × context_size` 时该方法为空操作，因此可以安全地在轮次之间或自定义检查点处随时调用。
+
+## 自主压缩
+
+自动压缩在阈值被突破的那一刻触发，这个位置往往落在一件事做到一半的时候，摘要因此容易丢掉正在进行的细节。把 `compression_tool_enabled` 设为 `True`，智能体会拿到一个 `CompressContext` 工具，可以抢在硬阈值之前、在两件事的交界处自行压缩：
+
+```python 开启自主压缩
+from agentscope.agent import Agent, ContextConfig
+
+agent = Agent(
+    name="my_agent",
+    system_prompt="...",
+    model=model,
+    toolkit=toolkit,
+    context_config=ContextConfig(
+        trigger_ratio=0.8,             # 硬阈值：达到即自动压缩
+        context_buffer_ratio=0.2,      # 提前 20% 提示智能体，即 60% 起
+        compression_tool_enabled=True, # 暴露 CompressContext 工具
+    ),
+)
+```
+
+开启后的运作方式：
+
+| 环节 | 行为 |
+|------|------|
+| 提示时机 | 输入 token 数进入 `(trigger_ratio - context_buffer_ratio) × context_size` 之后，且当前没有进行中的计划任务时，[运行时状态注入](/versions/2.0.9dev/zh/building-blocks/context/environment-awareness)会告知智能体可以调用 `CompressContext` |
+| 压缩阈值 | 工具内部按 `trigger_ratio - context_buffer_ratio` 判断，因此上下文未进入缓冲区时调用不会产生任何变化 |
+| 权限 | 该工具始终放行，不受[权限系统](/versions/2.0.9dev/zh/building-blocks/permission-system/overview)的确认流程影响 |
+| 失败处理 | 摘要生成失败时返回一条错误结果，上下文保持不变，智能体可以继续工作 |
+
+<Tip>
+自主压缩与自动压缩并存：智能体错过了缓冲区，上下文仍会在 `trigger_ratio` 处被自动压缩，因此开启它不需要额外的兜底逻辑。
+</Tip>
+
+## 限制图片数量
+
+`max_image_num` 用来避免长对话中的图片持续占用模型上下文。当图片数超过上限时，AgentScope 从最早的图片开始移除，并在原位置留下提示：
+
+- 如果智能体配置了 `offloader`，图片会先持久化，提示中包含可重新读取的路径；
+- 没有 `offloader` 时，图片会被丢弃，提示只记录其已因数量限制被移除。
+
+`max_image_num=0` 表示不在模型上下文中保留图片。
+
+## 截断工具结果
+
+每次工具调用之后，智能体会比较结果的 token 数与 `tool_result_limit`。超出限额时，结果被切分为保留部分（留在上下文中）与卸载部分（如挂载了卸载器，则交由其持久化，见[卸载上下文](/versions/2.0.9dev/zh/building-blocks/context/offload-context)）。
+
+保留部分会追加一段截断标记，让智能体知道输出已被截断：
+
+```
+<<<TRUNCATED>>>
+<system-reminder>The remaining content has been omitted for limited context.</system-reminder>
+```
+
+挂载了卸载器时，标记还会指向已持久化的完整输出：
+
+```
+<<<TRUNCATED>>>
+<system-reminder>The remaining content has been omitted for limited context. You can refer to the file in '/path/to/tool_result-<id>.txt' for the truncated content if needed.</system-reminder>
+```
+
+<Warning>
+`tool_result_limit` 设置过低会让智能体错过关键的工具输出；过高则可能让一次结果填满整个上下文。
+</Warning>

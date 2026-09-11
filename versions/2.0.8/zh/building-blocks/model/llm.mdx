@@ -1,0 +1,372 @@
+---
+title: "大语言模型"
+description: "创建并调用对话模型，也可以接入你自己的模型 API"
+---
+
+大语言模型（在 AgentScope 的类命名中称为 **Chat Model**）驱动智能体的对话与工具调用，输入输出可以是文本之外的多模态内容。AgentScope 当前提供以下模型类：
+
+| 模型 API              | 模型类                   |
+|--------------------|-----------------------|
+| OpenAI             | `OpenAIChatModel`     |
+| OpenAI (Responses API) | `OpenAIResponseModel` |
+| Anthropic          | `AnthropicChatModel`  |
+| DashScope          | `DashScopeChatModel`  |
+| DeepSeek           | `DeepSeekChatModel`   |
+| Gemini             | `GeminiChatModel`     |
+| Moonshot           | `MoonshotChatModel`   |
+| Volcengine         | `VolcengineChatModel` |
+| xAI                | `XAIChatModel`        |
+| Ollama             | `OllamaChatModel`     |
+
+## 创建模型
+
+每个模型接收一个凭证、一个模型名，以及可选的 API 专属 `Parameters` 对象。下面三个 tab 分别展示流式、工具调用与推理三种典型初始化场景：
+
+<CodeGroup>
+```python 流式输出
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="qwen-plus",
+    stream=True,
+)
+```
+
+```python 工具调用
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="qwen-plus",
+    stream=False,
+    parameters=DashScopeChatModel.Parameters(
+        parallel_tool_calls=False,
+    ),
+)
+```
+
+```python 推理模式
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+
+model = DashScopeChatModel(
+    credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+    model="qwen3-235b-a22b-thinking-2507",
+    parameters=DashScopeChatModel.Parameters(
+        thinking_enable=True,
+        thinking_budget=2048,
+    ),
+)
+```
+</CodeGroup>
+
+所有模型共享的构造参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `credential` | `CredentialBase` | API 专属凭证 |
+| `model` | `str` | 模型标识符（例如 `"qwen-plus"`） |
+| `parameters` | `Parameters \| None` | API 专属参数，例如 `temperature`、`thinking_enable`、`parallel_tool_calls` |
+| `stream` | `bool` | 是否流式输出 |
+| `max_retries` | `int` | API 失败时的最大重试次数 |
+| `context_size` | `int` | 上下文窗口大小，用于上下文压缩 |
+| `formatter` | `FormatterBase \| None` | 覆盖默认的消息格式化器（参见[格式化器](#格式化器)） |
+
+## 调用模型
+
+通过传入一组 `Msg` 对象（以及可选的 `tools` 和 `tool_choice`）调用模型：
+
+```python
+async def __call__(
+    self,
+    messages: list[Msg],
+    tools: list[dict] | None = None,
+    tool_choice: ToolChoice | None = None,
+    **kwargs: Any,
+) -> ChatResponse | AsyncGenerator[ChatResponse, None]:
+```
+
+返回类型取决于模型的 `stream` 设置：
+
+- **`stream=False`**：返回单个 `ChatResponse`，承载完整输出。
+- **`stream=True`**：返回 `AsyncGenerator[ChatResponse, None]`。中间 chunk（`is_last=False`）只携带**增量**内容；最后一个 chunk（`is_last=True`）承载**完整的累积内容**。
+
+下面两个 tab 分别展示两种模式：
+
+<CodeGroup>
+```python 流式
+import asyncio
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+
+async def main():
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen-plus",
+        stream=True,
+    )
+    msgs = [UserMsg(name="user", content="Count from 1 to 5.")]
+
+    # stream=True：迭代 ChatResponse chunk 组成的 async generator
+    async for chunk in await model(msgs):
+        if chunk.is_last:
+            print("Final:", chunk.content)   # 完整累积内容
+        else:
+            print("Delta:", chunk.content)   # 仅增量
+
+asyncio.run(main())
+```
+
+```python 非流式
+import asyncio
+import os
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+
+async def main():
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen-plus",
+        stream=False,
+    )
+    msgs = [UserMsg(name="user", content="Count from 1 to 5.")]
+
+    # stream=False：await 单个承载完整输出的 ChatResponse
+    response = await model(msgs)
+    print(response.content)   # [TextBlock(text='1, 2, 3, 4, 5')]
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+一段典型的流式输出示例，展示「增量 → 累积」的模式：
+
+```
+Delta: [TextBlock(text='1')]
+Delta: [TextBlock(text=', 2,')]
+Delta: [TextBlock(text=' 3, ')]
+Delta: [TextBlock(text='4, 5')]
+Final: [TextBlock(text='1, 2, 3, 4, 5')]
+```
+
+每个 `ChatResponse` 包含若干内容块（`TextBlock`、`ThinkingBlock`、`ToolCallBlock`、`DataBlock`）、一个 `is_last` 标志、一个 `finished_reason`（`FinishedReason.COMPLETED` 或 `FinishedReason.INTERRUPTED`），以及记录 token 数与耗时的 `ChatUsage`。
+
+## 中断模型调用
+
+模型层的中断指的是**异步取消**：模型调用运行在 asyncio 任务中，取消该任务（触发 `asyncio.CancelledError`）即可停止进行中的 API 请求，典型场景是用户在智能体推理过程中发起打断。
+
+被取消时，`ChatModelBase.__call__` 不会丢弃已生成的部分输出，而是捕获取消并返回一个最终 `ChatResponse`，其中包含已累积的内容，并将 `finished_reason` 标记为 `FinishedReason.INTERRUPTED`；正常结束时为 `FinishedReason.COMPLETED`，因此下游代码始终可以区分完整回答与被截断的回答：
+
+```python
+import asyncio
+from agentscope.model import FinishedReason
+
+async def call_model():
+    async for chunk in await model(msgs):
+        if chunk.is_last and chunk.finished_reason == FinishedReason.INTERRUPTED:
+            # 取消前已累积的部分内容
+            print("Interrupted:", chunk.content)
+
+task = asyncio.create_task(call_model())
+# 取消任务即可中断进行中的模型调用
+task.cancel()
+```
+
+这是智能体中断机制在模型层的那一半：`Agent` 类基于同样的机制停止运行中的推理-行动循环，并保持上下文一致。智能体层面的行为参见[中断智能体](/versions/2.0.8/zh/building-blocks/agent/interrupt-agent)。
+
+## 生成结构化输出
+
+当需要返回符合 Pydantic 模型或 JSON schema 的结构化结果时，调用 `generate_structured_output` 而非 `__call__`。它返回一个 `StructuredResponse`，其 `content` 是经过 schema 校验的 dict：
+
+```python
+import asyncio
+import os
+from pydantic import BaseModel
+from agentscope.model import DashScopeChatModel
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+
+class WeatherInfo(BaseModel):
+    city: str
+    temperature: float
+    unit: str
+
+async def main():
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        model="qwen-plus",
+        stream=False,
+    )
+    response = await model.generate_structured_output(
+        messages=[UserMsg(name="user", content="上海今天天气怎么样？")],
+        structured_model=WeatherInfo,
+    )
+    print(response.content)  # 符合 WeatherInfo 的 dict
+
+asyncio.run(main())
+```
+
+<Info>
+`generate_structured_output` 会基于 schema 合成一个强制工具调用，再对模型输出做校验与修复。
+</Info>
+
+## 格式化器
+
+格式化器（Formatter）负责把 AgentScope 的 `Msg` 对象转换为各模型 API 期望的 `list[dict]` 载荷。它通过模型构造函数中可选的 `formatter` 参数配置。AgentScope 为每种 API 都内置了两种格式化器：
+
+| 类型 | 适用场景 |
+|------|----------|
+| **ChatFormatter**（默认） | 标准的单智能体对话。每条 `Msg` 1:1 映射为一条 API 消息，保留原生角色（`user`、`assistant`、`system`）。 |
+| **MultiAgentFormatter** | 多智能体场景，例如辩论、主持等。连续的智能体消息会被聚合，并用 `<history>` 标签包裹，标注发送者名字；工具调用 / 结果序列保持原生 API 格式。 |
+
+切换到多智能体模式只需传入 MultiAgent 变体，无需修改智能体代码：
+
+```python
+import os
+from agentscope.model import OpenAIChatModel
+from agentscope.credential import OpenAICredential
+from agentscope.formatter import OpenAIMultiAgentFormatter
+
+model = OpenAIChatModel(
+    credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+    model="gpt-4.1",
+    formatter=OpenAIMultiAgentFormatter(),
+)
+```
+
+如果模型 API 的载荷格式不属于 OpenAI 或 Anthropic 风格，开发者可以继承 `FormatterBase` 实现自定义格式化器，并通过同一个 `formatter` 参数传入。
+
+### 多模态工具结果
+
+工具可以返回图片、音频等 `DataBlock`，各模型 API 承载这类内容的能力不同，格式化器据此决定它们如何进入请求：
+
+| 格式化器 | 多模态工具结果的承载方式 |
+|----------|--------------------------|
+| `OpenAIResponseFormatter` | 直接写进 `function_call_output.output` 的内容数组，文本、图片与文件按工具返回的原顺序排列，媒体与 `call_id` 的原生关联得以保留。纯文本结果仍是字符串输出。 |
+| 其余格式化器 | 工具结果里只留下引用该数据块的文字，数据块本身提升为紧随其后的一条用户消息。引用用的标识符取自 `DataBlock` 自带的稳定 `id`，因此同一段历史被反复格式化时输出保持一致，模型服务方的前缀缓存不会失效。 |
+
+两类格式化器遇到目标模型不支持的媒体类型时都会退回文字：base64 数据先落盘，工具结果中留下文件路径，URL 数据则直接给出 URL。
+
+## 自定义模型 API
+
+开发者可以通过实现一个凭证与一个模型类，并注册该凭证，把自定义模型 API 接入 AgentScope。
+
+### 步骤 1：定义凭证
+
+继承 `CredentialBase`，使用唯一的 `type` 判别字段，并实现 `get_chat_model_class()`：
+
+```python
+from typing import Literal, Type, TYPE_CHECKING
+from pydantic import ConfigDict, Field, SecretStr
+from agentscope.credential import CredentialBase
+
+if TYPE_CHECKING:
+    from agentscope.model import ChatModelBase
+
+class MyProviderCredential(CredentialBase):
+    model_config = ConfigDict(title="My Provider API")
+    type: Literal["my_provider_credential"] = "my_provider_credential"
+
+    api_key: SecretStr = Field(description="API key for My Provider.")
+    base_url: str = Field(default="https://api.myprovider.com/v1")
+
+    @classmethod
+    def get_chat_model_class(cls) -> Type["ChatModelBase"]:
+        from .my_model import MyProviderChatModel
+        return MyProviderChatModel
+```
+
+### 步骤 2：实现模型类
+
+继承 `ChatModelBase`，定义内部 `Parameters` 类，并实现 `_call_api`。基类负责重试、流式累积与中断处理，因此 `_call_api` 只需要把 API 返回结果转换为 AgentScope 的 `ChatResponse` chunk：
+
+```python
+from typing import Literal, Any, AsyncGenerator
+from pydantic import BaseModel, Field
+from agentscope.model import ChatModelBase, ChatResponse
+from agentscope.message import Msg
+from agentscope.tool import ToolChoice
+from agentscope.formatter import FormatterBase, OpenAIChatFormatter
+
+class MyProviderChatModel(ChatModelBase):
+    class Parameters(BaseModel):
+        max_tokens: int | None = Field(default=None, gt=0)
+        temperature: float | None = Field(default=None, ge=0, le=2)
+
+    type: Literal["my_provider_chat"] = "my_provider_chat"
+
+    def __init__(
+        self,
+        credential: "MyProviderCredential",
+        model: str,
+        parameters: Parameters | None = None,
+        stream: bool = True,
+        max_retries: int = 3,
+        context_size: int = 128000,
+        formatter: FormatterBase | None = None,
+    ) -> None:
+        super().__init__(
+            credential=credential,
+            model=model,
+            parameters=parameters or self.Parameters(),
+            stream=stream,
+            max_retries=max_retries,
+            context_size=context_size,
+        )
+        # 如果 API 兼容 OpenAI 格式，复用 OpenAIChatFormatter；
+        # 否则自行实现 FormatterBase 子类。
+        self.formatter = formatter or OpenAIChatFormatter()
+
+    async def _call_api(
+        self,
+        model_name: str,
+        messages: list[Msg],
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoice | None = None,
+        **kwargs: Any,
+    ) -> ChatResponse | AsyncGenerator[ChatResponse, None]:
+        formatted_messages = await self.formatter.format(messages)
+        # 用 self.credential.api_key 等调用你的模型 API。
+        # stream=False 时返回一个 ChatResponse；stream=True 时返回
+        # 一个只产出增量 ChatResponse chunk 的 async generator。
+        # 不要在这里累积流式 chunk；ChatModelBase.__call__ 会追加
+        # 最终累积响应，并在中断时标记 finished_reason。
+        ...
+```
+
+<Info>
+对流式的自定义模型而言，直接以 `ChatResponse(content=..., is_last=False)` 产出增量返回即可。如果 `_call_api` 结束时没有产出 `is_last=True` 的最终 chunk，`ChatModelBase.__call__` 会通过 `ChatResponse.append_chat_response()` 自动累积这些增量并返回最终响应；如果流式过程被取消，则会返回带有部分累积内容且 `finished_reason=FinishedReason.INTERRUPTED` 的响应。
+</Info>
+
+### 步骤 3：添加模型卡片（可选）
+
+把 YAML 文件放在模型实现旁边的 `_models/` 目录里。每个文件描述一个模型：它的能力（`input_types`、`output_types`）、上限（`context_size`、`output_size`），以及该模型专属的 `parameter_overrides`（完整卡片格式参见[前端集成](/versions/2.0.8/zh/building-blocks/model/overview#前端集成)）：
+
+```yaml
+name: my-model-v1
+label: My Model V1
+status: active
+input_types:
+  - text/plain
+output_types:
+  - text/plain
+context_size: 128000
+output_size: 4096
+parameter_overrides:
+  max_tokens: {"maximum": 4096}
+```
+
+`MyProviderChatModel.list_models()` 会加载该目录下的所有 YAML。如果想从其他位置（例如应用自己维护的模型注册表）拉取模型卡片，传入 `custom_yaml_dir`：
+
+```python
+cards = MyProviderChatModel.list_models(custom_yaml_dir="/path/to/cards")
+```
