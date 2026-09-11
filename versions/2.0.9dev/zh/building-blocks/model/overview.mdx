@@ -9,14 +9,14 @@ description: "通过凭证接入模型 API，并用模型卡片发现可用模�
 
 | 凭证 | 大语言模型（LLM） | 语音合成（TTS） | 嵌入模型（Embedding） | 实时模型 |
 |------|-------------------|-----------------|------------------------|----------|
-| `DashScopeCredential` | `DashScopeChatModel` | `DashScopeTTSModel`<br/>`DashScopeRealtimeTTSModel`<br/>`DashScopeCosyVoiceTTSModel` | `DashScopeEmbeddingModel` | *即将上线* |
-| `OpenAICredential` | `OpenAIChatModel`<br/>`OpenAIResponseModel` | `OpenAITTSModel` | `OpenAIEmbeddingModel` | *即将上线* |
-| `GeminiCredential` | `GeminiChatModel` | `GeminiTTSModel` | `GeminiEmbeddingModel` | *即将上线* |
+| `DashScopeCredential` | `DashScopeChatModel` | `DashScopeTTSModel`<br/>`DashScopeRealtimeTTSModel`<br/>`DashScopeCosyVoiceTTSModel` | `DashScopeEmbeddingModel` | `DashScopeRealtimeModel`<br/>`DashScopeAudioRealtimeModel` |
+| `OpenAICredential` | `OpenAIChatModel`<br/>`OpenAIResponseModel` | `OpenAITTSModel` | `OpenAIEmbeddingModel` | `OpenAIRealtimeModel` |
+| `GeminiCredential` | `GeminiChatModel` | `GeminiTTSModel` | `GeminiEmbeddingModel` | `GeminiRealtimeModel` |
 | `AnthropicCredential` | `AnthropicChatModel` | — | — | — |
 | `DeepSeekCredential` | `DeepSeekChatModel` | — | — | — |
 | `MoonshotCredential` | `MoonshotChatModel` | — | — | — |
 | `VolcengineCredential` | `VolcengineChatModel` | — | — | — |
-| `XAICredential` | `XAIChatModel` | — | — | — |
+| `XAICredential` | `XAIChatModel` | — | — | `XAIRealtimeModel` |
 | `OllamaCredential` | `OllamaChatModel` | — | `OllamaEmbeddingModel` | — |
 
 这种分层与前端的自然交互流程（先注册凭证，再从凭证下挑选模型）一致，让界面只需鉴权一次，就能展示该 API 支持的所有模型族。
@@ -28,7 +28,7 @@ description: "通过凭证接入模型 API，并用模型卡片发现可用模�
 - [嵌入模型](/versions/2.0.9dev/zh/building-blocks/model/embedding)：将文本与多媒体内容转换为稠密向量
 
 <Tip>
-**实时模型**即将上线：Realtime Model 支持正在从 v1.0 迁移到 v2.0。
+**实时模型**驱动语音到语音的实时对话，创建与使用方式参见[语音到语音](/versions/2.0.9dev/zh/building-blocks/realtime/speech-to-speech)。
 </Tip>
 
 ## 前端集成
