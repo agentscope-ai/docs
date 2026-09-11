@@ -177,19 +177,62 @@ See [Plan](/versions/2.0.9dev/en/building-blocks/plan) for the full task lifecyc
 
 ### Ask the User
 
-When an agent needs a decision from the person it is working for — which of two implementations to take, whether a draft is heading the right way, a preference the instructions never spelled out — `AskUser` lets it put the question in front of them instead of guessing:
+When an agent needs a decision from the person it is working for — which of two implementations to take, whether a draft is heading the right way, a preference the instructions never spelled out — `AskUser` lets it put the question in front of them instead of guessing. **The tool carries no execution logic of its own**: its `is_external_tool` is `True`, so it only declares what to ask. Presenting the question and collecting the answer is up to whatever drives the agent — a web frontend, a terminal UI, any custom shell — and once the interaction is over the answer comes back as an `ExternalExecutionResultEvent` before the reply continues.
 
-```python Register AskUser
-from agentscope.tool import AskUser, Toolkit
+One call carries up to four questions, each with two to four options. Beyond its `label`, an option has a `description` for the trade-off it represents, and a single-select question's options may each carry a `preview` for comparing concrete artifacts side by side: a code snippet, a config, a mockup. An "Other" free-text answer is always offered alongside the options, so the agent should not add one of its own. Permission checking passes `AskUser` straight through — the call is answered by the user in the first place, so a confirmation in front of it would only be a prompt about a prompt.
 
-toolkit = Toolkit(tools=[AskUser()])
-```
+A full round takes three steps:
 
-One call carries up to four questions, each with two to four options. Beyond its `label`, an option has a `description` for the trade-off it represents, and a single-select question's options may each carry a `preview` for comparing concrete artifacts side by side: a code snippet, a config, a mockup. An "Other" free-text answer is always offered alongside the options, so the agent should not add one of its own.
+<Steps>
+  <Step title="Equip the tool">
+    Put it in a `Toolkit` like any other built-in tool, and the agent decides for itself when to ask:
 
-`AskUser` is an external execution tool (`is_external_tool = True`) and runs nothing itself: only whatever drives the agent can put a question in front of a person, so the agent emits `RequireExternalExecutionEvent` and pauses until an `ExternalExecutionResultEvent` brings the answer back. Permission checking passes it straight through — the call is answered by the user in the first place, so a confirmation in front of it would only be a prompt about a prompt.
+    ```python Equip AskUser
+    from agentscope.tool import AskUser, Toolkit
 
-When returning the result, `output` is written for the model to read, and the same answers belong in `ToolResultBlock.metadata` shaped by `AskUserMetadata`, for programs that branch on the choice. See [human-in-the-loop](/versions/2.0.9dev/en/building-blocks/agent/human-in-the-loop#the-built-in-askuser) for the full round trip.
+    toolkit = Toolkit(tools=[AskUser()])
+    ```
+  </Step>
+
+  <Step title="Catch it outside and render it">
+    Calling the tool emits a `RequireExternalExecutionEvent` and pauses the reply. The driver catches that event on the stream, reads this call's questions and options out of `tool_calls`, and presents them in its own interface: a web frontend renders a set of cards, a terminal UI a keyboard-selectable list. Alongside the options the tool supplied, the interface must offer an "Other" free-text field, because the tool has already promised the user one. For how each field maps onto interface elements, see [human-in-the-loop](/versions/2.0.9dev/en/building-blocks/agent/human-in-the-loop#the-built-in-askuser).
+  </Step>
+
+  <Step title="Return the answers">
+    Once the user has answered, wrap the result in a `ToolResultBlock` and hand it back inside an `ExternalExecutionResultEvent`. `output` is the text the model reads; `metadata` carries the same answers shaped by `AskUserMetadata`, for programs that branch on the choice:
+
+    ```python Return the answers
+    from agentscope.event import ExternalExecutionResultEvent
+    from agentscope.message import ToolResultBlock, TextBlock, ToolResultState
+    from agentscope.tool import AskUserAnswer, AskUserMetadata
+
+    result = ToolResultBlock(
+        id=tool_call.id,      # matches the call in RequireExternalExecutionEvent
+        name=tool_call.name,
+        output=[TextBlock(text="Auth method: OAuth 2.0 (Recommended)")],
+        metadata=AskUserMetadata(
+            answers=[
+                AskUserAnswer(
+                    question="Which auth method should we integrate?",
+                    selected=["OAuth 2.0 (Recommended)"],  # labels the user chose
+                    other=None,                            # free text, when they typed instead
+                ),
+            ],
+        ).model_dump(),
+        state=ToolResultState.SUCCESS,
+    )
+
+    # Hand the event back and the agent resumes from where it paused
+    async for event in agent.reply_stream(
+        ExternalExecutionResultEvent(
+            reply_id=require_event.reply_id,
+            execution_results=[result],
+        ),
+    ):
+        ...
+    ```
+  </Step>
+</Steps>
 
 ## Switch Tool Backend
 
