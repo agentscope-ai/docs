@@ -16,13 +16,13 @@ AgentScope implements this through `RealtimeAgent`, which supports:
 
 The table below lists the supported provider APIs and models. Each model class takes the credential of the API it belongs to, exactly like every other model in AgentScope:
 
-| Provider API | Model Class | Models | Tool Calling |
-|--------------|-------------|--------|--------------|
-| DashScope (Qwen-Omni) | `DashScopeRealtimeModel` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` | qwen3.5 series only |
-| DashScope (Qwen-Audio-3.0) | `DashScopeAudioRealtimeModel` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` | Yes |
-| OpenAI Realtime | `OpenAIRealtimeModel` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` | Yes |
-| Gemini Live | `GeminiRealtimeModel` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` | Yes |
-| xAI Grok Voice | `XAIRealtimeModel` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` | Yes |
+| Provider API | Model Class | Models |
+|--------------|-------------|--------|
+| DashScope (Qwen-Omni) | `DashScopeRealtimeModel` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` |
+| DashScope (Qwen-Audio-3.0) | `DashScopeAudioRealtimeModel` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` |
+| OpenAI Realtime | `OpenAIRealtimeModel` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` |
+| Gemini Live | `GeminiRealtimeModel` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` |
+| xAI Grok Voice | `XAIRealtimeModel` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` |
 
 <Tip>
 Calling `list_models()` on a model class returns the [model cards](/versions/2.0.8dev/en/building-blocks/model/overview#what-is-modelcard) of every model under that API, carrying its sample rates, context limits, and available voices, ready to render a model selector in the frontend.
@@ -77,7 +77,7 @@ The four steps below build a voice agent on the local microphone that talks back
     A model class takes a model name and the credential of the API it belongs to. The model card is matched by name, which fixes the sample rates and context limits, while the voice, turn detection method, and other tuneables go through `Parameters`. The tabs below create the model on each provider API; the three steps that follow are identical whichever you pick:
 
     <CodeGroup>
-    ```python DashScope
+    ```python DashScope Qwen-Audio-3.0
     import os
 
     from agentscope.credential import DashScopeCredential
@@ -87,6 +87,19 @@ The four steps below build a voice agent on the local microphone that talks back
         model="qwen-audio-3.0-realtime-plus",
         credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
         parameters=DashScopeAudioRealtimeModel.Parameters(voice="longanqian"),
+    )
+    ```
+
+    ```python DashScope Qwen-Omni
+    import os
+
+    from agentscope.credential import DashScopeCredential
+    from agentscope.realtime import DashScopeRealtimeModel
+
+    model = DashScopeRealtimeModel(
+        model="qwen3.5-omni-plus-realtime",
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        parameters=DashScopeRealtimeModel.Parameters(voice="Tina"),
     )
     ```
 
@@ -185,63 +198,6 @@ The four steps below build a voice agent on the local microphone that talks back
     Speak into the microphone to hear a reply, speak again mid-reply to interrupt it, and press Ctrl+C to exit.
   </Step>
 </Steps>
-
-Putting the four steps together gives one runnable script:
-
-<AccordionGroup>
-<Accordion title="Full example">
-```python Talk to the agent through the local microphone
-import asyncio
-import os
-
-from agentscope.agent import RealtimeAgent
-from agentscope.credential import DashScopeCredential
-from agentscope.event import ReplyEndEvent, ReplyStartEvent, TextBlockDeltaEvent
-from agentscope.realtime import DashScopeAudioRealtimeModel, LocalAudioTransport
-
-
-async def main() -> None:
-    # The model card is matched by name, which fixes the sample rates and context limits
-    model = DashScopeAudioRealtimeModel(
-        model="qwen-audio-3.0-realtime-plus",
-        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
-    )
-    agent = RealtimeAgent(
-        name="Friday",
-        system_prompt="You are a voice assistant. Keep your answers short.",
-        model=model,
-    )
-    # The transport's sample rates must match the model's, or reply_stream() raises ValueError
-    transport = LocalAudioTransport(
-        input_sample_rate=model.input_sample_rate,
-        output_sample_rate=model.output_sample_rate,
-    )
-
-    # The user speaking is reported as a reply too, with role "user";
-    # the transcript arrives as text block events once it is final
-    user_turns: set[str] = set()
-    # The agent owns the model session and you own the transport;
-    # reply_stream() borrows both until the transport ends
-    async with agent, transport:
-        async for event in agent.reply_stream(transport):
-            match event:
-                case ReplyStartEvent(role="user"):
-                    user_turns.add(event.reply_id)
-                case ReplyStartEvent():
-                    print(f"[{agent.name}] ", end="", flush=True)
-                case TextBlockDeltaEvent() if event.reply_id in user_turns:
-                    print(f"[user] {event.delta}")
-                case TextBlockDeltaEvent():
-                    print(event.delta, end="", flush=True)
-                case ReplyEndEvent() if event.reply_id not in user_turns:
-                    print(f"  ({event.finished_reason})")
-
-
-asyncio.run(main())
-```
-</Accordion>
-</AccordionGroup>
-
 
 Three lifecycles run in this example, each owned by a different object:
 
@@ -414,7 +370,7 @@ async def confirm_in_terminal(event: RequireUserConfirmEvent) -> None:
 
 Two things to keep in mind when using tools:
 
-- Only models whose model card sets `supports_tools` receive the tool list, see the model table above.
+- Only models whose model card sets `supports_tools` receive the tool list. Among DashScope's Qwen-Omni models, that is the qwen3.5 series only; every model on the other provider APIs supports tools.
 - A confirmation request that goes unanswered for five minutes is treated as a rejection.
 
 <Tip>

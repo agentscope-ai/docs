@@ -850,7 +850,7 @@
                         ]
                       },
                       {
-                        "group": "实时智能体",
+                        "group": "实时语音智能体",
                         "tag": "EXP",
                         "pages": [
                           "versions/2.0.8dev/zh/building-blocks/realtime/overview",

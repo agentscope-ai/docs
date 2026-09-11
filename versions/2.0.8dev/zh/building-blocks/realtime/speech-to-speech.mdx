@@ -16,13 +16,13 @@ AgentScope 通过 `RealtimeAgent` 实现该方案，支持：
 
 目前支持的模型 API 与模型如下，每个模型类使用所属 API 的凭证，用法与其它模型一致：
 
-| 模型 API | 模型类 | 支持的模型 | 工具调用 |
-|----------|--------|------------|----------|
-| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` | 仅 qwen3.5 系列 |
-| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` | 支持 |
-| OpenAI Realtime | `OpenAIRealtimeModel` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` | 支持 |
-| Gemini Live | `GeminiRealtimeModel` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` | 支持 |
-| xAI Grok Voice | `XAIRealtimeModel` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` | 支持 |
+| 模型 API | 模型类 | 支持的模型 |
+|----------|--------|------------|
+| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` |
+| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` |
+| OpenAI Realtime | `OpenAIRealtimeModel` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` |
+| Gemini Live | `GeminiRealtimeModel` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` |
+| xAI Grok Voice | `XAIRealtimeModel` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` |
 
 <Tip>
 调用模型类的 `list_models()` 可以拿到该 API 下所有模型的[模型卡片](/versions/2.0.8dev/zh/building-blocks/model/overview#什么是模型卡片)，其中包含采样率、上下文上限、可选音色等信息，可直接用于渲染前端的模型选择器。
@@ -77,7 +77,7 @@ pip install "agentscope[realtime]"
     模型类接收模型名与所属 API 的凭证，模型卡片按名称自动匹配，采样率与上下文限制随之确定。音色、回合检测方式等可调项通过 `Parameters` 传入。下面的 tab 分别展示四种模型 API 的初始化方式，后续三步与选用哪种模型无关：
 
     <CodeGroup>
-    ```python DashScope
+    ```python DashScope Qwen-Audio-3.0
     import os
 
     from agentscope.credential import DashScopeCredential
@@ -87,6 +87,19 @@ pip install "agentscope[realtime]"
         model="qwen-audio-3.0-realtime-plus",
         credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
         parameters=DashScopeAudioRealtimeModel.Parameters(voice="longanqian"),
+    )
+    ```
+
+    ```python DashScope Qwen-Omni
+    import os
+
+    from agentscope.credential import DashScopeCredential
+    from agentscope.realtime import DashScopeRealtimeModel
+
+    model = DashScopeRealtimeModel(
+        model="qwen3.5-omni-plus-realtime",
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        parameters=DashScopeRealtimeModel.Parameters(voice="Tina"),
     )
     ```
 
@@ -185,62 +198,6 @@ pip install "agentscope[realtime]"
     运行后对着麦克风说话即可听到回复，在回复过程中开口即可打断，按 Ctrl+C 退出。
   </Step>
 </Steps>
-
-把四步拼起来就是一个完整可运行的脚本：
-
-<AccordionGroup>
-<Accordion title="完整示例">
-```python 用本地麦克风与智能体对话
-import asyncio
-import os
-
-from agentscope.agent import RealtimeAgent
-from agentscope.credential import DashScopeCredential
-from agentscope.event import ReplyEndEvent, ReplyStartEvent, TextBlockDeltaEvent
-from agentscope.realtime import DashScopeAudioRealtimeModel, LocalAudioTransport
-
-
-async def main() -> None:
-    # 模型卡片按名称自动匹配，采样率与上下文限制随之确定
-    model = DashScopeAudioRealtimeModel(
-        model="qwen-audio-3.0-realtime-plus",
-        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
-    )
-    agent = RealtimeAgent(
-        name="Friday",
-        system_prompt="你是一个中文语音助手，回答尽量简短。",
-        model=model,
-    )
-    # 传输的采样率必须与模型一致，否则 reply_stream() 会抛出 ValueError
-    transport = LocalAudioTransport(
-        input_sample_rate=model.input_sample_rate,
-        output_sample_rate=model.output_sample_rate,
-    )
-
-    # 用户说话同样以一次回复的形式产出事件，role 为 "user"，
-    # 转写确定后通过文本块事件送出
-    user_turns: set[str] = set()
-    # 智能体持有模型会话，传输由开发者持有，reply_stream() 借用两者直到传输结束
-    async with agent, transport:
-        async for event in agent.reply_stream(transport):
-            match event:
-                case ReplyStartEvent(role="user"):
-                    user_turns.add(event.reply_id)
-                case ReplyStartEvent():
-                    print(f"[{agent.name}] ", end="", flush=True)
-                case TextBlockDeltaEvent() if event.reply_id in user_turns:
-                    print(f"[user] {event.delta}")
-                case TextBlockDeltaEvent():
-                    print(event.delta, end="", flush=True)
-                case ReplyEndEvent() if event.reply_id not in user_turns:
-                    print(f"  ({event.finished_reason})")
-
-
-asyncio.run(main())
-```
-</Accordion>
-</AccordionGroup>
-
 
 上面的例子里有三个生命周期，各自由不同的对象掌控：
 
@@ -348,7 +305,7 @@ await agent.interrupt()
 
 ### 调用工具
 
-传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时智能体不会暂停：需要确认时，`reply_stream()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
+传入 `toolkit` 后，模型可以在对话中调用工具。工具在智能体侧执行，权限检查、用户确认与[普通智能体](/versions/2.0.8dev/zh/building-blocks/agent/human-in-the-loop)一致。区别在于实时语音智能体不会暂停：需要确认时，`reply_stream()` 产出 `RequireUserConfirmEvent` 后继续产出其它事件，确认结果由开发者在任意时刻通过 `send()` 送回，与事件流本身解耦：
 
 ```python 装配工具并接收确认请求
 from agentscope.event import RequireUserConfirmEvent
@@ -413,11 +370,11 @@ async def confirm_in_terminal(event: RequireUserConfirmEvent) -> None:
 
 使用工具时需要注意以下几点：
 
-- 只有模型卡片标注 `supports_tools` 的模型才会收到工具列表，见上方的模型表格。
+- 只有模型卡片标注 `supports_tools` 的模型才会收到工具列表，DashScope 的 Qwen-Omni 系列中仅 qwen3.5 系列支持，其余模型 API 的模型均支持。
 - 确认请求超过 5 分钟没有回应，智能体按拒绝处理。
 
 <Tip>
-实时智能体目前不支持元工具（工具分组）：工具列表与系统提示在连接模型时一次性发送，会话中途激活工具组或添加工具不会生效，请在构造时把需要的工具全部放进工具包。
+实时语音智能体目前不支持元工具（工具分组）：工具列表与系统提示在连接模型时一次性发送，会话中途激活工具组或添加工具不会生效，请在构造时把需要的工具全部放进工具包。
 </Tip>
 
 ### 回合检测
