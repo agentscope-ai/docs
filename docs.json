@@ -100,6 +100,14 @@
                           "versions/2.0.8dev/en/building-blocks/workspace/mcp-gateway"
                         ]
                       },
+                      {
+                        "group": "Realtime Voice Agent",
+                        "tag": "EXP",
+                        "pages": [
+                          "versions/2.0.8dev/en/building-blocks/realtime/overview",
+                          "versions/2.0.8dev/en/building-blocks/realtime/full-duplex"
+                        ]
+                      },
                       "versions/2.0.8dev/en/building-blocks/console",
                       "versions/2.0.8dev/en/building-blocks/a2a"
                     ]

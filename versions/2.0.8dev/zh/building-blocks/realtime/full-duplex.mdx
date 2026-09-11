@@ -138,7 +138,7 @@ asyncio.run(main())
 </ParamField>
 
 <ParamField path="model" type="RealtimeModelBase" required>
-  实时语音模型，详见[实时语音模型](#实时语音模型)。
+  实时语音模型，支持的模型见上方表格。
 </ParamField>
 
 <ParamField path="toolkit" type="Toolkit | None" default="None">
@@ -278,7 +278,7 @@ async def confirm_in_terminal(event: RequireUserConfirmEvent) -> None:
 
 使用工具时需要注意以下几点：
 
-- 只有模型卡片标注 `supports_tools` 的模型才会收到工具列表，见[模型卡片与限制](#模型卡片与限制)。
+- 只有模型卡片标注 `supports_tools` 的模型才会收到工具列表，见上方的模型表格。
 - 确认请求超过 5 分钟没有回应，智能体按拒绝处理。
 
 <Tip>

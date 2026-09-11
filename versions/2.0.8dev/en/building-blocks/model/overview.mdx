@@ -9,7 +9,7 @@ A **Credential** carries the API authentication fields a provider requires (`api
 
 | Credential | LLM (Chat Model) | TTS | Embedding | Realtime |
 |------------|------------------|-----|-----------|----------|
-| `DashScopeCredential` | `DashScopeChatModel` | `DashScopeTTSModel`<br/>`DashScopeRealtimeTTSModel`<br/>`DashScopeCosyVoiceTTSModel` | `DashScopeEmbeddingModel` | *coming soon* |
+| `DashScopeCredential` | `DashScopeChatModel` | `DashScopeTTSModel`<br/>`DashScopeRealtimeTTSModel`<br/>`DashScopeCosyVoiceTTSModel` | `DashScopeEmbeddingModel` | `DashScopeRealtimeModel`<br/>`DashScopeAudioRealtimeModel` |
 | `OpenAICredential` | `OpenAIChatModel`<br/>`OpenAIResponseModel` | `OpenAITTSModel` | `OpenAIEmbeddingModel` | *coming soon* |
 | `GeminiCredential` | `GeminiChatModel` | `GeminiTTSModel` | `GeminiEmbeddingModel` | *coming soon* |
 | `AnthropicCredential` | `AnthropicChatModel` | — | — | — |
@@ -27,7 +27,7 @@ All model families share the same construction pattern: a model takes a **creden
 - [Embedding](/versions/2.0.8dev/en/building-blocks/model/embedding): converts text and media into dense vectors
 
 <Tip>
-**Realtime Model** is coming soon: we are migrating Realtime Model support from v1.0 to v2.0.
+**Realtime Model** powers full-duplex voice conversations. See [Full-Duplex Voice Agent](/versions/2.0.8dev/en/building-blocks/realtime/full-duplex) for how to create and use one; more provider APIs are coming soon.
 </Tip>
 
 ## Integrate with Frontend
