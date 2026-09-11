@@ -16,13 +16,13 @@ AgentScope 通过 `RealtimeAgent` 实现该方案，支持：
 
 目前支持的模型 API 与模型如下，每个模型类使用所属 API 的凭证，用法与其它模型一致：
 
-| 模型 API | 模型类 | 凭证 | 支持的模型 | 工具调用 |
-|----------|--------|------|------------|----------|
-| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | `DashScopeCredential` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` | 仅 qwen3.5 系列 |
-| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | `DashScopeCredential` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` | 支持 |
-| OpenAI Realtime | `OpenAIRealtimeModel` | `OpenAICredential` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` | 支持 |
-| Gemini Live | `GeminiRealtimeModel` | `GeminiCredential` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` | 支持 |
-| xAI Grok Voice | `XAIRealtimeModel` | `XAICredential` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` | 支持 |
+| 模型 API | 模型类 | 支持的模型 | 工具调用 |
+|----------|--------|------------|----------|
+| DashScope（Qwen-Omni） | `DashScopeRealtimeModel` | `qwen3.5-omni-plus-realtime`<br/>`qwen3.5-omni-flash-realtime`<br/>`qwen3-omni-flash-realtime`<br/>`qwen-omni-turbo-realtime` | 仅 qwen3.5 系列 |
+| DashScope（Qwen-Audio-3.0） | `DashScopeAudioRealtimeModel` | `qwen-audio-3.0-realtime-plus`<br/>`qwen-audio-3.0-realtime-flash` | 支持 |
+| OpenAI Realtime | `OpenAIRealtimeModel` | `gpt-realtime-2.1`<br/>`gpt-realtime-2.1-mini`<br/>`gpt-realtime-2`<br/>`gpt-realtime-1.5` | 支持 |
+| Gemini Live | `GeminiRealtimeModel` | `gemini-3.1-flash-live-preview`<br/>`gemini-2.5-flash-native-audio-preview-12-2025` | 支持 |
+| xAI Grok Voice | `XAIRealtimeModel` | `grok-voice-latest`<br/>`grok-voice-think-fast-2.0` | 支持 |
 
 <Tip>
 调用模型类的 `list_models()` 可以拿到该 API 下所有模型的[模型卡片](/versions/2.0.8dev/zh/building-blocks/model/overview#什么是模型卡片)，其中包含采样率、上下文上限、可选音色等信息，可直接用于渲染前端的模型选择器。
@@ -70,10 +70,127 @@ pip install "agentscope[realtime]"
 本地声卡库 `sounddevice` 依赖 PortAudio。macOS 与 Windows 已随包附带；Debian/Ubuntu 需要先执行 `apt install libportaudio2`。
 </Note>
 
-下面的例子用本地麦克风与模型对话，并把双方说的话打印到终端。对着麦克风说话即可听到回复，在回复过程中开口即可打断，按 Ctrl+C 退出。切换模型 API 只需替换模型类与凭证，智能体与传输的代码不变：
+下面用本地麦克风搭一个能对话、能被打断的语音智能体，分四步完成：
 
-<CodeGroup>
-```python DashScope
+<Steps>
+  <Step title="初始化实时语音模型">
+    模型类接收模型名与所属 API 的凭证，模型卡片按名称自动匹配，采样率与上下文限制随之确定。音色、回合检测方式等可调项通过 `Parameters` 传入。下面的 tab 分别展示四种模型 API 的初始化方式，后续三步与选用哪种模型无关：
+
+    <CodeGroup>
+    ```python DashScope
+    import os
+
+    from agentscope.credential import DashScopeCredential
+    from agentscope.realtime import DashScopeAudioRealtimeModel
+
+    model = DashScopeAudioRealtimeModel(
+        model="qwen-audio-3.0-realtime-plus",
+        credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+        parameters=DashScopeAudioRealtimeModel.Parameters(voice="longanqian"),
+    )
+    ```
+
+    ```python OpenAI
+    import os
+
+    from agentscope.credential import OpenAICredential
+    from agentscope.realtime import OpenAIRealtimeModel
+
+    model = OpenAIRealtimeModel(
+        model="gpt-realtime-2.1",
+        credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
+        parameters=OpenAIRealtimeModel.Parameters(voice="marin"),
+    )
+    ```
+
+    ```python Gemini
+    import os
+
+    from agentscope.credential import GeminiCredential
+    from agentscope.realtime import GeminiRealtimeModel
+
+    model = GeminiRealtimeModel(
+        model="gemini-3.1-flash-live-preview",
+        credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
+        parameters=GeminiRealtimeModel.Parameters(voice="Puck"),
+    )
+    ```
+
+    ```python xAI
+    import os
+
+    from agentscope.credential import XAICredential
+    from agentscope.realtime import XAIRealtimeModel
+
+    model = XAIRealtimeModel(
+        model="grok-voice-latest",
+        credential=XAICredential(api_key=os.environ["XAI_API_KEY"]),
+        # reasoning_effort 设为 "none" 可以换取更快但更浅的回答
+        parameters=XAIRealtimeModel.Parameters(voice="eve", reasoning_effort="high"),
+    )
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="创建智能体">
+    智能体持有模型会话，系统提示在连接模型时一次性发送：
+
+    ```python 创建智能体
+    from agentscope.agent import RealtimeAgent
+
+    agent = RealtimeAgent(
+        name="Friday",
+        system_prompt="你是一个中文语音助手，回答尽量简短。",
+        model=model,
+    )
+    ```
+  </Step>
+
+  <Step title="创建音频传输">
+    传输决定声音的来源与去向，`LocalAudioTransport` 使用本机的麦克风与扬声器。采样率必须与模型一致，因此直接用模型的属性构造，而不是写死数值：
+
+    ```python 创建音频传输
+    from agentscope.realtime import LocalAudioTransport
+
+    transport = LocalAudioTransport(
+        input_sample_rate=model.input_sample_rate,
+        output_sample_rate=model.output_sample_rate,
+    )
+    ```
+  </Step>
+
+  <Step title="运行对话">
+    `reply_stream()` 借用传输持续泵送音频，并以异步迭代器的形式产出事件。用户说话同样以一次回复的形式产出事件，`role` 为 `"user"`，因此下面用 `reply_id` 区分两边，把双方说的话打印到终端：
+
+    ```python 运行对话并打印双方的话
+    from agentscope.event import ReplyEndEvent, ReplyStartEvent, TextBlockDeltaEvent
+
+    user_turns: set[str] = set()
+
+    async with agent, transport:
+        async for event in agent.reply_stream(transport):
+            match event:
+                case ReplyStartEvent(role="user"):
+                    user_turns.add(event.reply_id)
+                case ReplyStartEvent():
+                    print(f"[{agent.name}] ", end="", flush=True)
+                case TextBlockDeltaEvent() if event.reply_id in user_turns:
+                    print(f"[user] {event.delta}")
+                case TextBlockDeltaEvent():
+                    print(event.delta, end="", flush=True)
+                case ReplyEndEvent() if event.reply_id not in user_turns:
+                    print(f"  ({event.finished_reason})")
+    ```
+
+    运行后对着麦克风说话即可听到回复，在回复过程中开口即可打断，按 Ctrl+C 退出。
+  </Step>
+</Steps>
+
+把四步拼起来就是一个完整可运行的脚本：
+
+<AccordionGroup>
+<Accordion title="完整示例">
+```python 用本地麦克风与智能体对话
 import asyncio
 import os
 
@@ -121,50 +238,11 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+</Accordion>
+</AccordionGroup>
 
-```python OpenAI
-import os
 
-from agentscope.credential import OpenAICredential
-from agentscope.realtime import OpenAIRealtimeModel
-
-# 音色、回合检测方式等可调项通过 Parameters 传入
-model = OpenAIRealtimeModel(
-    model="gpt-realtime-2.1",
-    credential=OpenAICredential(api_key=os.environ["OPENAI_API_KEY"]),
-    parameters=OpenAIRealtimeModel.Parameters(voice="marin"),
-)
-```
-
-```python Gemini
-import os
-
-from agentscope.credential import GeminiCredential
-from agentscope.realtime import GeminiRealtimeModel
-
-model = GeminiRealtimeModel(
-    model="gemini-3.1-flash-live-preview",
-    credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
-    parameters=GeminiRealtimeModel.Parameters(voice="Puck"),
-)
-```
-
-```python xAI
-import os
-
-from agentscope.credential import XAICredential
-from agentscope.realtime import XAIRealtimeModel
-
-model = XAIRealtimeModel(
-    model="grok-voice-latest",
-    credential=XAICredential(api_key=os.environ["XAI_API_KEY"]),
-    # reasoning_effort 设为 "none" 可以换取更快但更浅的回答
-    parameters=XAIRealtimeModel.Parameters(voice="eve", reasoning_effort="high"),
-)
-```
-</CodeGroup>
-
-上面的代码里有三个生命周期，各自由不同的对象掌控：
+上面的例子里有三个生命周期，各自由不同的对象掌控：
 
 | 对象 | 持有者 | 生命周期 |
 |------|--------|----------|
