@@ -61,6 +61,7 @@ AgentScope 预置了一组覆盖常见智能体操作的工具，实例化后传
 | `TaskGet` | 按 ID 获取任务详情 | 是 |
 | `TaskList` | 列出全部任务及其状态 | 是 |
 | `TaskUpdate` | 更新任务状态或元数据 | 否 |
+| `AskUser` | 以多选题的形式向用户提问 | 是 |
 
 <Note>
 元工具 `reset_tools` 和 `Skill` 查看工具只有在存在额外的工具组或技能时才会自动注册，开发者无需手动实例化。详见[元工具](/versions/2.0.9dev/zh/building-blocks/tool/manage-tools)与 [Skill](/versions/2.0.9dev/zh/building-blocks/tool/skill)。
@@ -173,6 +174,65 @@ result = await read(file_path="/workspace/report.pdf", pages="1-5")
 计划工具让智能体能够显式地维护一份结构化的任务清单，智能体可以通过工具调用来创建、查询和更新任务。计划相关的数据会被存储在智能体实例的 `agent.state.tasks_context` 中，所有计划相关的工具通过操作这个共享的状态来实现任务的管理。同时，所有计划相关的工具在权限检查中被默认放行。
 
 完整的任务生命周期、存储模型，以及如何以编程方式预置或自定义任务，请参见[计划模式](/versions/2.0.9dev/zh/building-blocks/plan)。
+
+### 询问用户
+
+当智能体需要用户拿主意时（在两种实现方案之间选择、确认一份草稿的方向、补齐指令里没说清的偏好），`AskUser` 让它把问题摆到用户面前，而不是自行猜测。**这个工具本身不含任何执行逻辑**：它的 `is_external_tool` 为 `True`，只声明「要问什么」，具体怎么把问题呈现给人、怎么收集回答，都由驱动智能体的一方实现（Web 前端、终端 UI 或任何自定义外壳）；交互结束后，答案以 `ExternalExecutionResultEvent` 回传给智能体，回复才继续。
+
+一次调用最多提 4 个问题，每个问题 2 到 4 个选项。选项除了 `label` 还带 `description` 说明各自的取舍，单选题的选项可以再带一段 `preview`，用于并排比较代码片段、配置或界面草图这类具体产物。用户看到的选项之外总是附带一个「其他」自由输入项，因此智能体不应自己再加一个。权限检查对 `AskUser` 直接放行，因为这次调用本来就由用户回答，在它前面再加一次确认只是「为提问而提问」。
+
+完整的一轮分三步：
+
+<Steps>
+  <Step title="装备工具">
+    像普通内置工具一样放进 `Toolkit`，智能体便可以在推理中自行决定何时提问：
+
+    ```python 装备 AskUser
+    from agentscope.tool import AskUser, Toolkit
+
+    toolkit = Toolkit(tools=[AskUser()])
+    ```
+  </Step>
+
+  <Step title="外部捕获并渲染">
+    智能体调用它时会产出 `RequireExternalExecutionEvent` 并暂停当前回复。驱动方从事件流里捕获该事件，从 `tool_calls` 中取出这次的问题与选项，用自己的界面呈现出来：Web 前端渲染成一组卡片，终端 UI 渲染成键盘可选的列表。除了工具给出的选项，界面还要提供一个「其他」自由输入框，因为工具已经向用户承诺了这一点。各字段如何对应到界面元素，参见[人机交互](/versions/2.0.9dev/zh/building-blocks/agent/human-in-the-loop#内置的-askuser)。
+  </Step>
+
+  <Step title="回传答案">
+    用户作答后，把结果包成 `ToolResultBlock` 再放进 `ExternalExecutionResultEvent` 传回智能体。`output` 是写给模型读的文字，`metadata` 则按 `AskUserMetadata` 的结构放同一份答案，供需要按选择分支的程序读取：
+
+    ```python 回传答案
+    from agentscope.event import ExternalExecutionResultEvent
+    from agentscope.message import ToolResultBlock, TextBlock, ToolResultState
+    from agentscope.tool import AskUserAnswer, AskUserMetadata
+
+    result = ToolResultBlock(
+        id=tool_call.id,      # 与 RequireExternalExecutionEvent 中的工具调用对应
+        name=tool_call.name,
+        output=[TextBlock(text="鉴权方式：OAuth 2.0（推荐）")],
+        metadata=AskUserMetadata(
+            answers=[
+                AskUserAnswer(
+                    question="接入哪种鉴权方式？",
+                    selected=["OAuth 2.0（推荐）"],  # 用户勾选的选项 label
+                    other=None,                      # 用户自由输入时填在这里
+                ),
+            ],
+        ).model_dump(),
+        state=ToolResultState.SUCCESS,
+    )
+
+    # 传回事件，智能体从暂停处继续推理
+    async for event in agent.reply_stream(
+        ExternalExecutionResultEvent(
+            reply_id=require_event.reply_id,
+            execution_results=[result],
+        ),
+    ):
+        ...
+    ```
+  </Step>
+</Steps>
 
 ## 切换工具后端
 
@@ -328,7 +388,7 @@ weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
 
 这种模式是[人机交互](/versions/2.0.9dev/zh/building-blocks/agent/human-in-the-loop)工作流的基础：某些动作需要人工确认或人工执行。
 
-创建外部执行工具只需把 `is_external_tool` 设为 `True`，不必实现 `call` 函数：
+内置的 [`AskUser`](#询问用户) 就是这样一个工具。创建自己的外部执行工具只需把 `is_external_tool` 设为 `True`，不必实现 `call` 函数：
 
 ```python
 from agentscope.tool import ToolBase

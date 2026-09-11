@@ -134,6 +134,47 @@ description: "暂停以等待用户确认或外部执行，再通过结果事件
   </Step>
 </Steps>
 
+
+### 内置的 AskUser
+
+`AskUser` 是框架内置的外部执行工具，让智能体在需要用户拿主意时把问题摆出来。它一次最多提 4 个问题，每个问题 2 到 4 个选项，用法参见[询问用户](/versions/2.0.9dev/zh/building-blocks/tool/python-tool#询问用户)。
+
+`RequireExternalExecutionEvent` 中 `tc.input` 的结构如下，界面据此渲染：
+
+| 字段 | 含义 |
+|---|---|
+| `questions[].question` | 问题正文 |
+| `questions[].header` | 不超过 12 个字符的短标签，通常渲染成一个 chip |
+| `questions[].context` | 回答时需要对照看的内容（草稿、报错、待比较的两份设计），展示在选项上方 |
+| `questions[].multi_select` | 是否允许多选 |
+| `questions[].options[].label` / `description` | 选项文字，以及它意味着什么 |
+| `questions[].options[].preview` | 单选题可选的并排预览内容，例如代码片段或界面草图 |
+
+界面除了这些选项，还需要提供一个「其他」自由输入项，因为工具已经向用户承诺了这一点。
+
+回传时，`output` 写给模型读，同时要在 `metadata` 里按 `AskUserMetadata` 的结构放同一份答案，供程序按选择分支：
+
+```python 回传 AskUser 的答案
+from agentscope.message import ToolResultBlock, TextBlock, ToolResultState
+from agentscope.tool import AskUserAnswer, AskUserMetadata
+
+result = ToolResultBlock(
+    id=tc.id,
+    name=tc.name,
+    output=[TextBlock(text="鉴权方式：OAuth 2.0（推荐）")],
+    metadata=AskUserMetadata(
+        answers=[
+            AskUserAnswer(
+                question="接入哪种鉴权方式？",
+                selected=["OAuth 2.0（推荐）"],  # 用户勾选的选项 label
+                other=None,                      # 用户自由输入时填在这里
+            ),
+        ],
+    ).model_dump(),
+    state=ToolResultState.SUCCESS,
+)
+```
+
 <Note>
 如果多个工具调用都需要外部交互，而只传回了部分确认或执行结果，智能体不会为尚未确认或执行的工具调用重新发出请求事件。
 </Note>

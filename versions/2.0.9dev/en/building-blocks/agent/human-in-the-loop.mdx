@@ -134,6 +134,47 @@ When the agent calls a tool with `is_external_tool = True`, it emits a `RequireE
   </Step>
 </Steps>
 
+
+### The Built-in AskUser
+
+`AskUser` is the framework's own external execution tool, there for the moments an agent needs a decision from the person it is working for. One call carries up to four questions, each with two to four options — see [Ask the User](/versions/2.0.9dev/en/building-blocks/tool/python-tool#ask-the-user) for how to register it.
+
+`tc.input` in the `RequireExternalExecutionEvent` has the shape a renderer works from:
+
+| Field | Meaning |
+|---|---|
+| `questions[].question` | The question itself |
+| `questions[].header` | A label of at most 12 characters, usually rendered as a chip |
+| `questions[].context` | What the user must look at while answering — a draft, an error, two designs being compared — shown above the options |
+| `questions[].multi_select` | Whether more than one option may be chosen |
+| `questions[].options[].label` / `description` | The option's text, and what choosing it means |
+| `questions[].options[].preview` | Optional side-by-side content for a single-select question, such as a code snippet or a mockup |
+
+A renderer is expected to offer an "Other" free-text answer beside the options, because the tool has already promised the user one.
+
+On the way back, `output` is written for the model to read, while the same answers go into `metadata` shaped by `AskUserMetadata`, so a program can branch on the choice:
+
+```python Returning an AskUser answer
+from agentscope.message import ToolResultBlock, TextBlock, ToolResultState
+from agentscope.tool import AskUserAnswer, AskUserMetadata
+
+result = ToolResultBlock(
+    id=tc.id,
+    name=tc.name,
+    output=[TextBlock(text="Auth method: OAuth 2.0 (Recommended)")],
+    metadata=AskUserMetadata(
+        answers=[
+            AskUserAnswer(
+                question="Which auth method should we integrate?",
+                selected=["OAuth 2.0 (Recommended)"],  # labels the user chose
+                other=None,                            # free text, when they typed instead
+            ),
+        ],
+    ).model_dump(),
+    state=ToolResultState.SUCCESS,
+)
+```
+
 <Note>
 If multiple tool calls require outside interaction and only partial confirmation or execution results are passed back, the agent won't re-send the requiring events for the unconfirmed or unexecuted tool calls.
 </Note>

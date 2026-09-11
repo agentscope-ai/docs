@@ -152,6 +152,7 @@ class MyChannel(ChannelBase):
         interactive=True,          # 平台能否呈现交互式确认 UI
         streaming=True,            # 能否在一条消息内流式更新
         max_message_length=4000,   # 单条消息字符上限
+        wiki=True,                 # 平台是否有可供智能体阅读的知识库
     )
 ```
 
@@ -162,6 +163,9 @@ class MyChannel(ChannelBase):
 | `interactive` | 平台能否呈现交互式确认 UI |
 | `streaming` | 能否在一条消息内流式更新回复 |
 | `max_message_length` | 单条消息字符上限，`_split_long_message()` 据此自动分段 |
+| `wiki` | 平台是否有智能体可以浏览、阅读的知识库。与上面几项相反，它描述的是读取方向 |
+
+声明 `wiki=True` 的渠道需要实现 `ChannelBase` 上的三个方法：`list_wiki_spaces`、`list_wiki_nodes` 与 `read_wiki_document`。实现之后，渠道会自动获得调用它们的 `ListWikiSpaces` / `ListWikiNodes` / `ReadWikiDocument` 三个只读工具，无需自行注册。每个方法都会收到当前消息发送者的平台用户 id，请以该身份向平台发起请求，把鉴权交给平台本身；没有可信发送者的运行不会拿到这些工具。钉钉的实现参见[钉钉渠道的知识库工具](/versions/2.0.9dev/zh/deploy/channel/dingtalk#知识库工具)。
 
 ## 工具确认
 

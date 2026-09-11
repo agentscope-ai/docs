@@ -38,7 +38,7 @@ Create and configure the enterprise internal app and its robot on the [DingTalk 
     On the robot config page, set the message delivery mode to **Stream mode**, with no HTTP callback URL.
   </Step>
   <Step title="Request permissions">
-    Under "Permission management", request: sending messages as an enterprise robot, creating and updating card instances, and uploading and downloading media files. If you want the `ListUsers` tool to search people by name, also request the directory permissions for user search and user profile reads. Refer to the [DingTalk docs](https://open.dingtalk.com/document/) for the exact scopes.
+    Under "Permission management", request: sending messages as an enterprise robot, creating and updating card instances, and uploading and downloading media files. If you want the `ListUsers` tool to search people by name, also request the directory permissions for user search and user profile reads. For the [knowledge base tools](#knowledge-base-tools), request reads on wiki spaces and nodes and on document content as well — they act as the message sender, so the directory permission for user profile reads is required too. Refer to the [DingTalk docs](https://open.dingtalk.com/document/) for the exact scopes.
   </Step>
   <Step title="Publish the app">
     Publish an app version so it becomes available in your organization. You can then add the robot to a group or DM it directly.
@@ -170,6 +170,22 @@ The channel gives the agent an extra set of DingTalk tools for sending to users 
 
 <Warning>
 A DingTalk enterprise robot cannot enumerate every group it belongs to, and the process answering this call is not the one holding the robot's connection, so in a split deployment `ListConversations` comes back empty and stays empty. Treat an empty result as the normal case and ask the user for the target.
+</Warning>
+
+### Knowledge Base Tools
+
+The DingTalk channel also supplies three read-only tools for browsing and reading DingTalk's knowledge base (wiki), so an agent can answer from material held inside the company:
+
+| Tool | Purpose | Permission |
+|---|---|---|
+| `ListWikiSpaces` | List the knowledge bases the current user can see, each with its `root_node_id` | Read-only, allowed directly |
+| `ListWikiNodes` | List the direct children of a knowledge base root or folder; `has_children` marks one to browse further, `is_document` one to read | Read-only, allowed directly |
+| `ReadWikiDocument` | Read a bounded range of a document's text, converted to Markdown | Read-only, allowed directly |
+
+All three page: when a result carries a non-empty `next_token` (listings) or `next_start_index` (documents), call again with it for the next stretch.
+
+<Warning>
+These tools read as **the DingTalk user who sent the current message**. The server takes that identity from the inbound event; the model can neither supply nor change it, so what the agent can reach is exactly what DingTalk grants that person. For the same reason, a run with no trusted sender — a schedule firing, a background wakeup — does not receive these tools at all.
 </Warning>
 
 ## Verify and Troubleshoot
