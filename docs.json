@@ -136,6 +136,7 @@
                           "versions/2.0.9dev/en/deploy/channel/feishu",
                           "versions/2.0.9dev/en/deploy/channel/dingtalk",
                           "versions/2.0.9dev/en/deploy/channel/discord",
+                          "versions/2.0.9dev/en/deploy/channel/telegram",
                           "versions/2.0.9dev/en/deploy/channel/custom"
                         ]
                       },
@@ -1024,6 +1025,7 @@
                           "versions/2.0.9dev/zh/deploy/channel/feishu",
                           "versions/2.0.9dev/zh/deploy/channel/dingtalk",
                           "versions/2.0.9dev/zh/deploy/channel/discord",
+                          "versions/2.0.9dev/zh/deploy/channel/telegram",
                           "versions/2.0.9dev/zh/deploy/channel/custom"
                         ]
                       },

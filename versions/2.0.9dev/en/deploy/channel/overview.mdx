@@ -7,7 +7,7 @@ Channels connect the agents in an AgentScope service to external instant-messagi
 
 Channels in an AgentScope service currently support:
 
-- Receiving and replying to user messages on IM platforms such as Feishu, DingTalk, and Discord;
+- Receiving and replying to user messages on IM platforms such as Feishu, DingTalk, Discord, and Telegram;
 - Pushing messages to a chosen IM platform on the agent's own initiative;
 - Routing messages to different agents and sessions by rule;
 - Sending and receiving multimodal content such as images and files;
@@ -23,6 +23,7 @@ Each platform has a built-in type id (`channel_type`) that you pick when creatin
 | Feishu (Lark) | `feishu` | WebSocket long connection | Available |
 | Discord | `discord` | Gateway WebSocket | Available |
 | DingTalk | `dingtalk` | Stream mode long connection | Available |
+| Telegram | `telegram` | Bot API long polling | Available |
 | WeCom | `wecom` | App callback | Coming soon |
 
 <Tip>
@@ -39,6 +40,7 @@ from agentscope.app.channel import (
     DingTalkChannel,
     DiscordChannel,
     FeishuChannel,
+    TelegramChannel,
 )
 
 app = create_app(
@@ -46,7 +48,12 @@ app = create_app(
     message_bus=...,
     workspace_manager=...,
     # channel types this service accepts
-    channels=[FeishuChannel, DingTalkChannel, DiscordChannel],
+    channels=[
+        FeishuChannel,
+        DingTalkChannel,
+        DiscordChannel,
+        TelegramChannel,
+    ],
 )
 ```
 
@@ -92,6 +99,9 @@ For each endpoint's full request and response fields, see the [API](/versions/2.
   </Card>
   <Card title="Connect Discord" icon="discord" href="/versions/2.0.9dev/en/deploy/channel/discord" cta="Learn more" arrow>
     Create a Discord bot and let agents chat in Discord.
+  </Card>
+  <Card title="Connect Telegram" icon="telegram" href="/versions/2.0.9dev/en/deploy/channel/telegram" cta="Learn more" arrow>
+    Create a Telegram bot and let agents chat in Telegram.
   </Card>
   <Card title="Custom Channel" icon="puzzle-piece" href="/versions/2.0.9dev/en/deploy/channel/custom" cta="Learn more" arrow>
     Implement ChannelBase to connect a platform beyond the built-ins.

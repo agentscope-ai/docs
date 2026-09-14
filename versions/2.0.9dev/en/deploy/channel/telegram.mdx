@@ -1,0 +1,144 @@
+---
+title: "Telegram"
+description: "Chat with your service's agents through a Telegram bot."
+---
+
+The Telegram channel connects an AgentScope service to the Telegram Bot API by long polling. It supports private chats, groups, multimodal messages, streamed replies, and in-chat tool approval without requiring a public webhook URL.
+
+The integration currently provides these capabilities:
+
+- **Streaming replies**: private chats use Telegram drafts, while groups update an ordinary message at Telegram's supported rate;
+- **Multimodal input**: receive photos, albums, documents, audio, voice, video, animations, video notes, stickers, locations, venues, and contacts;
+- **Formatted output**: common Markdown is converted to Telegram-safe HTML and long replies are split automatically;
+- **Interactive approval**: tool calls that require confirmation are shown with Allow and Deny buttons;
+- **Outbound sending**: the agent can send text, images, and files to a known Telegram chat ID.
+
+## Prerequisites
+
+The Telegram channel depends on `python-telegram-bot` and `markdown-it-py`, installed with the `channel` extra:
+
+```bash Install the dependencies
+pip install "agentscope[channel]"
+```
+
+## Create Bot
+
+Create and configure the bot with [BotFather](https://t.me/BotFather).
+
+<Steps>
+  <Step title="Create a bot">
+    Send `/newbot` to BotFather and follow the prompts to choose a display name and username.
+  </Step>
+  <Step title="Record the bot token and ID">
+    Copy the token returned by BotFather. The numeric prefix before the colon is the bot ID. Keep the complete token secret.
+  </Step>
+  <Step title="Configure group access">
+    Use BotFather's group and privacy settings to control whether the bot can join groups and which group messages Telegram delivers to it. With privacy mode enabled, commands, mentions, and replies to the bot remain available.
+  </Step>
+  <Step title="Disable webhooks">
+    AgentScope uses `getUpdates` long polling. Remove any webhook configured for the same bot before enabling the channel.
+  </Step>
+</Steps>
+
+## Start Agent Service
+
+A Telegram channel runs inside an [agent service](/versions/2.0.9dev/en/deploy/agent-service). Register `TelegramChannel` in `create_app`:
+
+```python Start a Telegram-enabled service
+from agentscope.app import create_app
+from agentscope.app.channel import TelegramChannel
+from agentscope.app.message_bus import InMemoryMessageBus
+from agentscope.app.storage import RedisStorage
+from agentscope.app.workspace_manager import LocalWorkspaceManager
+
+app = create_app(
+    storage=RedisStorage(host="localhost", port=6379),
+    # Use RedisMessageBus instead for a multi-process deployment.
+    message_bus=InMemoryMessageBus(),
+    workspace_manager=LocalWorkspaceManager(basedir="./workspaces"),
+    channels=[TelegramChannel],
+)
+```
+
+For a multi-process or multi-node deployment, use `RedisMessageBus`. The channel uses the shared bus to elect one long-polling listener and to correlate approval callbacks across processes. Standby workers take over when the listener lease expires.
+
+## Add Channel
+
+Add the Telegram channel in the management UI, or call the `/channels` API directly.
+
+<Steps>
+  <Step title="Choose Telegram">
+    Create a channel and select "Telegram" as its platform type.
+  </Step>
+  <Step title="Enter the credentials">
+    Enter the numeric **Bot ID** and complete **Bot Token** obtained from BotFather.
+  </Step>
+  <Step title="Configure routing">
+    Choose the agent that handles messages and how chats map to sessions. See [Message Routing](/versions/2.0.9dev/en/deploy/channel/routing).
+  </Step>
+  <Step title="Save and enable">
+    Save and enable the channel. Its status becomes connected after long polling starts.
+  </Step>
+</Steps>
+
+## Platform Config
+
+The Telegram channel exposes these platform-specific fields:
+
+| Field | Description | Default |
+|---|---|---|
+| `only_at_reply` | In groups and supergroups, respond only when mentioned or when a user replies to the bot | `true` |
+| `show_thinking` | Include model reasoning in the reply | `false` |
+| `show_tool_process` | Include tool calls and results in the reply | `false` |
+
+<Note>
+When routing matches on `chat_type`, direct chats use `private`; group chats use `group` or `supergroup`.
+</Note>
+
+<Warning>
+A Telegram bot is reachable by anyone who knows its username, and this channel does not define its own user or group allowlist. Design routing and tool permissions for that exposure. In a group, an approval message is visible to the group and any non-bot member of that chat can click its buttons.
+</Warning>
+
+## Message Limits
+
+The adapter handles Telegram's delivery limits as follows:
+
+| Content | Behavior |
+|---|---|
+| Text | Converted to safe HTML and split into messages of at most 4,096 characters |
+| Inbound attachment | Downloaded up to the Bot API's 20 MiB limit |
+| Outbound photo | Sent inline up to 10 MiB |
+| Outbound file | Sent as a document up to 50 MiB |
+| Flood limit | Retried within a bounded per-operation delivery budget |
+
+## Agent Tools
+
+The Telegram channel adds the following tools. Each one requires user confirmation before execution:
+
+| Tool | Purpose |
+|---|---|
+| `SendMessage` | Send plain text to a Telegram chat ID |
+| `SendImage` | Send an image from the workspace inline |
+| `SendFile` | Send a workspace file as a document |
+
+Telegram does not provide a complete API for enumerating every chat or member visible to a bot, so this channel does not provide chat-list or member-list tools.
+
+## Verify and Troubleshoot
+
+- Check `GET /channels/{id}/status` or the management UI for the connection state.
+- If the bot stays disconnected, verify that the bot ID matches the token and that the token has not been revoked.
+- If the service reports an active webhook, remove the webhook before retrying.
+- If group messages are ignored, mention the bot or reply to one of its messages, or disable `only_at_reply`.
+- If Telegram reports another `getUpdates` consumer, stop the competing poller. AgentScope retries conflicts and coordinates its own replicas through the shared message bus.
+- If media cannot be downloaded or sent, check the limits above and the file's Telegram-supported format.
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Message Routing" icon="route" href="/versions/2.0.9dev/en/deploy/channel/routing" cta="Learn more" arrow>
+    Route Telegram chats to agents and sessions.
+  </Card>
+  <Card title="Custom Channel" icon="puzzle-piece" href="/versions/2.0.9dev/en/deploy/channel/custom" cta="Learn more" arrow>
+    Implement ChannelBase to connect another platform.
+  </Card>
+</CardGroup>
