@@ -31,6 +31,8 @@ description: "在任意后端上创建工作区，并接入智能体"
     )
     await workspace.initialize()
     ```
+
+    `await workspace.list_tools()` 返回的 `Glob` 和 `Grep` 工具以 `workdir` 为默认搜索目录。省略 `path` 或传入 `path="."` 时搜索工作区，传入 `path="src"` 时搜索工作区内的 `src` 子目录；绝对路径则直接指定搜索位置。即使 Python 进程从其他目录启动，也会使用上述搜索目录。
   </Tab>
 
   <Tab title="Bubblewrap">

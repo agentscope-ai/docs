@@ -31,6 +31,8 @@ Each backend has its own persistence model and directory layout. Pick the tab ma
     )
     await workspace.initialize()
     ```
+
+    The `Glob` and `Grep` tools returned by `await workspace.list_tools()` use `workdir` as their default search directory. An omitted `path` or `path="."` searches the workspace; `path="src"` searches its `src` subdirectory. An absolute `path` selects that location directly. These defaults apply even when the Python process was launched from a different directory.
   </Tab>
 
   <Tab title="Bubblewrap">

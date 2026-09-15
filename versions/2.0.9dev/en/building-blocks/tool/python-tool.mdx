@@ -67,6 +67,21 @@ AgentScope ships a set of ready-to-use tools covering common agent operations. I
 Two more tools, the `reset_tools` meta tool and the `Skill` viewer, are auto-registered by `Toolkit` whenever extra tool groups or skills exist. Developers do not instantiate them directly. See [Meta Tool](/versions/2.0.9dev/en/building-blocks/tool/manage-tools) and [Skill](/versions/2.0.9dev/en/building-blocks/tool/skill).
 </Note>
 
+### Glob and Grep
+
+`Glob` searches file names, and `Grep` searches file contents. When creating these tools directly, set the keyword-only `cwd` constructor argument to choose their default search directory. For example, these tools search `./project` when a call omits `path`:
+
+```python Search directory
+from agentscope.tool import Glob, Grep
+
+glob = Glob(cwd="./project")  # Resolve relative search paths within this directory.
+grep = Grep(cwd="./project")
+```
+
+With `cwd` configured, `path="."` searches that directory and `path="src"` searches its `src` subdirectory. Absolute search paths keep their meaning. A relative `cwd` is resolved against the backend's current directory. Omitting `cwd` preserves the backend's existing path behavior, which uses the Python process's current directory for standalone local tools.
+
+[`LocalWorkspace.list_tools()`](/versions/2.0.9dev/en/building-blocks/workspace/run-workspace) configures both search tools with the workspace's `workdir` automatically.
+
 ### Bash
 
 The `Bash` tool executes shell commands and returns stdout/stderr. It implements every optional interface method to provide fine-grained permission control.
