@@ -67,6 +67,21 @@ AgentScope 预置了一组覆盖常见智能体操作的工具，实例化后传
 元工具 `reset_tools` 和 `Skill` 查看工具只有在存在额外的工具组或技能时才会自动注册，开发者无需手动实例化。详见[元工具](/zh/versions/2.0.9dev/building-blocks/tool/manage-tools)与 [Skill](/zh/versions/2.0.9dev/building-blocks/tool/skill)。
 </Note>
 
+### Glob 和 Grep
+
+`Glob` 按文件名搜索，`Grep` 按文件内容搜索。直接创建工具时，可以通过仅限关键字传入的构造参数 `cwd` 设置默认搜索目录。例如，下面两个工具在调用时省略 `path`，就会搜索 `./project`：
+
+```python 搜索目录
+from agentscope.tool import Glob, Grep
+
+glob = Glob(cwd="./project")  # 相对搜索路径以此目录为基准。
+grep = Grep(cwd="./project")
+```
+
+配置 `cwd` 后，`path="."` 搜索该目录，`path="src"` 搜索其中的 `src` 子目录，绝对搜索路径的含义保持不变。相对的 `cwd` 以工具后端的当前目录为基准。省略 `cwd` 时，工具保留后端原有的路径行为；对于独立使用的本地工具，基准是 Python 进程的当前目录。
+
+[`LocalWorkspace.list_tools()`](/zh/versions/2.0.9dev/building-blocks/workspace/run-workspace) 会自动将工作区的 `workdir` 配置为这两个工具的搜索目录。
+
 ### Bash
 
 `Bash` 工具执行 shell 命令并返回 stdout / stderr。它实现了所有可选接口方法，提供精细的权限控制。
