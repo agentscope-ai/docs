@@ -13,7 +13,7 @@ The two projects share one site but keep separate content and release models:
 | Project | Documentation scope | Live documentation | Update model |
 |---|---|---|---|
 | AgentScope | Building, operating, and deploying agent applications | [AgentScope docs](https://docs.agentscope.io/stable/en/index) | Immutable version directories |
-| ReMe | File-native agent memory, workflows, integrations, and stable contracts | [ReMe docs](https://docs.agentscope.io/reme/latest/en/overview) | One continuously updated `latest` version |
+| ReMe | File-native agent memory, workflows, integrations, and stable contracts | [ReMe docs](https://docs.agentscope.io/en/reme/latest/overview) | One continuously updated `latest` version |
 
 ## ReMe Documentation
 
@@ -34,11 +34,11 @@ The current ReMe content is organized by user goal:
 
 | Area | Pages | Purpose |
 |---|---|---|
-| Get Started | [Overview](reme/latest/en/overview.mdx), [Quick Start](reme/latest/en/quickstart.mdx), [Concepts](reme/latest/en/concepts.mdx) | Explain the product, complete the first memory loop, and establish its principles |
-| Integration | [Integration overview](reme/latest/en/integration/overview.mdx), [Deployment](reme/latest/en/integration/deployment.mdx), [Python SDK](reme/latest/en/integration/python-sdk.mdx), [Plugins](reme/latest/en/integration/plugins.mdx) | Choose and implement the correct runtime boundary |
-| Resources | [Reference](reme/latest/en/reference.mdx), [FAQ](reme/latest/en/faq.mdx), [Contribution](reme/latest/en/contribution.mdx) | Find stable contracts, solve common problems, and contribute changes |
+| Get Started | [Overview](en/reme/latest/overview.mdx), [Quick Start](en/reme/latest/quickstart.mdx), [Concepts](en/reme/latest/concepts.mdx) | Explain the product, complete the first memory loop, and establish its principles |
+| Integration | [Integration overview](en/reme/latest/integration/overview.mdx), [Deployment](en/reme/latest/integration/deployment.mdx), [Python SDK](en/reme/latest/integration/python-sdk.mdx), [Plugins](en/reme/latest/integration/plugins.mdx) | Choose and implement the correct runtime boundary |
+| Resources | [Reference](en/reme/latest/reference.mdx), [FAQ](en/reme/latest/faq.mdx), [Contribution](en/reme/latest/contribution.mdx) | Find stable contracts, solve common problems, and contribute changes |
 
-Chinese pages mirror the same structure under `reme/latest/zh/`. Update both languages
+Chinese pages mirror the same structure under `zh/reme/latest/`. Update both languages
 together and keep their intent, headings, examples, and links aligned.
 
 ## Local Development
@@ -64,10 +64,9 @@ The preview is available at `http://localhost:3000` by default.
 
 ```text
 .
-├── versions/
-│   └── <version>/{en,zh}/   # Versioned AgentScope documentation
-├── reme/
-│   └── latest/{en,zh}/      # Current ReMe documentation
+├── {en,zh}/                 # Language code leads every page path
+│   ├── versions/<version>/  # Versioned AgentScope documentation
+│   └── reme/latest/         # Current ReMe documentation
 ├── images/                  # Shared static assets
 ├── scripts/                 # Documentation maintenance scripts
 ├── docs.json                # Mintlify navigation and redirects
@@ -105,8 +104,8 @@ AgentScope release:
 
 AgentScope versions can be created with `scripts/create-version.sh`.
 
-ReMe does not keep historical release directories. Update `reme/latest/{en,zh}/`
-directly, keep canonical internal links under `/reme/latest/...`, and leave its
+ReMe does not keep historical release directories. Update `{en,zh}/reme/latest/`
+directly, keep canonical internal links under `/{en,zh}/reme/latest/...`, and leave its
 `docs.json` version label as `latest`. The `/reme/stable/...` alias and obsolete
 numeric-version URLs redirect to the current pages for compatibility.
 
@@ -116,7 +115,7 @@ When adding or updating documentation:
 
 1. Verify the behavior in the corresponding project source.
 2. Update the correct project, version, and language pages.
-3. For ReMe, make the equivalent English and Chinese changes in `reme/latest/`.
+3. For ReMe, make the equivalent English and Chinese changes in `{en,zh}/reme/latest/`.
 4. Update `docs.json` when navigation, versions, or compatibility redirects change.
 5. Check page links and run `mint validate` before submitting a pull request.
 
@@ -131,8 +130,8 @@ mint validate
 
 - [AgentScope GitHub](https://github.com/agentscope-ai/agentscope)
 - [ReMe GitHub](https://github.com/agentscope-ai/ReMe)
-- [ReMe English documentation](https://docs.agentscope.io/reme/latest/en/overview)
-- [ReMe 中文文档](https://docs.agentscope.io/reme/latest/zh/overview)
+- [ReMe English documentation](https://docs.agentscope.io/en/reme/latest/overview)
+- [ReMe 中文文档](https://docs.agentscope.io/zh/reme/latest/overview)
 - [Mintlify Documentation](https://mintlify.com/docs)
 
 ## AI Documentation Index

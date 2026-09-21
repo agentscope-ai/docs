@@ -1,0 +1,26 @@
+---
+title: "Overview"
+description: "Choose how an application or agent should run and use ReMe."
+---
+
+Every usage mode works with the same ReMe workspace and jobs. The main decisions are who owns the ReMe lifecycle and whether the host needs a shared service, a service-based agent integration, or in-process Python access.
+
+## Choose a Path
+
+Use the integration boundary that best matches the host:
+
+| Path | Choose it when | Responsibility |
+|---|---|---|
+| [Deployment](/en/reme/latest/integration/deployment) | ReMe should run independently and serve one or more clients | Expose MCP, CLI, HTTP, or ReMe Studio access |
+| [Python SDK](/en/reme/latest/integration/python-sdk) | A Python or AgentScope application needs in-process ReMe | Call `ReMe.run_job()` or use `ReMeMiddleware` |
+| [Agent integrations](/en/reme/latest/integration/plugins) | A supported agent needs a maintained in-process or service-based path | Use the QwenPaw Python path, a host plugin, or a CLI Skill |
+
+Choose [Python SDK](/en/reme/latest/integration/python-sdk) for AgentScope's first-party `ReMeMiddleware` or when another Python host should own ReMe in process. Choose [Agent integrations](/en/reme/latest/integration/plugins) for QwenPaw, Claude Code, Hermes, OpenClaw, or Codex guidance, and review [Deployment](/en/reme/latest/integration/deployment) when selecting MCP, CLI, HTTP, or Studio.
+
+## Runtime Model
+
+Direct Python, AgentScope, and QwenPaw can embed ReMe in the host process. MCP, CLI, HTTP, and ReMe Studio access a separately running ReMe service. Plugins and Skills sit on the client side and decide when an agent should use those interfaces.
+
+![ReMe runtime model with an in-process Python SDK path and a shared-service path, each allowing only one runtime owner per workspace](/images/reme/runtime-model.svg)
+
+Keep one runtime owner for a workspace: either let the Python host manage the application lifecycle, or start one shared service with `reme start`. The runtime owns background indexing and scheduled consolidation; the host still owns session hooks, stable session identifiers, and decisions about when to recall or record.

@@ -18,7 +18,9 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DOCS_ROOT="$(dirname "$SCRIPT_DIR")"
-VERSIONS_DIR="$DOCS_ROOT/versions"
+# Pages live under <lang>/versions/<version>; English lists the known versions
+LANGS=(en zh)
+VERSIONS_DIR="$DOCS_ROOT/en/versions"
 DOCS_JSON="$DOCS_ROOT/docs.json"
 
 # If source version not specified, find the latest version
@@ -32,18 +34,22 @@ if [ -z "$SOURCE_VERSION" ]; then
     fi
 fi
 
-SOURCE_DIR="$VERSIONS_DIR/$SOURCE_VERSION"
-TARGET_DIR="$VERSIONS_DIR/$NEW_VERSION"
+TARGET_DIRS=()
+for LANG_CODE in "${LANGS[@]}"; do
+    SOURCE_DIR="$DOCS_ROOT/$LANG_CODE/versions/$SOURCE_VERSION"
+    TARGET_DIR="$DOCS_ROOT/$LANG_CODE/versions/$NEW_VERSION"
 
-if [ ! -d "$SOURCE_DIR" ]; then
-    echo "Error: Source version directory not found: $SOURCE_DIR"
-    exit 1
-fi
+    if [ ! -d "$SOURCE_DIR" ]; then
+        echo "Error: Source version directory not found: $SOURCE_DIR"
+        exit 1
+    fi
 
-if [ -d "$TARGET_DIR" ]; then
-    echo "Error: Target version already exists: $TARGET_DIR"
-    exit 1
-fi
+    if [ -d "$TARGET_DIR" ]; then
+        echo "Error: Target version already exists: $TARGET_DIR"
+        exit 1
+    fi
+    TARGET_DIRS+=("$TARGET_DIR")
+done
 
 if ! command -v python3 >/dev/null 2>&1; then
     echo "Error: python3 is required to update docs.json but was not found."
@@ -52,8 +58,10 @@ fi
 
 echo "Creating version $NEW_VERSION from $SOURCE_VERSION..."
 
-# Copy the source version
-cp -r "$SOURCE_DIR" "$TARGET_DIR"
+# Copy the source version for every language
+for LANG_CODE in "${LANGS[@]}"; do
+    cp -r "$DOCS_ROOT/$LANG_CODE/versions/$SOURCE_VERSION" "$DOCS_ROOT/$LANG_CODE/versions/$NEW_VERSION"
+done
 
 # Replace version references in all mdx files
 # GNU sed (Linux) and BSD sed (macOS) disagree on the -i argument, so branch on it
@@ -63,10 +71,10 @@ if sed --version >/dev/null 2>&1; then
 else
     SED_INPLACE=(sed -i '')
 fi
-find "$TARGET_DIR" -name "*.mdx" -exec "${SED_INPLACE[@]}" "s|/versions/$SOURCE_VERSION/|/versions/$NEW_VERSION/|g" {} \;
+find "${TARGET_DIRS[@]}" -name "*.mdx" -exec "${SED_INPLACE[@]}" "s|/versions/$SOURCE_VERSION/|/versions/$NEW_VERSION/|g" {} \;
 
 # Count modified files
-MODIFIED_COUNT=$(grep -r "/versions/$NEW_VERSION/" "$TARGET_DIR" --include="*.mdx" -l 2>/dev/null | wc -l | tr -d ' ')
+MODIFIED_COUNT=$(grep -r "/versions/$NEW_VERSION/" "${TARGET_DIRS[@]}" --include="*.mdx" -l 2>/dev/null | wc -l | tr -d ' ')
 
 # Update docs.json: clone navigation entry per language + update redirects
 echo "Updating docs.json (navigation + redirects)..."
@@ -164,13 +172,13 @@ for lang_entry in languages:
 
 # Update redirects (/latest/ for dev, /stable/ for release)
 is_dev = new_version.endswith("dev")
-target_source = "/latest/:slug*" if is_dev else "/stable/:slug*"
+alias = "latest" if is_dev else "stable"
 redirect_updated = ""
 for redirect in data.get("redirects", []) or []:
-    if redirect.get("source") == target_source:
-        redirect["destination"] = f"/versions/{new_version}/:slug*"
-        redirect_updated = f"{target_source} -> /versions/{new_version}/:slug*"
-        break
+    for lang in ("en", "zh"):
+        if redirect.get("source") == f"/{alias}/{lang}/:slug*":
+            redirect["destination"] = f"/{lang}/versions/{new_version}/:slug*"
+            redirect_updated = f"/{alias}/<lang>/:slug* -> /<lang>/versions/{new_version}/:slug*"
 
 # Write through a temporary file in the same directory, then rename it over
 # the original. A plain "w" truncates the file first, so a running `mint dev`
@@ -193,8 +201,8 @@ REDIRECT_UPDATED=$(echo "$PY_OUTPUT" | sed -n 's/^REDIRECT=//p')
 
 echo ""
 echo "✅ Created version $NEW_VERSION"
-echo "   Source: $SOURCE_DIR"
-echo "   Target: $TARGET_DIR"
+echo "   Source: <lang>/versions/$SOURCE_VERSION"
+echo "   Target: <lang>/versions/$NEW_VERSION"
 echo "   Files with updated links: $MODIFIED_COUNT"
 echo "   Navigation added for: ${NAV_ADDED:-<none>}"
 if [ -n "$NAV_SKIPPED" ]; then
@@ -205,7 +213,7 @@ echo "   Redirect updated:      ${REDIRECT_UPDATED:-<no matching redirect found>
 # Only *.mdx files are rewritten above, so generated artifacts still carry the
 # source version. Point them out instead of patching them: an OpenAPI spec has
 # to be regenerated from the matching AgentScope release, not string-replaced
-STALE_FILES=$(grep -rl "$SOURCE_VERSION" "$TARGET_DIR" --include="*.json" 2>/dev/null || true)
+STALE_FILES=$(grep -rl "$SOURCE_VERSION" "${TARGET_DIRS[@]}" --include="*.json" 2>/dev/null || true)
 if [ -n "$STALE_FILES" ]; then
     echo ""
     echo "⚠️  These generated files still reference $SOURCE_VERSION:"
@@ -216,8 +224,8 @@ fi
 echo ""
 echo "Next steps:"
 echo "  1. Review docs.json to confirm the new version block looks right"
-echo "  2. Make your documentation changes in $TARGET_DIR"
+echo "  2. Make your documentation changes in <lang>/versions/$NEW_VERSION"
 echo "  3. Run 'mint dev' to preview"
 echo ""
 echo "When promoting a dev version to a release, drop the old dev version"
-echo "afterwards: remove versions/<old-dev> and its navigation entries."
+echo "afterwards: remove <lang>/versions/<old-dev> and its navigation entries."

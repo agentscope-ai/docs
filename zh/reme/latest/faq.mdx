@@ -1,0 +1,113 @@
+---
+title: "FAQ"
+description: "解决 ReMe 安装、连接、模型和索引的常见问题。"
+---
+
+先运行以下命令确认服务状态：
+
+```bash
+reme find_reme
+reme health_check
+reme version
+```
+
+## 常见问题
+
+### 所有能力都需要 LLM 吗？
+
+不需要。文件读写、关键词检索和 wikilink 遍历可以直接使用；Auto Memory、Auto Resource 和 Auto Dream 的主要整理阶段需要 LLM；向量语义检索需要 embedding。
+
+### 记忆存在哪里？
+
+默认在启动目录的 `.reme/`。用 `workspace_dir=` 可以指定其他位置。持久记忆是普通文件，可以用 git 或文件同步工具备份；`metadata/` 是可重建的派生状态，`mem_session/` 保存 Agent wrapper 生成的运行态。
+
+### 可以直接编辑记忆吗？
+
+可以。`daily/` 和 `digest/` 中的 Markdown 就是用户界面。编辑长期结论时尽量保留来源链接；移动和删除文件时优先使用 ReMe action，避免留下悬空链接。
+
+### HTTP 和 MCP 怎么选？
+
+CLI、脚本和普通应用使用默认 HTTP；原生支持 MCP 的 Agent 使用 MCP。两种服务暴露同一组 job，并共享 workspace。可以在[接入概览](/zh/reme/latest/integration/overview)中比较不同边界。
+
+## 故障排查
+
+### 服务无法启动或端口被占用
+
+默认端口是 `2333`。先定位已有进程，或换端口：
+
+```bash
+reme find_reme
+reme start service.port=8181
+```
+
+使用自定义端口后，Agent、MCP 配置和手工请求中的端口也必须同步修改。
+
+### `reme search` 等命令连接失败
+
+普通 action 会连接运行中的服务。确认服务存在，并避免手工指定与服务不一致的 backend、transport、host 或 port：
+
+```bash
+reme find_reme
+reme search query="check" host=127.0.0.1 port=8181
+```
+
+如果服务以 MCP 启动，客户端也必须使用相同 backend 和 transport。
+
+### MCP 客户端无法连接
+
+推荐使用 streamable HTTP：
+
+```bash
+reme start service.backend=mcp service.transport=streamable-http
+```
+
+默认 URL 是 `http://127.0.0.1:2333/mcp`。检查客户端没有使用 SSE URL、错误端口或 HTTP backend。
+
+### Auto Memory / Auto Dream 报模型错误
+
+确认启动 ReMe 的目录中存在 `.env`，或环境变量已导出：
+
+```bash
+export LLM_API_KEY=sk-xxx
+export LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+模型名称、provider 参数和所需组件以当前 `reme/config/default.yaml` 为准。
+
+### 开启 embedding 后维度不匹配
+
+embedding 模型的输出维度必须与配置一致。更换模型或维度后，旧向量不能复用，修正配置并重建索引：
+
+```bash
+reme reindex
+```
+
+### 新文件搜索不到
+
+确认：
+
+1. ReMe 服务正在运行；
+2. Markdown 记忆位于 `daily/` 或 `digest/`；
+3. `resource/` 下的来源文件是 `md`、`txt`、`json`、`jsonl`、`csv`、`yaml` 或 `html`，且 Auto Resource 已生成对应 daily 卡片；
+4. 写入后已给后台 watcher 短暂处理时间。
+
+必要时运行 `reme reindex`。完整重建还会扫描 `resource/` 和 JSONL；实时索引 watcher 则特意只处理 `daily/` 和 `digest/` 下的 Markdown。
+
+### ReMe Studio 无法访问
+
+只有找到 Web 构建产物时，HTTP 服务根路径才会提供 Studio；即使没有 Studio，Job API 仍可用。请确认当前是 HTTP backend，并安装包含 Web 构建的包，或通过 `service.web_static_dir` / `REME_WEB_STATIC_DIR` 指定包含 `index.html` 的目录。
+
+### Claude Code 会话没有自动记录
+
+确认 ReMe MCP 服务仍在运行、plugin 的 `.mcp.json` 地址正确，并查看 `plugins/reme/logs/auto_memory_hook.log`。Stop hook 是异步 best-effort，服务不可达时不会阻塞 Claude Code。
+
+## 反馈问题
+
+仍无法解决时，请在 [GitHub Issues](https://github.com/agentscope-ai/ReMe/issues) 提供：
+
+- ReMe 版本和操作系统；
+- 启动命令与实际 backend / transport；
+- 最小复现步骤和完整错误；
+- 是否启用了 LLM、embedding 或自定义配置。
+
+提交前请删除密钥、个人信息和 workspace 中的敏感内容。

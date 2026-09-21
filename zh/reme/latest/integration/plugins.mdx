@@ -1,0 +1,161 @@
+---
+title: "Agent 集成"
+description: "通过持续维护的进程内 Python、工具、Skill 和 plugin 方案，将支持的 Agent 接入 ReMe。"
+---
+
+本页介绍持续维护的宿主接入方案。Claude Code、Hermes、OpenClaw、Codex 和其他可执行 CLI 的 Agent 连接[已部署的 ReMe 服务](/zh/reme/latest/integration/deployment)；QwenPaw 使用进程内 Python 路径。AgentScope 的 `ReMeMiddleware` 应使用 [Python 接入](/zh/reme/latest/integration/python-sdk#agentscope)。
+
+## 选择接入模式
+
+以下模式的区别在于如何封装服务调用与记忆行为：
+
+| 模式 | 提供的能力 | 适用场景 |
+|---|---|---|
+| 直接调用工具 | 通过 MCP、CLI 或 HTTP 调用服务 | 已经管理工具调用和会话生命周期的自定义 Agent |
+| Skill | 定义何时通过服务 client 搜索、读取和记录 | 支持通用 Agent Skill 的宿主 |
+| Plugin | 将连接配置、工具或 Skill、生命周期 hook 打包为宿主专用方案 | 已有 ReMe plugin 的宿主 |
+
+三种模式最终连接同一个服务边界：
+
+```text
+Agent ── 工具 / Skill / plugin ──> MCP / CLI / HTTP ──> ReMe 服务 ──> workspace
+```
+
+Agent 侧的接入不负责管理 ReMe 进程。它负责选择服务接口、提供会话上下文，并决定返回的记忆是否以及如何影响回答。
+
+### Skill
+
+Skill 是服务接口之上的行为层，不是服务或传输方式。仓库内置的 [`skills/reme_memory/`](https://github.com/agentscope-ai/ReMe/tree/main/skills/reme_memory) 使用 ReMe CLI；其他宿主也可以通过 MCP 工具或 HTTP 应用相同的行为。
+
+使用 Skill 时，将完整的 `skills/reme_memory/` 目录安装到宿主的 skill 位置，确保 `SKILL.md` 和配套规则一起保留。之后宿主应遵循以下约定：
+
+1. 回答过往对话、偏好、决定或项目历史前，先搜索，再读取命中的相关文件；
+2. 只记录具有长期价值的事实、偏好、决定和经验，不默认保存密钥或敏感信息；
+3. 会话结束或出现稳定信息时调用 `auto_memory`，并使用宿主会话生命周期提供的稳定 `session_id`；
+4. 将 `auto_dream` 交给 ReMe 定时任务，或由宿主按自身生命周期触发；
+5. 将 ReMe 视为记忆输入，最终是否以及如何使用结果仍由 Agent 决定。
+
+Skill 不负责启动 ReMe，也不会自行补全缺失的对话历史。
+
+### Plugin
+
+Plugin 将特定宿主所需的服务连接配置、工具、Skill 和会话 hook 等能力打包在一起。它应连接已经部署的 ReMe 服务，并利用宿主生命周期实现自动召回或记录。安装 plugin 并不意味着它会启动或管理 ReMe。
+
+## 持续维护的集成
+
+ReMe 目前为以下宿主提供或记录了持续维护的接入方案：
+
+| 宿主 | 接入方式 | 召回 | 记录 |
+|---|---|---|---|
+| Claude Code | ReMe plugin | MCP 工具与 `reme-memory` Skill | Stop hook 自动记录 |
+| Hermes Agent | ReMe memory-provider plugin | 每次模型调用前用 HTTP 搜索 | 每轮完成后排队调用 `auto_memory` |
+| QwenPaw | 进程内 Python API | 宿主管理搜索和读取 | 宿主生命周期和模型配置 |
+| OpenClaw / Codex | `reme_memory` Skill | ReMe CLI | 需要显式宿主生命周期 hook |
+
+下面分别介绍这些方案的宿主专用配置与验证步骤。其他可执行 CLI 的 Agent 也可以改造内置 Skill。
+
+## Claude Code
+
+Claude Code plugin 组合了 MCP 召回、召回 skill 和异步会话记录。它只连接共享的 ReMe MCP 服务，不会自行启动 ReMe。
+
+### 1. 启动 ReMe
+
+先按[快速开始](/zh/reme/latest/quickstart)安装 ReMe，再保持 MCP 服务运行：
+
+```bash
+reme start service.backend=mcp service.transport=streamable-http
+```
+
+默认端点为 `http://127.0.0.1:2333/mcp`。自动记录还需要配置 LLM 环境。
+
+### 2. 安装 Plugin
+
+克隆 ReMe 仓库，在仓库根目录通过 Claude Code 添加内置 marketplace 并安装 plugin：
+
+```text
+/plugin marketplace add ./plugins/claude_code
+/plugin install reme@reme-marketplace
+```
+
+重启 Claude Code，运行 `/mcp`，确认名为 `reme` 的 server 和工具已经连接。
+
+Package 位于 `plugins/claude_code/`：`.mcp.json` 定义服务地址，`reme-memory` skill 控制召回，`hooks/auto_memory.py` 在会话结束后调用 `auto_memory_cc`。
+
+### 3. 验证召回与记录
+
+先在终端写入一条容易识别的记忆：
+
+```bash
+reme write \
+  path=digest/wiki/claude-code-check \
+  name="Claude Code Check" \
+  description="Claude Code 接入验证" \
+  content="项目约定：提交前先运行 pytest。"
+```
+
+随后让 Claude Code 回答“这个项目提交前要做什么？”。它应先搜索并读取 ReMe，再根据记忆回答。
+
+接着结束一段包含长期信息的对话，稍后搜索其中的关键词：
+
+```bash
+reme search query="<刚才对话中的关键词>" limit=5
+```
+
+Stop hook 异步运行，并采用 best-effort 策略：ReMe 服务不可用时不会阻塞 Claude Code。修改服务端口时，还需同步更新 `plugins/claude_code/reme/.mcp.json`。Hook 覆盖项和日志位置见 [plugin README](https://github.com/agentscope-ai/ReMe/blob/main/plugins/claude_code/README.md)。
+
+## Hermes Agent
+
+Hermes memory-provider plugin 连接独立管理的 ReMe HTTP 服务。它在每次模型调用前召回相关记忆，并在不阻塞主对话的前提下通过 `auto_memory` 记录已完成的 turn。
+
+### 1. 启动 ReMe
+
+需要相互隔离的 Hermes profile 应分别使用独立 workspace 和端点：
+
+```bash
+reme start \
+  workspace_dir="$HOME/.reme-hermes-default" \
+  service.backend=http \
+  service.host=127.0.0.1 \
+  service.port=2333
+```
+
+BM25 召回不需要 embedding，但自动记录需要可用的 LLM 配置。
+
+### 2. 安装并配置 Plugin
+
+```bash
+hermes plugins install agentscope-ai/ReMe/plugins/hermes_agent
+hermes memory setup
+```
+
+选择 `reme`，确认 HTTP 端点，再运行 `hermes memory status`。配置保存在 `$HERMES_HOME/reme.json`。同一个 ReMe workspace 会共享召回记忆；不应共享上下文的 profile 必须分开使用 workspace 和端点。
+
+### 3. 理解失败行为
+
+召回在模型调用前使用独立的短超时。已完成的轮次会进入队列，由串行后台写入器处理；服务关闭时，会在限定时间内排空队列。健康检查、检索和记录分别使用独立的冷却机制，某条路径失败时不会连带禁用其他路径。配置字段和生命周期详见 [Hermes plugin README](https://github.com/agentscope-ai/ReMe/blob/main/plugins/hermes_agent/README.md)。
+
+## QwenPaw
+
+QwenPaw 的推荐路径是通过 Python API 在进程内嵌入 ReMe，以复用宿主的应用生命周期和模型配置，同时保持本地文件化记忆。按 [Python SDK 指南](/zh/reme/latest/integration/python-sdk)接入，并确保每个 workspace 只有一个运行时所有者。
+
+### 验证召回与记录
+
+先在终端写入验证记忆：
+
+```bash
+reme write \
+  path=digest/personal/qwenpaw-check \
+  name="QwenPaw Check" \
+  description="QwenPaw 接入验证" \
+  content="用户偏好：解释技术问题时先给结论。"
+```
+
+然后让 QwenPaw 回答“我偏好怎样的技术解释？”。确认进程内接入先搜索 ReMe，并读取刚写入的文件。
+
+再提供一条具有长期价值的信息，结束会话后搜索相关关键词。宿主必须提供稳定的 session ID 和真实消息历史，不要自行补全缺失的对话内容。
+
+## OpenClaw、Codex 与其他可执行 CLI 的 Agent
+
+将完整的 [`skills/reme_memory/`](https://github.com/agentscope-ai/ReMe/tree/main/skills/reme_memory) 目录安装到宿主 Skill 位置，并保持 ReMe HTTP 服务运行。Skill 通过 CLI 搜索、读取、遍历和记录记忆。`read` 只接受 Markdown；其他文本结果应先用 `reme stat` 检查大小，再使用 `reme load`。
+
+Skill 本身不提供自动记录。请将 `auto_memory` 连接到显式的宿主 session 或 turn hook，传入稳定 `session_id`，并只提供真实对话消息。ReMe 在持久化 transcript 时会省略召回的 tool result 和 base64 数据，避免把检索内容或二进制数据当作会话来源。
