@@ -1,0 +1,113 @@
+---
+title: "FAQ"
+description: "Answers and troubleshooting steps for common ReMe problems."
+---
+
+Start by checking the running service:
+
+```bash
+reme find_reme
+reme health_check
+reme version
+```
+
+## Common Questions
+
+### Does every feature need an LLM?
+
+No. File operations, keyword search, and wikilink traversal work without one. The main Auto Memory, Auto Resource, and Auto Dream refinement stages need an LLM. Vector semantic search needs embeddings.
+
+### Where is memory stored?
+
+By default, under `.reme/` in the launch directory. Use `workspace_dir=` to choose another location. Durable memory is stored in ordinary files suitable for git or file backup; `metadata/` is rebuildable derived state, and `mem_session/` contains generated agent-wrapper runtime state.
+
+### Can I edit memory directly?
+
+Yes. Markdown in `daily/` and `digest/` is the user interface. Preserve source links when changing durable conclusions, and prefer ReMe actions when moving or deleting linked files.
+
+### HTTP or MCP?
+
+Use the default HTTP service for CLI, scripts, and ordinary applications. Use MCP for agents with native MCP support. Both expose the same jobs and share the workspace. See the [integration overview](/en/reme/latest/integration/overview) to compare the boundaries.
+
+## Troubleshooting
+
+### The service cannot start or the port is occupied
+
+The default port is `2333`. Locate an existing process or choose another port:
+
+```bash
+reme find_reme
+reme start service.port=8181
+```
+
+After changing it, update every agent, MCP, and manual-request URL too.
+
+### `reme search` and other actions cannot connect
+
+Normal actions connect to the running service. Confirm that it exists, and do not manually specify a conflicting backend, transport, host, or port:
+
+```bash
+reme find_reme
+reme search query="check" host=127.0.0.1 port=8181
+```
+
+An MCP service and its client must use the same backend and transport.
+
+### An MCP client cannot connect
+
+Use streamable HTTP unless the client requires something else:
+
+```bash
+reme start service.backend=mcp service.transport=streamable-http
+```
+
+The default URL is `http://127.0.0.1:2333/mcp`. Check for an SSE URL, wrong port, or HTTP backend in the client configuration.
+
+### Auto Memory or Auto Dream reports a model error
+
+Confirm that `.env` exists in the launch directory or that the variables are exported:
+
+```bash
+export LLM_API_KEY=sk-xxx
+export LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+Use the current `reme/config/default.yaml` for model names, provider parameters, and required components.
+
+### Embedding dimensions do not match
+
+The configured dimension must match the selected embedding model. Vectors from another model or dimension cannot be reused. Correct the configuration and rebuild:
+
+```bash
+reme reindex
+```
+
+### A new file does not appear in search
+
+Confirm that:
+
+1. the ReMe service is running;
+2. a Markdown memory is under `daily/` or `digest/`;
+3. a source file under `resource/` has a supported `md`, `txt`, `json`, `jsonl`, `csv`, `yaml`, or `html` suffix and Auto Resource has produced its daily card;
+4. the background watcher had a moment to process the write.
+
+Run `reme reindex` when necessary. A full rebuild also scans `resource/` and JSONL, while the live index watcher intentionally handles only Markdown in `daily/` and `digest/`.
+
+### ReMe Studio is not available
+
+Studio is served at the HTTP service root only when a web build can be found. The Job API remains available without it. Confirm that the service uses the HTTP backend and either install a package containing the build or set `service.web_static_dir` / `REME_WEB_STATIC_DIR` to a directory containing `index.html`.
+
+### Claude Code did not record a session
+
+Confirm that the ReMe MCP service is running, the plugin `.mcp.json` URL is correct, and inspect `plugins/reme/logs/auto_memory_hook.log`. The Stop hook is asynchronous and best-effort, so an unavailable service never blocks Claude Code.
+
+## Report an Issue
+
+If the problem remains, open a [GitHub Issue](https://github.com/agentscope-ai/ReMe/issues) with:
+
+- ReMe version and operating system;
+- launch command and actual backend / transport;
+- a minimal reproduction and complete error;
+- whether LLM, embeddings, or custom configuration are enabled.
+
+Remove secrets, personal information, and sensitive workspace content first.

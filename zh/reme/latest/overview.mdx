@@ -1,0 +1,109 @@
+---
+title: "什么是 ReMe？"
+description: "了解 ReMe 如何将对话和资料转化为用户拥有的文件化 Agent 记忆。"
+---
+
+ReMe 是面向 AI Agent 的 local-first 自进化个人知识库。它把对话和资料持续沉淀为可读、可编辑、可检索、相互链接的 Markdown 记忆，并始终把文件控制权留给用户。同一份 workspace 可以在 QwenPaw、OpenClaw、Hermes、Claude Code 和 Codex 等 Agent 之间复用。
+
+下图概括了 ReMe 如何通过文件实现共享、可迁移的长期记忆：
+
+![ReMe 设计理念](/images/reme/design-philosophy.svg)
+
+<CardGroup cols={3}>
+  <Card title="5 分钟上手" icon="rocket" href="/zh/reme/latest/quickstart">
+    安装 ReMe，完成一次可验证的写入、检索和读取。
+  </Card>
+  <Card title="理解核心理念" icon="compass" href="/zh/reme/latest/concepts">
+    了解文件化记忆背后的原则与取舍。
+  </Card>
+  <Card title="选择接入方式" icon="plug" href="#选择接入方式">
+    在 Python、Agent 专用方案和通用接口中选择合适的方式。
+  </Card>
+</CardGroup>
+
+## 核心理念
+
+- **Memory as File, File as Memory**：记忆首先是用户拥有的文件，而不是数据库里的隐藏状态；用户可以直接查看、编辑、移动和备份。
+- **Memory from Experience**：长期记忆来自经验的提炼、修正与合并，不是无限堆积上下文。
+- **Human-Agent Shared Memory**：人和 Agent 读写同一份 Markdown，知识始终可见、可控、可迁移。
+- **Connected and Traceable**：Auto Link 将关系和来源写回文件，让长期结论能够沿链接追溯到证据。
+
+完整的理念与取舍见[核心概念](/zh/reme/latest/concepts)。
+
+## ReMe 解决什么问题
+
+Agent 的上下文通常随会话结束而消失。即使接入向量数据库，用户也很难知道系统记住了什么、依据是什么，以及如何修正或迁移这些记忆。
+
+ReMe 在本地 workspace 中形成完整的记忆闭环，同时保留可追溯的原始数据：
+
+- **捕获**：原始对话和资料保留为可追溯的来源。
+- **整理**：有价值的事实、偏好、流程和知识逐步演化为 Markdown 记忆。
+- **检索**：默认使用 BM25 和有界 wikilink 扩展；按需启用 embedding 语义召回与 RRF 排序融合。
+- **接入**：Python、AgentScope、MCP、CLI、HTTP、ReMe Studio、plugin 和 Skill 面向同一种文件化记忆模型；每个 workspace 只保留一个运行时所有者。
+
+ReMe 由此把记忆从 Agent 的内部状态，变成用户和 Agent 共同维护的知识资产。
+
+## 适合哪些场景
+
+- **个人助理**：跨会话保留偏好、背景、计划和重要经历。
+- **Coding Agent**：延续项目决策、代码约定、排障经验和工作流。
+- **个人知识库**：将对话、笔记与资料整理成相互链接的 Markdown。
+- **经验驱动的 Agent**：把成功路径、失败教训和可复用流程沉淀下来。
+
+如果需要严格事务、复杂权限或超大规模在线检索，ReMe 可能需要与其他系统配合。它是记忆层，而不是完整的 Agent 产品，也不会在用户不可见时进行无边界采集。
+
+## 文件化记忆系统
+
+ReMe 将原始证据、中间整理结果、长期记忆和派生系统状态分开保存。下图展示了人和 Agent 如何操作同一组文件，以及可重建索引如何支持记忆检索。
+
+![ReMe Memory as File 模型：共享文件、记忆整理与派生索引](/images/reme/memory-as-file.svg)
+
+Workspace 中的顶层目录与流程一一对应：
+
+| 层次 | 目录 | 作用 |
+|---|---|---|
+| 原始来源 | `session/`、`resource/` | 保留来源对话和导入资料 |
+| Agent 运行态 | `mem_session/` | 保存 Agent wrapper 生成的 session 与配置，不属于用户记忆 |
+| 当日记忆 | `daily/` | 保存带来源链接的摘要和浅加工记忆 |
+| 长期记忆 | `digest/` | 保存可复用的个人事实、流程经验和知识 |
+| 派生状态 | `metadata/` | 保存可重建的索引、图谱、catalog 和缓存 |
+
+Auto Memory 将对话转化为按主题命名的 daily 卡片，Auto Resource 解读直接放在 `resource/` 根目录或日期子目录中的资料，Auto Dream 再把变化的 daily 卡片整合为长期知识。默认情况下，Auto Dream 检查最近两天窗口，最多提取五个可复用 unit，再创建、佐证、细化或修正 digest 节点。默认实时 watcher 只索引 `daily/` 和 `digest/` 下的 Markdown；完整 `reme reindex` 还会扫描 `resource/` 和 JSONL。搜索先返回带路径和行号的命中片段，再附加数量受限的入链与出链元数据，让 Agent 只在需要时继续展开。
+
+<Note>
+`proactive` 只读取 Auto Dream 生成的 topics。它不会自行浏览网页、发送通知或改写记忆；是否以及如何行动由宿主 Agent 决定。
+</Note>
+
+## 能否离线使用
+
+文件读写、关键词检索、wikilink 遍历和 proactive topics 读取不需要 LLM。对话提炼、资料理解和长期整合需要配置兼容的 LLM；语义检索需要 embedding 服务。可以先使用本地文件能力，再按需启用模型。
+
+## 选择接入方式
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python" href="/zh/reme/latest/integration/python-sdk">
+    直接嵌入 ReMe，或使用 AgentScope 的第一方 `ReMeMiddleware`。
+  </Card>
+  <Card title="Agent 集成" icon="robot" href="/zh/reme/latest/integration/plugins">
+    接入 Claude Code、Hermes、OpenClaw、Codex 等 Agent。
+  </Card>
+  <Card title="接入" icon="arrows-to-circle" href="/zh/reme/latest/integration/overview">
+    通过 MCP、Skill、CLI 或 HTTP 连接 ReMe。
+  </Card>
+</CardGroup>
+
+## 已发布基准测试结果
+
+仓库中的参考运行结果包括：LongMemEval cleaned-s 的 500 个问题得分 89.4%，BEAM 100K 配置得分 66.1%，BEAM 1M 配置得分 65.0%，以及 π-Bench 五类用户画像上的 PROC 得分 0.580。模型、prompt、数据集和评测方式详见 [ReMe benchmark 目录](https://github.com/agentscope-ai/ReMe/tree/main/benchmark)；只有在评测设置一致时，结果才适合直接比较。
+
+## 研究
+
+ReMe 的经验驱动记忆方向详见论文 [Remember Me, Refine Me: A Dynamic Procedural Memory Framework for Experience-Driven Agent Evolution](https://aclanthology.org/2026.findings-acl.829/)，该论文已被 Findings of ACL 2026 接收。
+
+## 更多入口
+
+<CardGroup cols={3}>
+  <Card title="参考" icon="book" href="/zh/reme/latest/reference">Workspace、配置和运行时自描述接口。</Card>
+  <Card title="FAQ" icon="life-ring" href="/zh/reme/latest/faq">常见问题与故障排查。</Card>
+  <Card title="贡献" icon="code-pull-request" href="/zh/reme/latest/contribution">开发环境、测试和贡献流程。</Card>
+</CardGroup>

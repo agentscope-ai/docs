@@ -1,0 +1,111 @@
+---
+title: "快速开始"
+description: "安装 ReMe，并跑通可验证的写入、索引、检索和读取流程。"
+---
+
+本页使用不依赖 LLM 的基础能力，完成一次可验证的“写入 → 索引 → 检索 → 读取”。
+
+## 1. 安装
+
+ReMe 需要 Python 3.11 或更高版本：
+
+```bash
+pip install "reme-ai[core]"
+```
+
+从源码开发时使用：
+
+```bash
+git clone https://github.com/agentscope-ai/ReMe.git
+cd ReMe
+pip install -e ".[core]"
+```
+
+## 2. 启动服务
+
+在一个终端中运行：
+
+```bash
+reme start
+```
+
+默认 workspace 是启动目录下的 `.reme/`，服务监听 `127.0.0.1:2333`。另开一个终端检查状态：
+
+```bash
+reme version
+reme health_check
+reme help
+```
+
+端口冲突时可以改用：
+
+```bash
+reme start service.port=8181
+```
+
+安装包包含 Web 构建产物时，打开 [http://127.0.0.1:2333/](http://127.0.0.1:2333/) 即可使用 **ReMe Studio**。Studio 可以浏览、编辑和搜索 workspace，与只读 workspace agent 对话，并查看 digest wikilink 图。通过 `service.web_enabled=false` 可以关闭；也可用 `service.web_static_dir` / `REME_WEB_STATIC_DIR` 指定自定义构建。即使找不到 Web 构建产物，Job API 仍会正常启动。
+
+## 3. 写入第一条记忆
+
+使用 `reme write` 在长期记忆目录 `digest/` 中创建一个 Markdown 文件：
+
+```bash
+reme write \
+  path=digest/wiki/quick-start-demo \
+  name="Quick Start Demo" \
+  description="第一条 ReMe 记忆" \
+  content="# Quick Start Demo
+
+ReMe 将 Agent 记忆保存为用户可读的 Markdown。"
+```
+
+ReMe 会补全 `.md` 后缀，并在 `.reme/digest/wiki/quick-start-demo.md` 中写入正文与 frontmatter。
+
+## 4. 检索并读取
+
+后台索引会实时监听 `daily/` 和 `digest/` 下的 Markdown，因此通常会自动发现新文件。如果没有立即命中，等待片刻或运行一次 `reme reindex`；完整重建还会扫描 `resource/` 和 JSONL。
+
+```bash
+reme search query="Agent 记忆 Markdown" limit=5
+reme read path=digest/wiki/quick-start-demo.md
+```
+
+搜索还支持闭区间日期过滤：
+
+```bash
+reme search query="Agent 记忆 Markdown" start_date=2026-08-01 end_date=2026-08-12 limit=5
+```
+
+同时直接打开 workspace 中的文件。命令结果和磁盘文件一致，说明最小闭环已经跑通。
+
+完成这个闭环后，workspace 包含以下顶层目录：
+
+```text
+.reme/
+├── metadata/    索引、图谱和运行状态
+├── session/     来源对话
+├── mem_session/ Agent wrapper 生成的 session 和配置
+├── resource/    原始资料
+├── daily/       当日整理结果
+└── digest/      长期记忆
+```
+
+## 5. 按需启用记忆演化
+
+对话提炼、资料理解和长期整合需要 LLM。语义检索还需要 embedding。准备使用这些能力时，在启动目录创建 `.env`：
+
+```bash
+LLM_API_KEY=sk-xxx
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+模型名和 embedding store 是否启用由配置决定，权威默认值见 `reme/config/default.yaml`。不要提交包含密钥的 `.env`。
+
+## 下一步
+
+- 先在[集成概览](/zh/reme/latest/integration/overview)中比较不同方式；宿主进程可以选择 [Python SDK](/zh/reme/latest/integration/python-sdk)，也可以参考 [Agent 集成指南](/zh/reme/latest/integration/plugins)。
+- 在 [ReMe 参考](/zh/reme/latest/reference)中查找 workspace、配置和接口入口。
+- 遇到连接或索引问题时查看 [ReMe FAQ](/zh/reme/latest/faq)。

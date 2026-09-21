@@ -1,0 +1,26 @@
+---
+title: "概览"
+description: "选择应用或 Agent 运行和使用 ReMe 的方式。"
+---
+
+所有使用方式都面向同一个 ReMe workspace 和 job。主要需要决定：由谁管理 ReMe 的生命周期，以及宿主需要共享服务、使用服务的 Agent 接入，还是进程内 Python 调用。
+
+## 选择接入方式
+
+选择与宿主能力最匹配的接入边界：
+
+| 方式 | 适用场景 | 职责 |
+|---|---|---|
+| [部署](/zh/reme/latest/integration/deployment) | ReMe 需要独立运行并服务一个或多个 client | 提供 MCP、CLI、HTTP 或 ReMe Studio 访问方式 |
+| [Python SDK](/zh/reme/latest/integration/python-sdk) | Python 或 AgentScope 应用需要进程内使用 ReMe | 调用 `ReMe.run_job()` 或使用 `ReMeMiddleware` |
+| [Agent 集成](/zh/reme/latest/integration/plugins) | 支持的 Agent 需要持续维护的进程内或服务接入方案 | 使用 QwenPaw Python 路径、宿主 plugin 或 CLI Skill |
+
+AgentScope 的第一方 `ReMeMiddleware`，以及其他需要在进程内管理 ReMe 的 Python 宿主，应选择 [Python SDK](/zh/reme/latest/integration/python-sdk)。QwenPaw、Claude Code、Hermes、OpenClaw 或 Codex 的具体方案见 [Agent 集成](/zh/reme/latest/integration/plugins)；选择 MCP、CLI、HTTP 或 Studio 时查看[部署](/zh/reme/latest/integration/deployment)。
+
+## 运行模型
+
+直接使用 Python、AgentScope 或 QwenPaw 进程内接入时，ReMe 嵌入宿主进程；MCP、CLI、HTTP 和 ReMe Studio 访问独立运行的 ReMe 服务。插件和 Skill 位于 client 侧，负责决定 Agent 何时通过这些接口使用记忆。
+
+![ReMe 运行模型：进程内 Python SDK 与共享服务是两条独立路径，每个 workspace 同时只能有一个运行时所有者](/images/reme/runtime-model.svg)
+
+一个 workspace 只保留一个运行时所有者：由 Python 宿主管理应用生命周期，或者通过 `reme start` 启动一个共享服务。运行时负责后台索引和定时整合；宿主仍需负责会话 hook、稳定的 session ID，以及何时召回或记录记忆。
