@@ -1,0 +1,76 @@
+---
+title: "管理资源"
+description: "在运行时添加、移除 MCP 服务与技能"
+---
+
+工作区的资源并非在创建时就固定不变。MCP 服务与技能都可以在工作区运行期间添加或移除，且每次变更都会持久化，重启后依然生效。生命周期方法则负责把工作区从开通带到释放。
+
+## 管理 MCP 服务
+
+`add_mcp` 注册一个新的 MCP 服务，`remove_mcp` 按名称注销。变更写入工作区目录下的 `.mcp` 文件，重启后的工作区会自动重连相同的服务，无需重新传入种子：
+
+```python
+from agentscope.mcp import MCPClient, HttpMCPConfig
+
+# 注册新的 MCP 服务；名称已存在时抛出 ValueError
+await workspace.add_mcp(
+    MCPClient(
+        name="amap",
+        is_stateful=False,
+        mcp_config=HttpMCPConfig(url="https://mcp.amap.com/mcp?key=..."),
+    ),
+)
+
+# 按名称注销；名称不存在时记录警告并静默返回
+await workspace.remove_mcp("amap")
+
+# 枚举当前已注册的客户端
+mcps = await workspace.list_mcps()
+```
+
+<Note>
+持久化遵循工作区自身的模型：未挂载主机 `workdir` 的临时 `DockerWorkspace` 只在内存中保存 MCP 列表，容器销毁后即丢失。
+</Note>
+
+## 管理技能
+
+`add_skill` 把本地的技能目录（必须包含 `SKILL.md`）复制到工作区的 `skills/` 目录下，内部通过 tar 归档传输，因此对本地目录和远程沙箱的行为一致。`remove_skill` 按技能对智能体暴露的名称（`SKILL.md` frontmatter 中的 `name` 字段）删除：
+
+```python
+# 把本地技能目录复制进工作区；
+# 缺少 SKILL.md 或目录已存在时抛出 ValueError
+await workspace.add_skill("./skills/web-search")
+
+# 按 frontmatter 中的名称删除；找不到时抛出 KeyError
+await workspace.remove_skill("web-search")
+
+# 枚举可用技能（从各 SKILL.md 解析）
+skills = await workspace.list_skills()
+```
+
+## 管理生命周期
+
+三个方法贯穿工作区的一生，`async with` 协议则把 `initialize` / `close` 包装为作用域用法：
+
+| 方法 | 效果 |
+|------|------|
+| `initialize()` | 开通后端（启动容器 / 沙箱 / Pod）、连接 MCP 服务、播种技能 |
+| `reset()` | 把工作区恢复为空状态：关闭并移除全部 MCP、删除全部技能、清空各会话状态 |
+| `close()` | 释放全部资源与连接 |
+
+```python
+async with LocalWorkspace(workdir="./ws") as workspace:
+    ...  # 进入时 initialize()，退出时 close()
+```
+
+<Warning>
+`reset()` 清空工作区，而非恢复初始状态：构造时传入的 `default_mcps` 与 `skill_paths` 种子**不会**被重新应用。
+</Warning>
+
+## 在服务中分配工作区
+
+在多租户服务中，决定哪个请求使用哪个工作区（按用户、智能体或会话）、缓存活跃实例、淘汰空闲实例，是**工作区管理器**的职责，它是独立的服务侧组件，有专门的章节介绍：
+
+<Card title="工作区管理器" icon="server" href="/zh/versions/2.0.5/deploy/workspace-manager" cta="查看部署文档" arrow>
+  分配与隔离策略、TTL 淘汰，以及与智能体服务的集成。
+</Card>

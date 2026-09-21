@@ -1,0 +1,111 @@
+---
+title: "Quick Start"
+description: "Install ReMe and complete a verifiable write, index, search, and read loop."
+---
+
+This page uses ReMe's model-free capabilities to complete a verifiable write → index → search → read loop.
+
+## 1. Install
+
+ReMe requires Python 3.11 or newer:
+
+```bash
+pip install "reme-ai[core]"
+```
+
+For source development:
+
+```bash
+git clone https://github.com/agentscope-ai/ReMe.git
+cd ReMe
+pip install -e ".[core]"
+```
+
+## 2. Start the Service
+
+In one terminal, run:
+
+```bash
+reme start
+```
+
+The default workspace is `.reme/` under the launch directory, and the service listens on `127.0.0.1:2333`. In another terminal, check it:
+
+```bash
+reme version
+reme health_check
+reme help
+```
+
+Use another port when necessary:
+
+```bash
+reme start service.port=8181
+```
+
+When the package includes the web build, open [http://127.0.0.1:2333/](http://127.0.0.1:2333/) for **ReMe Studio**. It can browse, edit, and search the workspace, chat with the read-only workspace agent, and inspect the digest wikilink graph. Set `service.web_enabled=false` to disable it, or use `service.web_static_dir` / `REME_WEB_STATIC_DIR` for a custom build. The Job API still works when no web build is found.
+
+## 3. Write a Memory
+
+Use `reme write` to create a Markdown memory in the durable `digest/` area:
+
+```bash
+reme write \
+  path=digest/wiki/quick-start-demo \
+  name="Quick Start Demo" \
+  description="My first ReMe memory" \
+  content="# Quick Start Demo
+
+ReMe stores agent memory as user-readable Markdown."
+```
+
+ReMe adds the `.md` suffix and writes frontmatter plus content to `.reme/digest/wiki/quick-start-demo.md`.
+
+## 4. Search and Read
+
+The background index watches Markdown under `daily/` and `digest/`, so it normally discovers the file automatically. If it does not appear immediately, wait briefly or run `reme reindex` once. The full rebuild also scans `resource/` and JSONL.
+
+```bash
+reme search query="agent memory Markdown" limit=5
+reme read path=digest/wiki/quick-start-demo.md
+```
+
+Search also accepts an inclusive date range:
+
+```bash
+reme search query="agent memory Markdown" start_date=2026-08-01 end_date=2026-08-12 limit=5
+```
+
+Open the file in the workspace too. Matching CLI output and disk content confirm that the minimum loop works.
+
+After completing the loop, the workspace contains these top-level areas:
+
+```text
+.reme/
+├── metadata/    derived indexes, graph, and runtime state
+├── session/     source conversations
+├── mem_session/ generated agent-wrapper sessions and configuration
+├── resource/    source resources
+├── daily/       daily refinement
+└── digest/      durable memory
+```
+
+## 5. Enable Memory Refinement When Needed
+
+Conversation refinement, resource interpretation, and consolidation require an LLM. Semantic search also requires embeddings. Add a `.env` in the launch directory when you need them:
+
+```bash
+LLM_API_KEY=sk-xxx
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+Model names and embedding-store activation are configuration choices. The authoritative defaults are in `reme/config/default.yaml`. Never commit secrets from `.env`.
+
+## Next
+
+- Compare the available [integration paths](/en/reme/latest/integration/overview), then use the [Python SDK](/en/reme/latest/integration/python-sdk) or follow an [agent integration guide](/en/reme/latest/integration/plugins).
+- Find workspace, configuration, and interface details in the [ReMe reference](/en/reme/latest/reference).
+- Review the [ReMe FAQ](/en/reme/latest/faq) for connection or indexing problems.
