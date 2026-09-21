@@ -370,6 +370,29 @@ toolkit = Toolkit(tools=[FunctionTool(get_weather)])
 | `is_concurrency_safe` | `bool` | Whether parallel calls are safe (default `True`) |
 | `is_read_only` | `bool` | Whether the function has side effects (default `False`) |
 | `is_state_injected` | `bool` | Whether the agent state is injected as `_agent_state` (default `False`) |
+| `preset_kwargs` | `dict[str, Any] \| None` | Application-managed keyword arguments. Preset keys are hidden from the model-visible schema, applied after model arguments, and callable values are evaluated on every invocation (default `None`) |
+
+### Dynamic and protected arguments
+
+Use `preset_kwargs` for values that should be supplied by the application rather than chosen by the model. A preset key is removed from the model-visible schema and the preset value takes precedence over any value supplied by the model. This is useful for runtime context or permission-sensitive values.
+
+Preset values may be zero-argument callables. They are evaluated on every invocation, so the tool can use the latest application state:
+
+```python
+from agentscope.tool import FunctionTool
+
+current_project = "project-a"
+
+
+def search_project(query: str, project_name: str) -> str:
+    return f"{project_name}: {query}"
+
+
+search_tool = FunctionTool(
+    search_project,
+    preset_kwargs={"project_name": lambda: current_project},
+)
+```
 
 Pass a Pydantic model directly when the arguments need enums, numeric ranges or nested structures:
 
