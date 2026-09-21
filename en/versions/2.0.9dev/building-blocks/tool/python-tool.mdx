@@ -108,14 +108,14 @@ The `Bash` tool executes shell commands and returns stdout/stderr. It implements
 
 `generate_suggestions()` extracts the command prefix (first two tokens) and proposes a prefix rule. For example, `git commit -m "fix bug"` produces the suggestion `git commit:*`.
 
-The constructor accepts optional extra entries for the dangerous-path lists:
+The constructor accepts custom dangerous-path lists. A list you pass replaces the corresponding default list instead of extending it, and an empty list disables that check:
 
 ```python
 from agentscope.tool import Bash
 
 bash = Bash(
-    additional_dangerous_files=[".secrets"],
-    additional_dangerous_directories=[".credentials"],
+    dangerous_files=[".env", ".secrets"],
+    dangerous_directories=[".ssh", ".credentials"],
 )
 ```
 

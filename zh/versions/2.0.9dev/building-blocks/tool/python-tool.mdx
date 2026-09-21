@@ -108,14 +108,14 @@ grep = Grep(cwd="./project")
 
 `generate_suggestions()` 抽取命令前缀（前两个 token）并给出前缀规则。例如 `git commit -m "fix bug"` 生成建议 `git commit:*`。
 
-构造函数支持向危险路径列表追加自定义条目：
+构造函数支持传入自定义的危险路径列表。传入的列表会替换对应的默认列表，而不是在默认列表上追加；传入空列表则关闭该项检查：
 
 ```python
 from agentscope.tool import Bash
 
 bash = Bash(
-    additional_dangerous_files=[".secrets"],
-    additional_dangerous_directories=[".credentials"],
+    dangerous_files=[".env", ".secrets"],
+    dangerous_directories=[".ssh", ".credentials"],
 )
 ```
 
