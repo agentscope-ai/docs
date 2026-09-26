@@ -161,6 +161,24 @@ Leader 会话自动获得下列工具。Worker 只能看到 `TeamSay`。
 
 这意味着 worker 在同一服务中*并发*运行 —— 它们不是嵌套在 leader 之下的协程。Leader 通过读取 worker 的会话事件流，或让 worker `TeamSay` 回报，来观察其进展。
 
+### 团队消息通知
+
+`TeamSay` 将消息成功投递到接收方收件箱后，会在接收方的[会话事件流](/zh/versions/2.0.9dev/deploy/agent-service)发布名为 `team_turn` 的 `CustomEvent`。在线订阅者可以立即收到该事件，重连后也可以从会话回放中读取，无需等待接收方产生下一条回复。广播会分别向每个接收方的事件流发布一次，发送方的事件流不会收到该通知。
+
+事件的 `value` 包含：
+
+| 字段 | 说明 |
+|------|------|
+| `team_id` | 投递消息的团队 ID。 |
+| `sender_session_id`、`sender_agent_id`、`sender_name` | 发送方身份。 |
+| `recipients` | 仅包含当前接收方 `session_id` 和 `agent_id` 的单项列表。 |
+| `content` | 通过 `TeamSay` 发送的文本。 |
+| `hint_block_id` | 已投递 `HintBlock` 的 ID；广播的所有接收方共用此 ID，可用于去重。 |
+| `reply_id` | `null`，因为投递时接收方尚未开始回复。 |
+| `created_at` | UTC ISO 8601 投递时间，与事件顶层的 `created_at` 相同。 |
+
+`team_turn` 表示消息已投递。接收方在下一次推理前由 `InboxMiddleware` 取出消息时，仍会收到 `HintBlockEvent`。即使事件发布失败，收件箱投递也保持成功，因此客户端不应假定每条已投递消息都必有对应通知。
+
 ## 延伸阅读
 
 <CardGroup cols={2}>

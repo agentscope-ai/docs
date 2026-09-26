@@ -164,6 +164,24 @@ Team communication reuses the same inbox + wakeup primitives the service uses fo
 
 This means workers run *concurrently* on the same service — they are not nested coroutines under the leader. The leader observes a worker's progress by reading its session stream, or by having the worker `TeamSay` back to it.
 
+### Team message notifications
+
+After `TeamSay` delivers a message to a recipient's inbox, the recipient's [session stream](/en/versions/2.0.9dev/deploy/agent-service) publishes a `CustomEvent` named `team_turn`. The event is available to live subscribers and in session replay, before the recipient has to produce another reply. Broadcasts publish one event to each recipient's stream; the sender's stream does not receive one.
+
+The event's `value` contains:
+
+| Field | Description |
+|-------|-------------|
+| `team_id` | Team that carried the message. |
+| `sender_session_id`, `sender_agent_id`, `sender_name` | Sender identity. |
+| `recipients` | One entry with this recipient's `session_id` and `agent_id`. |
+| `content` | The text sent through `TeamSay`. |
+| `hint_block_id` | ID of the delivered `HintBlock`; shared by all recipients of a broadcast and useful for deduplication. |
+| `reply_id` | `null`, because the recipient has not started a reply at delivery time. |
+| `created_at` | UTC ISO 8601 delivery timestamp, also used as the event's top-level `created_at`. |
+
+`team_turn` is a delivery notification. The recipient still receives a `HintBlockEvent` when `InboxMiddleware` drains the message for its next reasoning step. If event publication fails, the inbox delivery remains successful, so consumers should not rely on receiving a notification for every delivered message.
+
 ## See also
 
 <CardGroup cols={2}>
