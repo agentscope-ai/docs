@@ -370,6 +370,29 @@ toolkit = Toolkit(tools=[FunctionTool(get_weather)])
 | `is_concurrency_safe` | `bool` | 是否可并发调用（默认 `True`） |
 | `is_read_only` | `bool` | 是否无副作用（默认 `False`） |
 | `is_state_injected` | `bool` | 是否通过 `_agent_state` 注入智能体状态数据（默认 `False`） |
+| `preset_kwargs` | `dict[str, Any] \| None` | 由应用管理的关键字参数。预设参数会从模型可见的 schema 中移除，并在模型参数之后应用；如果值是无参数可调用对象，则每次调用工具时重新计算（默认 `None`） |
+
+### 动态且受保护的参数
+
+当某个值应由应用提供、而不是由模型决定时，可以使用 `preset_kwargs`。预设参数名会从模型可见的 schema 中移除；即使模型传入了同名参数，应用预设的值也会覆盖它。这适合传入运行时上下文或权限敏感的参数。
+
+预设值可以是无参数可调用对象。它会在每次调用工具时重新计算，因此可以读取最新的应用状态：
+
+```python
+from agentscope.tool import FunctionTool
+
+current_project = "project-a"
+
+
+def search_project(query: str, project_name: str) -> str:
+    return f"{project_name}: {query}"
+
+
+search_tool = FunctionTool(
+    search_project,
+    preset_kwargs={"project_name": lambda: current_project},
+)
+```
 
 需要枚举、数值范围或复杂结构时，可直接传入 Pydantic 模型：
 
