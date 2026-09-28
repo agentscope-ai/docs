@@ -1,0 +1,235 @@
+---
+title: "SOP 服务"
+description: "在智能体服务中保存标准作业流程，并让它在会话里自动推进"
+tag: "EXP"
+---
+
+当开发者希望在[智能体服务](/zh/versions/2.0.10dev/deploy/agent-service)中长期保存一份[标准作业流程](/zh/versions/2.0.10dev/building-blocks/sop)，并反复发起运行时，可以使用服务层的 SOP 能力。流程以数据的形式保存，每次运行都在普通会话中逐步推进，前端通过会话事件流即可实时观看。
+
+服务层的 SOP 提供以下能力：
+
+| 能力 | 说明 |
+|------|------|
+| 流程存储 | 流程以 `SOPData` 保存，可通过 HTTP 接口增删改查，前端可按 `GET /sop/schema` 渲染编辑表单 |
+| 后台运行 | 发起运行后请求立即返回，运行在后台推进，每一步都作为普通对话轮次交给对应会话 |
+| 人工验收 | 验证者可以是智能体，也可以是人；人工验收时运行挂起，直到有人提交结论 |
+| 工具授权续接 | 步骤中的工具授权与普通会话一样经 `POST /chat` 答复，答复后运行自动继续 |
+| 级联删除 | 删除运行会一并删除它创建的会话与工作区，删除流程会删除它的全部运行 |
+
+<Note>
+SOP 服务处于实验阶段，接口与存储结构可能在后续版本调整。自定义的存储后端需要实现 `StorageBase` 中的 SOP 相关方法，未实现时调用这些接口会抛出 `NotImplementedError`，不影响服务的其他功能。
+</Note>
+
+## 定义流程
+
+服务中的流程用 `SOPData` 描述。与 SDK 中直接持有智能体对象不同，这里的每一步通过智能体 ID 与会话键引用执行者和验证者。`SOPData` 的字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `str` | 流程名称 |
+| `description` | `str`，默认 `""` | 流程用途 |
+| `steps` | `list[SOPStepDataV1]` | 按顺序排列的步骤，至少一个 |
+| `workspace_grain` | `"run"` \| `"per_session_key"`，默认 `"run"` | 一次运行分配几个工作区 |
+| `session_settings` | `dict[str, SessionSettings]` | 每个会话键对应会话的开启配置 |
+
+每个步骤（`SOPStepDataV1`）的字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `subject` | `str` | 步骤的简短名称 |
+| `description` | `str` | 这一步必须达成的结果 |
+| `executor` | `SOPAgentRef` | 执行者，由 `agent_id` 与 `session_key` 组成 |
+| `verifier` | `AgentVerifier` \| `HumanVerifier` \| `None` | 验证者，为 `None` 时执行者交付即通过 |
+| `max_attempts` | `int`，默认 `3` | 最多被驳回几次，超出后整个运行失败 |
+
+### 会话键
+
+`session_key` 决定一个智能体在哪个会话里工作。两处引用使用同一个会话键，就共用同一个会话，也就共享同一段上下文；使用不同的会话键，即便是同一个智能体也会分处两个会话，互不可见。例如让写作智能体在两步之间延续上下文，两步的执行者使用同一个会话键即可；让审稿智能体每次都从空白上下文开始验收，给它一个独立的会话键。
+
+一个会话键只能属于一个智能体。会话的模型与权限模式也按会话键配置在 `session_settings` 中，每个用到的会话键都必须配置，字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `chat_model_config` | `dict` | 会话使用的模型配置，包括 `type`、`credential_id`、`model` 与 `parameters` |
+| `fallback_chat_model_config` | `dict \| None` | 主模型失败时使用的备用模型配置 |
+| `permission_mode` | `str`，默认 `"default"` | 会话的权限模式 |
+
+### 验证者
+
+验证者有两种类型，通过 `type` 字段区分：
+
+| 类型 | 字段 | 行为 |
+|------|------|------|
+| `AgentVerifier`（`"agent"`） | `agent`：`SOPAgentRef`；`criteria`：步骤说明之外的额外验收标准 | 由智能体在自己的会话中验收，同一个审稿智能体可以在不同步骤使用不同的标准 |
+| `HumanVerifier`（`"human"`） | `question`：向人提出的问题 | 执行者交付后运行挂起，等待有人通过接口提交结论 |
+
+### 工作区
+
+一次运行的会话在创建时就分配好工作区，工作区专属于这次运行，不与其他运行共享。`workspace_grain` 的取值如下：
+
+| 取值 | 效果 |
+|------|------|
+| `run` | 整个运行共用一个工作区，步骤之间可以通过文件交接成果，交付中写明文件路径即可 |
+| `per_session_key` | 每个会话一个工作区，各步骤互相看不到对方的文件 |
+
+以下请求体创建一个两步流程：写作智能体产出初稿并由审稿智能体验收，定稿后交给人工确认：
+
+```bash 创建流程
+curl -X POST http://localhost:8000/sop/ \
+  -H "X-User-ID: alice" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "name": "write-article",
+      "steps": [
+        {
+          "subject": "撰写初稿",
+          "description": "写出一篇介绍向量数据库的文章初稿。",
+          "executor": {"agent_id": "agent-writer", "session_key": "writer"},
+          "verifier": {
+            "type": "agent",
+            "agent": {"agent_id": "agent-reviewer", "session_key": "reviewer"},
+            "criteria": "至少覆盖索引结构与相似度度量两部分。"
+          }
+        },
+        {
+          "subject": "定稿",
+          "description": "根据初稿整理出可发布的终稿。",
+          "executor": {"agent_id": "agent-writer", "session_key": "writer"},
+          "verifier": {"type": "human", "question": "终稿可以发布吗？"}
+        }
+      ],
+      "session_settings": {
+        "writer": {
+          "chat_model_config": {
+            "type": "dashscope",
+            "credential_id": "cred-xxx",
+            "model": "qwen3.8-max",
+            "parameters": {}
+          }
+        },
+        "reviewer": {
+          "chat_model_config": {
+            "type": "dashscope",
+            "credential_id": "cred-xxx",
+            "model": "qwen3.8-max",
+            "parameters": {}
+          }
+        }
+      }
+    }
+  }'
+```
+
+以下几类流程在创建或修改时就会被拒绝，返回 422，避免等到运行时才失败：
+
+| 情况 | 原因 |
+|------|------|
+| 某一步用到的会话键没有出现在 `session_settings` 中 | 运行无法为它创建会话 |
+| 同一个会话键被两个不同的智能体使用 | 一个会话只能属于一个智能体 |
+| 模型配置不合法 | 运行无法按它创建会话 |
+| `steps` 为空 | 运行永远不会结束 |
+
+## 接口列表
+
+SOP 相关接口都挂在 `/sop` 下，按资源分为流程与运行两组：
+
+| 方法与路径 | 说明 |
+|------------|------|
+| `GET /sop/schema` | 返回 `SOPData` 的 JSON Schema，供前端渲染编辑表单 |
+| `GET /sop/` | 列出当前用户的流程 |
+| `POST /sop/` | 创建流程，返回 `sop_id` |
+| `GET /sop/{sop_id}` | 读取一个流程 |
+| `PATCH /sop/{sop_id}` | 用新的 `data` 整体替换流程内容，已有运行不受影响 |
+| `DELETE /sop/{sop_id}` | 删除流程及其全部运行 |
+| `POST /sop/{sop_id}/runs` | 发起一次运行，请求体为 `{"inputs": [Msg, ...]}` |
+| `GET /sop/runs` | 列出运行，按创建时间倒序，可用 `sop_id` 与 `phase` 过滤 |
+| `GET /sop/runs/{sop_run_id}` | 读取一次运行及其当前状态 |
+| `DELETE /sop/runs/{sop_run_id}` | 删除一次运行及其创建的会话 |
+| `POST /sop/runs/{sop_run_id}/verdict` | 为等待人工验收的步骤提交结论 |
+
+<Tip>
+`GET /sop/runs?phase=awaiting` 可以列出所有正在等人处理的运行，包括等待人工验收和等待工具授权两种情况。
+</Tip>
+
+## 运行流程
+
+发起运行时，服务先把当前的流程内容复制一份保存在运行记录里，之后修改流程不会影响已发起的运行。随后为每个会话键各创建一个会话，会话名为「流程名 / 会话键」，然后立即返回运行记录，运行本身在后台推进：
+
+```bash 发起运行
+curl -X POST http://localhost:8000/sop/sop-xxx/runs \
+  -H "X-User-ID: alice" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputs": [
+      {"name": "alice", "role": "user", "content": [{"type": "text", "text": "面向初学者。"}]}
+    ]
+  }'
+```
+
+返回的 `SOPRunRecord` 中，`sessions` 字段记录了每个会话键对应的会话 ID，`state` 字段是运行状态，其 `phase` 表示运行整体所处的阶段。开发者可以订阅这些会话的事件流 `GET /sessions/{session_id}/stream` 实时观看，并轮询 `GET /sop/runs/{sop_run_id}` 查看进度。
+
+### 提交成果
+
+每一步都作为一次普通的对话轮次交给对应会话中的智能体。这一轮次会额外装配一个提交工具，智能体通过它把结果直接写入运行状态：
+
+| 工具 | 装配给 | 作用 |
+|------|--------|------|
+| `SubmitHandover` | 执行者 | 提交交给后续步骤的说明 |
+| `SubmitVerdict` | 验证者 | 提交是否通过，未通过时附上原因，原因会原样交给执行者重做 |
+
+智能体的回复结束时如果还没有调用提交工具，会被提醒调用；提醒三次仍未提交，这次回复以错误结束，并记为一次驳回。执行者没有交付、验证者没有结论，都会消耗这一步的 `max_attempts`。
+
+<Note>
+只有运行派发的轮次才装配提交工具。开发者或用户直接在某一步的会话里发消息，只是普通对话，既不会被要求提交，也不会推动运行。
+</Note>
+
+### 人工验收
+
+验证者为 `HumanVerifier` 时，执行者交付后这一步进入 `awaiting`，运行随即停下。任何时候通过以下接口提交结论，运行都会在后台继续：
+
+```bash 提交人工结论
+curl -X POST http://localhost:8000/sop/runs/run-xxx/verdict \
+  -H "X-User-ID: alice" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "step_index": 1,
+    "passed": false,
+    "message": "结尾缺少参考资料，补上后再提交。"
+  }'
+```
+
+请求体的字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `step_index` | `int` | 被验收步骤的序号，从 0 开始 |
+| `passed` | `bool` | 是否通过 |
+| `message` | `str`，默认 `""` | 未通过的原因，会原样交给执行者 |
+
+接口在结论记录后立即返回更新后的运行记录。运行或步骤不存在时返回 404；该步骤不由人验收，或当前并未等待验收时返回 409。
+
+### 处理工具授权
+
+步骤中的智能体请求工具授权时，这一步同样进入 `awaiting`。授权与普通会话完全一致：向该会话发送 `POST /chat`，请求体为 `UserConfirmResultEvent` 或 `ExternalExecutionResultEvent`。续接的这一轮仍然装配提交工具，结束后运行在后台自动继续，无需额外调用。续接的回复如果被中断，运行保持原地不动。
+
+## 删除流程与运行
+
+删除操作会级联清理运行创建的资源：
+
+| 接口 | 删除范围 |
+|------|----------|
+| `DELETE /sop/runs/{sop_run_id}` | 运行记录、它创建的所有会话（包括正在进行的轮次与会话的事件流），并关闭它的工作区 |
+| `DELETE /sop/{sop_id}` | 流程记录，以及它的全部运行，每次运行按上一行清理 |
+
+这些会话由运行创建，运行删除后留着它们没有意义，还可能被后台工具的完成事件再次唤醒，因此一并删除。
+
+## 当前限制
+
+SOP 服务目前还有以下限制：
+
+| 限制 | 说明 |
+|------|------|
+| 无法停止运行 | 还没有停止一次正在推进的运行的接口，只能删除它 |
+| 运行不会自动恢复 | 服务进程崩溃或重新部署时，正在推进的运行会停在 `running`，不会自动继续 |
+| 跨节点删除 | 多节点部署时，删除一个正在其他节点上推进的运行，需要等那个节点推进到停下为止 |

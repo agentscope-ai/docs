@@ -1,0 +1,254 @@
+---
+title: "标准作业流程"
+description: "把多步任务拆成逐个验收的里程碑，让智能体按固定顺序推进"
+tag: "EXP"
+---
+
+当一项任务必须按固定顺序经过几个里程碑、且每个里程碑都要验收后才能进入下一个时，开发者可以用 `agentscope.sop` 模块把它写成标准作业流程（Standard Operating Procedure，SOP）。流程只规定有哪些步骤、各步要证明什么，至于每一步怎么完成，交给执行它的智能体自己决定。
+
+该模块由以下几部分组成：
+
+| 组成 | 作用 |
+|------|------|
+| `SOP` | 流程定义：名称、描述与按顺序排列的步骤，不保存任何运行状态，可反复用于多次运行 |
+| `SOPStep` | 最常用的步骤形态：一个执行者干活，一个可选的验证者验收 |
+| `SOPStepBase` | 步骤基类，用于实现自定义的步骤逻辑 |
+| `SOPEngine` | 一次运行的驱动者：按顺序推进步骤、消耗重试次数、把人机交互的答复交给挂起的那一步 |
+| `SOPRunState` | 一次运行的全部状态，是纯数据，可以持久化后恢复 |
+
+与[目标流水线](/zh/versions/2.0.10dev/building-blocks/pipeline/goal)相比，SOP 由多个有序的里程碑组成，每个里程碑有各自的验证者与重试次数，并且运行状态可以落盘，隔多久都能接着跑。
+
+<Note>
+SOP 模块处于实验阶段，接口可能在后续版本调整。
+</Note>
+
+<Tip>
+判断一件事该不该写成 SOP，可以先问两个问题：不运行它，能否说清一共几步、每步由谁完成？如果不能，它不是 SOP。某一步完成时真的有人检查吗？如果没有，它不该单独成为一步。
+</Tip>
+
+## 定义流程
+
+以下示例定义一个两步流程：先写出大纲并由审稿智能体验收，再按大纲写正文：
+
+```python sop_quickstart.py
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+from agentscope.model import DashScopeChatModel
+from agentscope.sop import SOP, SOPEngine, SOPStep
+
+
+async def main() -> None:
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.getenv("DASHSCOPE_API_KEY")),
+        model="qwen3.8-max",
+    )
+
+    # 执行者：负责完成每一步的工作
+    writer = Agent(
+        name="Writer",
+        system_prompt="You're a technical writer.",
+        model=model,
+    )
+    # 验证者：只负责验收，不参与写作
+    reviewer = Agent(
+        name="Reviewer",
+        system_prompt="You're a strict reviewer.",
+        model=model,
+    )
+
+    sop = SOP(
+        name="write-article",
+        steps=[
+            SOPStep(
+                subject="列出大纲",
+                description="给出一份至少包含三个章节的文章大纲。",
+                executor=writer,
+                verifier=reviewer,
+                # 最多被驳回 3 次，之后整个运行失败
+                max_attempts=3,
+            ),
+            SOPStep(
+                subject="撰写正文",
+                description="严格按照上一步的大纲写出完整正文。",
+                executor=writer,
+                # 不设验证者：执行者交付即视为完成
+            ),
+        ],
+    )
+
+    engine = SOPEngine(sop)
+    # 运行的输入交给第一步
+    async for event in engine.reply_stream(
+        UserMsg(name="user", content="写一篇介绍向量数据库的文章。"),
+    ):
+        print(event)
+
+    print(engine.phase)  # 例如 SOPPhase.COMPLETED
+
+
+asyncio.run(main())
+```
+
+`SOPStep` 的构造参数如下：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `subject` | `str` | 步骤的简短名称 |
+| `description` | `str` | 这一步必须达成的结果，只写终点，不写路线 |
+| `executor` | `AgentLike` | 执行者 |
+| `verifier` | `AgentLike \| None`，默认 `None` | 验证者，为 `None` 时执行者交付即通过，适合只需要发生、无需验收的步骤 |
+| `max_attempts` | `int`，默认 `3` | 最多被驳回几次，超出后整个运行失败 |
+
+执行者与验证者只要满足 `AgentLike` 协议即可，`Agent` 天然满足。同一个智能体用在多个步骤里时，它的上下文在这些步骤间是连续的；各步使用不同的智能体，上下文就互相独立。
+
+<Warning>
+验收是验证者的职责，不要单独写成一步。某一步被驳回时，重做的是这一步自己：如果把「检查大纲」写成独立步骤，驳回后重跑的只是检查本身，得出的结论不会变，直到次数用尽。
+</Warning>
+
+## 推进步骤
+
+引擎按顺序逐步推进，已完成的步骤会被跳过。每一步的一次尝试分为执行与验收两半：
+
+<Steps>
+  <Step title="执行者工作">
+    执行者收到步骤说明与上一步的交接内容，完成后以结构化输出交出 `handover`，即交给后续步骤的说明。
+  </Step>
+  <Step title="验证者验收">
+    验证者看到步骤说明、这一步收到的输入以及执行者的交付，以结构化输出给出 `passed` 与 `message`。
+  </Step>
+  <Step title="通过则进入下一步">
+    通过后这一步标记为完成，它的交付成为下一步的输入。
+  </Step>
+  <Step title="驳回则重做">
+    驳回后交付被清空，`message` 连同当前是第几次尝试一起交给执行者重做。驳回次数达到 `max_attempts` 时，这一步与整个运行都标记为失败。
+  </Step>
+</Steps>
+
+步骤之间只传递交付内容，不传递文件或对话。第一步收到运行的输入，之后每一步收到的是上一步的交付，包在 `<handover from="上一步名称">` 标签里。因此执行者写交付时，要假设后续步骤没有看过它的任何工作过程。
+
+以下情况也会被记为一次驳回，同样消耗 `max_attempts`：
+
+| 情况 | 记录的原因 |
+|------|------------|
+| 执行者的回复结束了，但没有给出交付 | 没有结构化输出，什么也没交接 |
+| 验证者的回复结束了，但没有给出结论 | 验证者没有得出结论 |
+
+运行过程中，引擎在每次尝试前后各产出一个 `CustomEvent`，便于开发者展示进度：
+
+| 事件名 | `value` 内容 |
+|--------|--------------|
+| `SOP_STEP_STARTED` | `step`：步骤名称；`attempt`：第几次尝试 |
+| `SOP_STEP_ENDED` | `step`：步骤名称；`phase`：本次尝试结束时的阶段 |
+
+## 查看运行阶段
+
+步骤与整个运行共用同一组阶段 `SOPPhase`：
+
+| 阶段 | 含义 |
+|------|------|
+| `PENDING` | 尚未开始，或被驳回后等待重做 |
+| `RUNNING` | 正在进行 |
+| `AWAITING` | 已挂起，等待外部答复后才能继续 |
+| `COMPLETED` | 已通过验收 |
+| `FAILED` | 驳回次数用尽 |
+
+整个运行的阶段由各步骤的阶段推算得出，规则依次为：全部未开始时为 `PENDING`，任一步失败即为 `FAILED`，全部完成为 `COMPLETED`，任一步挂起为 `AWAITING`，其余情况为 `RUNNING`。通过 `engine.phase` 或 `engine.state.phase` 可以读取。
+
+## 挂起与恢复
+
+执行者或验证者停在工具授权或外部执行上时，这一步进入 `AWAITING`，`reply_stream` 随即结束，不占用协程，也不持有任何锁。开发者拿到答复后再调用一次 `reply_stream` 即可继续：
+
+```python 挂起后恢复
+# 某个智能体请求工具授权，事件流随即结束
+async for event in engine.reply_stream(UserMsg(name="user", content="...")):
+    ...
+
+# 把用户的答复交回去，挂起的那一步从断点接着跑
+async for event in engine.reply_stream(user_confirm_result_event):
+    ...
+```
+
+`reply_stream` 接受的输入如下：
+
+| 输入类型 | 含义 |
+|----------|------|
+| `Msg` / `list[Msg]` | 开始运行，作为第一步的输入 |
+| `UserConfirmResultEvent` | 用户对工具授权的答复，交给挂起的那一步 |
+| `ExternalExecutionResultEvent` | 外部执行的结果，交给挂起的那一步 |
+| `UserInterruptEvent` | 放弃挂起的调用；本次尝试作废但不计入驳回次数，这一步回到 `PENDING` |
+| `None` | 不带新输入，从当前状态继续 |
+
+### 持久化运行状态
+
+`SOPRunState` 是一个 Pydantic 模型，包含运行的输入、每一步的阶段、交付与历次结论。开发者可以把它存下来，在之后任意时间、甚至另一个进程里重建引擎继续运行：
+
+```python 保存与恢复运行状态
+from agentscope.sop import SOPEngine, SOPRunState
+
+# 挂起后保存运行状态
+saved = engine.state.model_dump_json()
+
+# 之后：用同一份流程定义和保存的状态重建引擎
+engine = SOPEngine(sop, SOPRunState.model_validate_json(saved))
+async for event in engine.reply_stream(user_confirm_result_event):
+    ...
+```
+
+<Warning>
+`SOPRunState` 只包含流程自己的状态。执行者与验证者作为 `Agent` 各自持有上下文，需要开发者按智能体自己的方式另行保存与恢复，再用它们构造 `SOP` 交给引擎。流程在保存之后若增删了步骤，步骤数与状态对不上，`SOPEngine` 会抛出 `ValueError`。
+</Warning>
+
+## 自定义步骤
+
+当一个步骤不是「一人执行、一人验收」的形态时，开发者可以继承 `SOPStepBase` 并实现 `reply_stream`。引擎从不查看步骤内部，只要求**一次调用就是一次尝试**，并且这次尝试要么挂起，要么在传入的状态上记下结论：
+
+```python 自定义步骤
+from agentscope.sop import SOPPhase, SOPStepBase, SOPStepRunState
+
+
+class RunTests(SOPStepBase):
+    """不经过模型，直接用测试结果判定的步骤。"""
+
+    async def reply_stream(self, inputs, state: SOPStepRunState):
+        state.phase = SOPPhase.RUNNING
+        passed, report = await run_test_suite()  # 开发者自己的逻辑
+        # 记下结论：通过则完成，未通过则回到 PENDING 等待重做
+        self.record(state, passed, message=report, verifier="pytest")
+        # reply_stream 必须是异步生成器，这里没有事件需要产出
+        return
+        yield
+```
+
+`SOPStepBase` 提供以下接口：
+
+| 接口 | 说明 |
+|------|------|
+| `__init__(subject, description, max_attempts=3)` | 步骤名称、目标与最多驳回次数 |
+| `reply_stream(inputs, state)` | 抽象方法，完成一次尝试；`state` 是这一步在运行中的记录 |
+| `record(state, passed, message="", verifier="")` | 记下一次结论；驳回时会清空交付并回到 `PENDING` |
+| `state_type` | 类属性，步骤需要额外保存字段时，继承 `SOPStepRunState` 并在这里指定，额外字段会随运行状态一起持久化 |
+
+## 在终端中调试
+
+`SOPEngine` 满足[流水线](/zh/versions/2.0.10dev/building-blocks/pipeline/overview)的 `PipelineProtocol`，可以像智能体一样直接交给[终端界面](/zh/versions/2.0.10dev/building-blocks/console)运行，工具授权与中断都由界面处理：
+
+```python 在终端中运行 SOP
+from agentscope.console import launch_console
+
+await launch_console(agent=SOPEngine(sop))
+```
+
+## 延伸阅读
+
+<CardGroup cols={2}>
+  <Card title="SOP 服务" icon="server" href="/zh/versions/2.0.10dev/deploy/sop" cta="了解更多">
+    在智能体服务中存储流程、发起运行，并由人工在线验收。
+  </Card>
+  <Card title="目标流水线" icon="bullseye" href="/zh/versions/2.0.10dev/building-blocks/pipeline/goal" cta="了解更多">
+    只有一个目标时，用执行者与验证者的循环逼近它。
+  </Card>
+</CardGroup>

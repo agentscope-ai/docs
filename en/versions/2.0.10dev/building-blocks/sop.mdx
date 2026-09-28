@@ -1,0 +1,254 @@
+---
+title: "Standard Operating Procedure"
+description: "Break a multi-step task into milestones that agents complete in a fixed order, each one checked before the next begins."
+tag: "EXP"
+---
+
+When a task has to pass through several milestones in a fixed order, and each milestone must be accepted before the next one starts, developers can write it as a standard operating procedure (SOP) with the `agentscope.sop` module. The procedure says which steps exist and what each must prove; how a step gets there is left to the agent doing it.
+
+The module is made of the following parts:
+
+| Part | Role |
+|------|------|
+| `SOP` | The definition: a name, a description, and the ordered steps. It holds no run state, so one definition serves any number of runs |
+| `SOPStep` | The usual step shape: an executor does the work, and an optional verifier judges it |
+| `SOPStepBase` | The step base class, for implementing custom step logic |
+| `SOPEngine` | Drives one run: walks the steps in order, spends the attempt budget, and routes human-in-the-loop answers to the step that parked |
+| `SOPRunState` | Everything about one run, as plain data that can be saved and restored |
+
+Compared with the [Goal Pipeline](/en/versions/2.0.10dev/building-blocks/pipeline/goal), an SOP is a sequence of ordered milestones, each with its own verifier and attempt budget, and its run state can be written to disk and picked up again any time later.
+
+<Note>
+The SOP module is experimental, and its interfaces may change in later releases.
+</Note>
+
+<Tip>
+Two questions tell whether something should be an SOP. Without running it, can you say how many steps there are and who does each one? If not, it is not an SOP. Does someone actually check the step when it finishes? If not, it should not be a step of its own.
+</Tip>
+
+## Define a Procedure
+
+The following example defines a two-step procedure: write an outline that a reviewer agent accepts, then write the article from that outline:
+
+```python sop_quickstart.py
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+from agentscope.model import DashScopeChatModel
+from agentscope.sop import SOP, SOPEngine, SOPStep
+
+
+async def main() -> None:
+    model = DashScopeChatModel(
+        credential=DashScopeCredential(api_key=os.getenv("DASHSCOPE_API_KEY")),
+        model="qwen3.8-max",
+    )
+
+    # Executor: does the work of each step
+    writer = Agent(
+        name="Writer",
+        system_prompt="You're a technical writer.",
+        model=model,
+    )
+    # Verifier: only judges, never writes
+    reviewer = Agent(
+        name="Reviewer",
+        system_prompt="You're a strict reviewer.",
+        model=model,
+    )
+
+    sop = SOP(
+        name="write-article",
+        steps=[
+            SOPStep(
+                subject="Draft the outline",
+                description="Produce an article outline with at least three sections.",
+                executor=writer,
+                verifier=reviewer,
+                # Refused at most 3 times, after which the whole run fails
+                max_attempts=3,
+            ),
+            SOPStep(
+                subject="Write the article",
+                description="Write the full article, following the outline exactly.",
+                executor=writer,
+                # No verifier: the step passes as soon as the executor hands over
+            ),
+        ],
+    )
+
+    engine = SOPEngine(sop)
+    # The run's input goes to the first step
+    async for event in engine.reply_stream(
+        UserMsg(name="user", content="Write an article introducing vector databases."),
+    ):
+        print(event)
+
+    print(engine.phase)  # e.g. SOPPhase.COMPLETED
+
+
+asyncio.run(main())
+```
+
+`SOPStep` takes the following arguments:
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `subject` | `str` | A short name for the step |
+| `description` | `str` | What the step must achieve: the destination, not the route |
+| `executor` | `AgentLike` | Does the work |
+| `verifier` | `AgentLike \| None`, defaults to `None` | Judges the work. With `None`, the step passes as soon as the executor hands over, which suits a step that only has to happen |
+| `max_attempts` | `int`, defaults to `3` | How many refusals before the whole run fails |
+
+Executors and verifiers only need to satisfy the `AgentLike` protocol, which `Agent` does out of the box. Reusing one agent across several steps carries its context through those steps; giving each step its own agent keeps their contexts apart.
+
+<Warning>
+Judging belongs to the verifier; do not write it as a step of its own. A refusal sends back the step that was refused. If "check the outline" were its own step, a refusal would only rerun the check, which reaches the same conclusion every time until the attempts run out.
+</Warning>
+
+## Advance Steps
+
+The engine advances through the steps in order and skips those already completed. Each attempt at a step has two halves, work and judgement:
+
+<Steps>
+  <Step title="The executor works">
+    The executor receives the step's description and what the previous step handed over. When done, it returns a `handover` through structured output: the account the following steps will read.
+  </Step>
+  <Step title="The verifier judges">
+    The verifier sees the step's description, the input the step received, and the executor's handover, and answers with `passed` and `message` through structured output.
+  </Step>
+  <Step title="Pass and move on">
+    A passed step is marked completed, and its handover becomes the next step's input.
+  </Step>
+  <Step title="Refuse and retry">
+    A refusal clears the handover and sends `message` back to the executor, together with which attempt this is. Once refusals reach `max_attempts`, the step and the whole run are marked failed.
+  </Step>
+</Steps>
+
+Only handovers cross between steps; files and conversations do not. The first step receives the run's input, and every later step receives the previous step's handover wrapped in a `<handover from="previous step name">` tag. An executor should therefore write its handover for someone who has seen none of its work.
+
+The following cases also count as a refusal and spend `max_attempts` in the same way:
+
+| Case | Recorded reason |
+|------|-----------------|
+| The executor's reply ends without a handover | No structured output, so nothing was handed on |
+| The verifier's reply ends without a verdict | The verifier reached no verdict |
+
+While running, the engine emits a `CustomEvent` before and after each attempt, which developers can use to show progress:
+
+| Event name | `value` |
+|------------|---------|
+| `SOP_STEP_STARTED` | `step`: the step name; `attempt`: which attempt this is |
+| `SOP_STEP_ENDED` | `step`: the step name; `phase`: the phase the attempt ended in |
+
+## Check the Run Phase
+
+Steps and the run as a whole share one set of phases, `SOPPhase`:
+
+| Phase | Meaning |
+|-------|---------|
+| `PENDING` | Not started, or refused and waiting to be retried |
+| `RUNNING` | In progress |
+| `AWAITING` | Parked until an outside answer arrives |
+| `COMPLETED` | Accepted |
+| `FAILED` | Refused until the attempts ran out |
+
+The run's phase is derived from its steps, by these rules in order: `PENDING` when no step has started, `FAILED` when any step failed, `COMPLETED` when every step completed, `AWAITING` when any step is parked, and `RUNNING` otherwise. Read it from `engine.phase` or `engine.state.phase`.
+
+## Park and Resume
+
+When an executor or verifier stops on a tool confirmation or an external execution, the step enters `AWAITING` and `reply_stream` ends, holding no coroutine and no lock. Once developers have the answer, calling `reply_stream` again carries on:
+
+```python Resume after parking
+# An agent asks for tool confirmation, and the event stream ends
+async for event in engine.reply_stream(UserMsg(name="user", content="...")):
+    ...
+
+# Pass the user's answer back; the parked step continues from where it stopped
+async for event in engine.reply_stream(user_confirm_result_event):
+    ...
+```
+
+`reply_stream` accepts the following inputs:
+
+| Input type | Meaning |
+|------------|---------|
+| `Msg` / `list[Msg]` | Start the run, as the first step's input |
+| `UserConfirmResultEvent` | The user's answer to a tool confirmation, passed to the parked step |
+| `ExternalExecutionResultEvent` | The result of an external execution, passed to the parked step |
+| `UserInterruptEvent` | Abandon the parked call. The attempt is dropped without counting as a refusal, and the step goes back to `PENDING` |
+| `None` | Continue from the current state with no new input |
+
+### Persist the Run State
+
+`SOPRunState` is a Pydantic model holding the run's inputs and each step's phase, handover, and verdicts. Developers can store it and rebuild the engine at any later time, even in another process, to carry on:
+
+```python Save and restore the run state
+from agentscope.sop import SOPEngine, SOPRunState
+
+# Save the run state once it parks
+saved = engine.state.model_dump_json()
+
+# Later: rebuild the engine from the same definition and the saved state
+engine = SOPEngine(sop, SOPRunState.model_validate_json(saved))
+async for event in engine.reply_stream(user_confirm_result_event):
+    ...
+```
+
+<Warning>
+`SOPRunState` covers only the procedure's own state. Executors and verifiers are `Agent`s with their own context, which developers save and restore the way they would for any agent, before building the `SOP` from them. If steps were added or removed after the state was saved, the step count no longer matches and `SOPEngine` raises `ValueError`.
+</Warning>
+
+## Customize Steps
+
+When a step does not fit the "one works, one judges" shape, developers can subclass `SOPStepBase` and implement `reply_stream`. The engine never looks inside a step; it only requires that **one call is one attempt**, and that the attempt either parks or records a verdict on the state it was handed:
+
+```python Custom step
+from agentscope.sop import SOPPhase, SOPStepBase, SOPStepRunState
+
+
+class RunTests(SOPStepBase):
+    """A step judged by test results rather than by a model."""
+
+    async def reply_stream(self, inputs, state: SOPStepRunState):
+        state.phase = SOPPhase.RUNNING
+        passed, report = await run_test_suite()  # the developer's own logic
+        # Record the verdict: completed on a pass, back to PENDING otherwise
+        self.record(state, passed, message=report, verifier="pytest")
+        # reply_stream must be an async generator; there is nothing to yield
+        return
+        yield
+```
+
+`SOPStepBase` provides the following interfaces:
+
+| Interface | Description |
+|-----------|-------------|
+| `__init__(subject, description, max_attempts=3)` | The step's name, goal, and refusal budget |
+| `reply_stream(inputs, state)` | Abstract. Makes one attempt; `state` is this step's record in the run |
+| `record(state, passed, message="", verifier="")` | Records a verdict. A refusal clears the handover and returns the step to `PENDING` |
+| `state_type` | Class attribute. When a step needs to keep extra fields, subclass `SOPStepRunState` and name it here; the extra fields are persisted with the run state |
+
+## Debug in the Terminal
+
+`SOPEngine` satisfies the [pipeline](/en/versions/2.0.10dev/building-blocks/pipeline/overview) `PipelineProtocol`, so it can be handed to the [terminal UI](/en/versions/2.0.10dev/building-blocks/console) just like an agent, with tool confirmations and interruptions handled by the UI:
+
+```python Run an SOP in the terminal
+from agentscope.console import launch_console
+
+await launch_console(agent=SOPEngine(sop))
+```
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="SOP Service" icon="server" href="/en/versions/2.0.10dev/deploy/sop" cta="Read more">
+    Store procedures in the agent service, start runs, and have people sign off on steps online.
+  </Card>
+  <Card title="Goal Pipeline" icon="bullseye" href="/en/versions/2.0.10dev/building-blocks/pipeline/goal" cta="Read more">
+    When there is a single goal, close in on it with an executor and verifier loop.
+  </Card>
+</CardGroup>

@@ -1,0 +1,332 @@
+---
+title: "Console"
+description: "Quickly test and verify agent behavior in the terminal"
+---
+
+When you need to quickly try out or debug an agent, you can chat with it and inspect its full event stream directly in the terminal, without launching the web service or hand-dispatching the dozens of event types that `reply_stream` produces.
+
+AgentScope offers two terminal interfaces for this: `agentscope.console` prints the event stream line by line and needs nothing beyond the core install, while `agentscope.tui` builds a full-screen interface on [Textual](https://textual.textualize.io/) with Markdown rendering, keyboard-driven confirmations, and `AskUser` question forms.
+
+The entries of the two modules and when to use each are as follows:
+
+| Entry | Module | When to use |
+|-------|--------|-------------|
+| `launch_console` | `agentscope.console` | Interactive chat with a single agent: input loop, tool-call confirmation, and interruption handling built in, zero UI code |
+| `ConsoleRenderer` | `agentscope.console` | Embedded in your own code: renders the event stream to the terminal, while inputs and orchestration stay under your control |
+| `launch_tui` | `agentscope.tui` | Full-screen chat: streams Markdown, folds tool calls and reasoning, and handles confirmations and `AskUser` questions from the keyboard |
+| `launch_realtime_ui` | `agentscope.tui` | Full-screen view of a realtime voice session: transcripts of both sides, tool calls, and confirmation cards |
+| `ChatUI` / `MessagesUI` | `agentscope.tui` | Embedded in your own Textual app, which keeps control of execution and concurrency |
+
+## Launch an Interactive Chat
+
+`launch_console` takes a constructed agent and handles the entire terminal interaction:
+
+```python Chat with an agent in the terminal
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import Bash, Read, Toolkit, Write
+
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You're a helpful assistant named Friday.",
+        model=DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.environ["DASHSCOPE_API_KEY"],
+            ),
+            model="qwen3.7-max",
+        ),
+        toolkit=Toolkit(tools=[Bash(), Read(), Write()]),
+    )
+
+    # Enter the terminal chat; type exit/quit or press Ctrl+D to leave
+    await launch_console(agent)
+
+
+asyncio.run(main())
+```
+
+Each part of the interaction behaves as follows:
+
+| Interaction | Behavior |
+|-------------|----------|
+| Message input | Reads input at the `user>` prompt; type `exit`, `quit`, or press Ctrl+D to leave |
+| Streamed rendering | Reply text and thinking print live; tool calls and results print as whole blocks |
+| Tool confirmation | When a tool call requires confirmation, each one is asked in turn: `y` allows once, `a` also accepts the suggested permission rules (matching calls won't ask again), anything else denies |
+| Interruption | Ctrl+C during streaming interrupts the current reply; Ctrl+C at a confirmation prompt aborts the reply waiting for confirmation |
+
+`launch_console` accepts the following parameters:
+
+<ParamField path="agent" type="Agent | PipelineProtocol" required>
+  The agent to interact with, or any pipeline satisfying
+  [`PipelineProtocol`](/en/versions/2.0.10dev/building-blocks/pipeline/overview).
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  The sender name attached to the user's messages, also used as the
+  input prompt.
+</ParamField>
+
+<ParamField path="verbosity" type="str" default="default">
+  Output verbosity, one of `"quiet"`, `"default"`, or `"debug"`. See
+  [Control the Output Verbosity](#control-the-output-verbosity).
+</ParamField>
+
+<ParamField path="max_tool_result_lines" type="int | None" default="20">
+  Maximum number of printed lines per tool result; the excess collapses
+  into a hint line. `None` disables truncation.
+</ParamField>
+
+<Note>
+Neither `launch_console` nor `launch_tui` involves session management or persistence: the conversation lives in `agent.state` and ends with the process. For multi-user, multi-session, and persistent deployments, use the [agent service](/en/versions/2.0.10dev/deploy/agent-service).
+</Note>
+
+## Embed the Event Renderer
+
+When you own the run logic yourself (an agent pipeline, a test script), use `ConsoleRenderer` for printing only. The renderer is passive: how events are produced, and how inputs and confirmations are handled, are entirely up to the caller.
+
+```python Render the event stream in your own code
+from agentscope.console import ConsoleRenderer
+from agentscope.message import UserMsg
+
+renderer = ConsoleRenderer()
+
+# Hand every event from reply_stream to the renderer
+async for event in agent.reply_stream(UserMsg("user", "Hi!")):
+    renderer.render(event)
+
+# The renderer also accumulates the events back into a complete reply
+final_msg = renderer.last_msg
+```
+
+The renderer attributes events by reply id, so multiple agents speaking in sequence can share one instance:
+
+```python Render a multi-agent pipeline
+renderer = ConsoleRenderer()
+
+msg = UserMsg("user", "Draft a product intro")
+for agent in [writer, reviewer]:
+    async for event in agent.reply_stream(msg):
+        renderer.render(event)
+    # The previous agent's full reply feeds the next one
+    msg = renderer.last_msg
+```
+
+The renderer applies the following rules per content type:
+
+| Content | Rendering |
+|---------|-----------|
+| Reply text, thinking | Streamed live; thinking is dimmed |
+| Tool calls, tool results | Printed as whole blocks on their end events, so concurrently-streamed results never interleave; long results truncate by line count |
+| Hint blocks | Shown in a bordered panel, e.g. the injected runtime state (time, task reminders) |
+| Binary data | Images, audio, etc. print as placeholders (e.g. `[data: image/png, ~34KB]`) instead of raw base64 |
+| Token usage | One line of input/output token counts after each model call |
+
+<Tip>
+For events that need a human in the loop (tool confirmation, external execution), the renderer only displays the notice; collecting the results and resuming the reply is the caller's job. See [Human-in-the-Loop](/en/versions/2.0.10dev/building-blocks/agent/human-in-the-loop).
+</Tip>
+
+## Control the Output Verbosity
+
+Both `launch_console` and `ConsoleRenderer` take a `verbosity` parameter with three increasing levels:
+
+| Level | What's shown |
+|-------|--------------|
+| `quiet` | Only the reply text and errors |
+| `default` | Plus thinking, tool calls/results, hint blocks, token usage, and confirmation notices |
+| `debug` | Plus lifecycle events (model call start, reply finish reason, etc.) and tool result metadata |
+
+<Note>
+Unknown event types are skipped silently (`debug` prints one line with the type name), so new event types in the protocol never break existing rendering.
+</Note>
+
+## Launch the Full-Screen Interface
+
+For a richer interactive experience, `launch_tui` opens a full-screen chat interface. It depends on Textual, so install the `tui` extra first (`agentscope[full]` already includes it):
+
+```bash Install the full-screen interface dependencies
+pip install "agentscope[tui]"
+```
+
+`launch_tui` is used the same way as `launch_console`: pass it a constructed agent. The example below also equips `AskUser`, so when the agent asks a question the interface shows a keyboard-driven form:
+
+```python Chat with an agent in the full-screen interface
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import AskUser, Toolkit
+from agentscope.tui import launch_tui
+from agentscope.workspace import LocalWorkspace
+
+
+async def main() -> None:
+    async with LocalWorkspace(workdir="./workspace") as workspace:
+        agent = Agent(
+            name="Friday",
+            system_prompt="You are a helpful assistant named Friday.",
+            model=DashScopeChatModel(
+                credential=DashScopeCredential(
+                    api_key=os.environ["DASHSCOPE_API_KEY"],
+                ),
+                model="qwen3.8-max",
+            ),
+            toolkit=Toolkit(
+                # AskUser lets the agent ask the user multiple-choice
+                # questions; the rest are the workspace tools
+                tools=[AskUser(), *(await workspace.list_tools())],
+                skills_or_loaders=await workspace.list_skills(),
+            ),
+            offloader=workspace,
+        )
+
+        # Open the full-screen interface; type /exit and press Enter to quit
+        await launch_tui(agent)
+
+
+asyncio.run(main())
+```
+
+The interface is driven entirely from the keyboard. Each part of the interaction behaves as follows:
+
+| Interaction | Behavior |
+|-------------|----------|
+| Message input | Enter sends, Shift+Enter inserts a newline; type `/exit` and press Enter to quit |
+| Streaming | Replies render as Markdown in real time; tool calls and reasoning are folded, and expand on click or on Enter when focused |
+| Tool confirmation | The pending request replaces the input box; use ↑/↓ to choose between "Allow once", "Always allow with the suggested rules", "Deny", and "Interrupt the reply", then press Enter |
+| `AskUser` questions | Shown as a form with single-select, multi-select, previews, and a free-text "Other" answer; the answers go back to the agent as an external execution result |
+| Interruption | Press Ctrl+C while a reply is running to interrupt it |
+
+<Tip>
+The input box stays usable while a reply is running. New messages are queued and `reply_stream` is called for them one at a time, so concurrent replies never modify the same agent's context at once.
+</Tip>
+
+`launch_tui` accepts the following parameters:
+
+<ParamField path="target" type="Agent | PipelineProtocol" required>
+  The agent to interact with, or any pipeline that satisfies
+  [`PipelineProtocol`](/en/versions/2.0.10dev/building-blocks/pipeline/overview).
+</ParamField>
+
+<ParamField path="messages" type="Sequence[Msg]" default="()">
+  History messages to display before the interaction starts.
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  The sender name of messages sent from the input box.
+</ParamField>
+
+## Show Realtime Voice Sessions
+
+The input of a [realtime voice agent](/en/versions/2.0.10dev/building-blocks/realtime/speech-to-speech) is a continuous audio stream, so it has its own entry, `launch_realtime_ui`. The interface shows the transcripts of both sides, tool calls, and confirmation cards. Confirmations, interruptions, and typed input go back to the agent through `agent.send()`, while the audio itself is played by the transport and never enters the interface. Install both the realtime and the full-screen interface dependencies before running it:
+
+```bash Install the realtime and full-screen interface dependencies
+pip install "agentscope[realtime,tui]"
+```
+
+The interface only borrows the agent and the transport. Start both yourself before launching it; it does not close them when it exits:
+
+```python Run a voice session in the full-screen interface
+from agentscope.tui import launch_realtime_ui
+
+# agent is a RealtimeAgent, and transport is a constructed audio transport
+# (such as LocalAudioTransport)
+async with agent, transport:
+    # The interface exits when the transport ends, or press Ctrl+Q to quit
+    await launch_realtime_ui(agent, transport)
+```
+
+`launch_realtime_ui` differs from `launch_tui` in the following ways:
+
+| Aspect | Behavior of `launch_realtime_ui` |
+|--------|----------------------------------|
+| Driving | Calls `agent.reply_stream(transport)` once on mount for the whole session, instead of once per message |
+| Audio | Drops audio data blocks and shows only the transcripts |
+| Typed input | The input box is enabled only when the model accepts text input mid-session; otherwise the user can only speak |
+| Interruption | Speaking interrupts the agent; interruptions started from the interface reach it as a `UserInterruptEvent` through `agent.send()` |
+
+`launch_realtime_ui` accepts the following parameters:
+
+<ParamField path="agent" type="RealtimeAgent" required>
+  The connected realtime voice agent.
+</ParamField>
+
+<ParamField path="transport" type="TransportBase" required>
+  The started audio transport, which captures and plays audio.
+</ParamField>
+
+<ParamField path="messages" type="Sequence[Msg]" default="()">
+  History messages to display before the interaction starts.
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  The sender name of messages sent from the input box.
+</ParamField>
+
+## Embed Interface Components
+
+If you already have a Textual app, you can use the two components of `agentscope.tui` directly. The components only display `Msg` objects; they neither consume events nor modify the conversation history. They split the work as follows:
+
+| Component | Content |
+|-----------|---------|
+| `MessagesUI` | A read-only message list that renders Markdown, tool calls, and attachments |
+| `ChatUI` | Adds an input box, confirmations, and `AskUser` forms on top of `MessagesUI`, and emits user actions as Textual messages |
+
+The example below connects `ChatUI` to your own runtime backend `runtime`, which applies events to messages (`Msg.append_event()`) and pushes the messages that changed:
+
+```python Embed ChatUI in a Textual app
+from textual import on
+from textual.app import App, ComposeResult
+
+from agentscope.tui import ChatUI
+
+
+class RuntimeApp(App):
+    def compose(self) -> ComposeResult:
+        # history is the list of messages to display initially
+        yield ChatUI(messages=history, id="chat")
+
+    def on_mount(self) -> None:
+        self.run_worker(self.consume_messages())
+
+    async def consume_messages(self) -> None:
+        chat = self.query_one("#chat", ChatUI)
+        # Push only the messages that changed; the interface updates them
+        # in place by message ID
+        async for message in runtime.changed_messages:
+            await chat.update_message(message)
+
+    @on(ChatUI.Submitted)
+    async def submit(self, event: ChatUI.Submitted) -> None:
+        # A new message sent by the user
+        await runtime.submit(event.msg)
+
+    @on(ChatUI.Confirmed)
+    async def confirm(self, event: ChatUI.Confirmed) -> None:
+        # The tool confirmation result; event.value is a UserConfirmResultEvent
+        await runtime.submit(event.value)
+
+    @on(ChatUI.ExternalExecutionSubmitted)
+    async def external_result(
+        self,
+        event: ChatUI.ExternalExecutionSubmitted,
+    ) -> None:
+        # The result of an external tool such as AskUser
+        await runtime.submit(event.value)
+
+    @on(ChatUI.InterruptRequested)
+    async def interrupt(self, event: ChatUI.InterruptRequested) -> None:
+        await runtime.interrupt(event.reply_id)
+```
+
+<Note>
+Mutating an existing `Msg` object in place does not refresh the interface. Call `set_messages()` to load or replace the whole history, and `update_message()` for streaming updates.
+</Note>

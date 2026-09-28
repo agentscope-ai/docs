@@ -1,0 +1,328 @@
+---
+title: "终端 UI"
+description: "在终端快速测试、验证智能体运行逻辑"
+---
+
+当开发者需要快速验证或调试一个智能体时，可以直接在终端中与它对话、查看完整的事件流，无需启动 Web 服务，也无需手动分发 `reply_stream` 产出的数十种事件。
+
+AgentScope 为此提供两种终端界面：`agentscope.console` 逐行打印事件流，只依赖核心安装；`agentscope.tui` 基于 [Textual](https://textual.textualize.io/) 提供全屏交互界面，支持 Markdown 渲染、键盘选择确认与 `AskUser` 问答表单。
+
+两个模块的接口与适用场景如下：
+
+| 接口 | 所属模块 | 适用场景 |
+|------|----------|----------|
+| `launch_console` | `agentscope.console` | 与单个智能体交互式对话：内置输入循环、工具调用确认与中断处理，零界面代码 |
+| `ConsoleRenderer` | `agentscope.console` | 嵌入开发者自己的代码：只负责把事件流渲染为终端输出，输入与编排逻辑由调用方掌控 |
+| `launch_tui` | `agentscope.tui` | 全屏对话界面：流式渲染 Markdown、折叠工具与思考过程、用键盘处理确认和 `AskUser` 提问 |
+| `launch_realtime_ui` | `agentscope.tui` | 实时语音会话的全屏界面：显示双方的转写文本、工具调用与确认卡片 |
+| `ChatUI` / `MessagesUI` | `agentscope.tui` | 嵌入开发者自己的 Textual 应用，执行与并发策略由应用掌控 |
+
+## 启动交互对话
+
+`launch_console` 接收一个构造完成的智能体，接管终端交互的全部环节：
+
+```python 与智能体在终端中对话
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import Bash, Read, Toolkit, Write
+
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You're a helpful assistant named Friday.",
+        model=DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.environ["DASHSCOPE_API_KEY"],
+            ),
+            model="qwen3.7-max",
+        ),
+        toolkit=Toolkit(tools=[Bash(), Read(), Write()]),
+    )
+
+    # 进入终端对话，输入 exit/quit 或按 Ctrl+D 退出
+    await launch_console(agent)
+
+
+asyncio.run(main())
+```
+
+运行后各交互环节的行为如下：
+
+| 环节 | 行为 |
+|------|------|
+| 消息输入 | 以 `user>` 提示符读取输入，输入 `exit`、`quit` 或按 Ctrl+D 退出 |
+| 流式渲染 | 回复文本与思考过程实时打印，工具调用与结果整块输出 |
+| 工具确认 | 工具调用需要确认时逐个询问：`y` 允许一次，`a` 同时接受建议的权限规则（后续匹配的调用不再询问），其余输入拒绝 |
+| 中断 | 流式输出过程中按 Ctrl+C 中断当前回复；在确认提示处按 Ctrl+C 终止等待确认的回复 |
+
+`launch_console` 支持以下参数：
+
+<ParamField path="agent" type="Agent | PipelineProtocol" required>
+  要交互的智能体，或任意满足
+  [`PipelineProtocol`](/zh/versions/2.0.9/building-blocks/pipeline/overview)
+  的流水线。
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  用户消息的发送者名称，同时用作输入提示符。
+</ParamField>
+
+<ParamField path="verbosity" type="str" default="default">
+  输出详细程度，取值为 `"quiet"`、`"default"` 或 `"debug"`，详见[控制输出详细程度](#控制输出详细程度)。
+</ParamField>
+
+<ParamField path="max_tool_result_lines" type="int | None" default="20">
+  单条工具结果的最大打印行数，超出部分折叠为提示行，`None` 表示不截断。
+</ParamField>
+
+<Note>
+`launch_console` 与 `launch_tui` 都不包含会话管理与持久化：对话状态保存在 `agent.state` 中，随进程退出而结束。若需要多用户、多会话与持久化存储，请使用[智能体服务](/zh/versions/2.0.9/deploy/agent-service)。
+</Note>
+
+## 嵌入事件渲染器
+
+当开发者自己掌控运行逻辑（例如多智能体流水线、测试脚本）时，可以只使用 `ConsoleRenderer` 完成打印。渲染器是被动的：事件如何产生、输入与确认如何处理，均由调用方决定。
+
+```python 在自己的代码中渲染事件流
+from agentscope.console import ConsoleRenderer
+from agentscope.message import UserMsg
+
+renderer = ConsoleRenderer()
+
+# 把 reply_stream 产出的每个事件交给渲染器
+async for event in agent.reply_stream(UserMsg("user", "你好！")):
+    renderer.render(event)
+
+# 渲染器会把事件累积回一条完整的回复消息
+final_msg = renderer.last_msg
+```
+
+渲染器按回复标识区分事件的归属，因此多个智能体顺序发言时可以复用同一个实例：
+
+```python 渲染多智能体流水线
+renderer = ConsoleRenderer()
+
+msg = UserMsg("user", "写一段产品介绍")
+for agent in [writer, reviewer]:
+    async for event in agent.reply_stream(msg):
+        renderer.render(event)
+    # 上一个智能体的完整回复作为下一个的输入
+    msg = renderer.last_msg
+```
+
+渲染器对各类事件的处理规则如下：
+
+| 内容 | 渲染方式 |
+|------|----------|
+| 回复文本、思考过程 | 实时流式打印，思考内容以暗色显示 |
+| 工具调用、工具结果 | 结束事件到达时整块打印，并发执行的多个工具结果不会交错；超长结果按行数截断 |
+| 提示块 | 以带边框的面板展示，例如运行时状态注入的时间与任务提醒 |
+| 二进制数据 | 图片、音频等以占位符显示（如 `[data: image/png, ~34KB]`），不打印 base64 内容 |
+| token 用量 | 每次模型调用结束后打印一行输入/输出 token 数 |
+
+<Tip>
+工具确认、外部执行等需要人工介入的事件，渲染器只负责显示提醒；如何收集确认结果并继续回复由调用方实现，可参考[人机协作](/zh/versions/2.0.9/building-blocks/agent/human-in-the-loop)。
+</Tip>
+
+## 控制输出详细程度
+
+`launch_console` 与 `ConsoleRenderer` 均通过 `verbosity` 参数控制输出的详细程度，三档依次递增：
+
+| 档位 | 显示内容 |
+|------|----------|
+| `quiet` | 仅回复文本与错误信息 |
+| `default` | 增加思考过程、工具调用与结果、提示块、token 用量、确认提醒 |
+| `debug` | 增加生命周期事件（模型调用开始、回复结束原因等）与工具结果元数据 |
+
+<Note>
+渲染器会静默跳过未知的事件类型（`debug` 档打印一行类型名），因此事件协议新增类型不会影响既有的渲染逻辑。
+</Note>
+
+## 启动全屏界面
+
+需要更完整的交互体验时，可以用 `launch_tui` 打开全屏对话界面。全屏界面依赖 Textual，需要先安装 `tui` 扩展（`agentscope[full]` 已包含）：
+
+```bash 安装全屏界面依赖
+pip install "agentscope[tui]"
+```
+
+`launch_tui` 的用法与 `launch_console` 相同，传入构造完成的智能体即可。下面的例子额外装配了 `AskUser`，智能体提问时界面会弹出键盘操作的问答表单：
+
+```python 在全屏界面中与智能体对话
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import AskUser, Toolkit
+from agentscope.tui import launch_tui
+from agentscope.workspace import LocalWorkspace
+
+
+async def main() -> None:
+    async with LocalWorkspace(workdir="./workspace") as workspace:
+        agent = Agent(
+            name="Friday",
+            system_prompt="You are a helpful assistant named Friday.",
+            model=DashScopeChatModel(
+                credential=DashScopeCredential(
+                    api_key=os.environ["DASHSCOPE_API_KEY"],
+                ),
+                model="qwen3.8-max",
+            ),
+            toolkit=Toolkit(
+                # AskUser 让智能体可以向用户提选择题，其余为工作区工具
+                tools=[AskUser(), *(await workspace.list_tools())],
+                skills_or_loaders=await workspace.list_skills(),
+            ),
+            offloader=workspace,
+        )
+
+        # 打开全屏界面，输入 /exit 并回车退出
+        await launch_tui(agent)
+
+
+asyncio.run(main())
+```
+
+界面全部通过键盘操作，各交互环节的行为如下：
+
+| 环节 | 行为 |
+|------|------|
+| 消息输入 | Enter 发送，Shift+Enter 换行；输入 `/exit` 并回车退出 |
+| 流式渲染 | 回复以 Markdown 实时渲染；工具调用与思考过程折叠显示，点击或聚焦后按 Enter 展开 |
+| 工具确认 | 待确认的请求替换输入框，用 ↑/↓ 在"允许一次""按建议规则始终允许""拒绝""中断回复"之间选择，Enter 确认 |
+| `AskUser` 提问 | 以表单呈现，支持单选、多选、预览与"其他"自由输入，答案自动作为外部执行结果交回智能体 |
+| 中断 | 回复进行中按 Ctrl+C 中断当前回复 |
+
+<Tip>
+回复进行期间输入框依然可用：新消息会排队，`reply_stream` 按顺序逐个调用，同一个智能体的上下文不会被并发回复同时修改。
+</Tip>
+
+`launch_tui` 支持以下参数：
+
+<ParamField path="target" type="Agent | PipelineProtocol" required>
+  要交互的智能体，或任意满足
+  [`PipelineProtocol`](/zh/versions/2.0.9/building-blocks/pipeline/overview)
+  的流水线。
+</ParamField>
+
+<ParamField path="messages" type="Sequence[Msg]" default="()">
+  开始交互前先显示的历史消息。
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  输入框发出的消息的发送者名称。
+</ParamField>
+
+## 显示实时语音会话
+
+[实时语音智能体](/zh/versions/2.0.9/building-blocks/realtime/speech-to-speech)的输入是持续的音频流，因此使用单独的 `launch_realtime_ui`：界面显示双方的转写文本、工具调用与确认卡片，确认、打断与文字输入通过 `agent.send()` 交回智能体，音频本身由传输播放，不进入界面。运行前需要同时安装实时语音与全屏界面的依赖：
+
+```bash 安装实时语音与全屏界面依赖
+pip install "agentscope[realtime,tui]"
+```
+
+界面只借用智能体与传输，两者都需要由开发者先启动，界面退出后也不会替开发者关闭：
+
+```python 用全屏界面运行语音会话
+from agentscope.tui import launch_realtime_ui
+
+# agent 为 RealtimeAgent，transport 为已构造的音频传输（如 LocalAudioTransport）
+async with agent, transport:
+    # 传输结束后界面自动退出，也可以按 Ctrl+Q 退出
+    await launch_realtime_ui(agent, transport)
+```
+
+`launch_realtime_ui` 与 `launch_tui` 的行为差异如下：
+
+| 方面 | `launch_realtime_ui` 的行为 |
+|------|------------------------------|
+| 驱动方式 | 挂载时调用一次 `agent.reply_stream(transport)`，贯穿整个会话，而不是每条消息调用一次 |
+| 音频 | 丢弃音频数据块，只显示转写文本 |
+| 文字输入 | 模型支持会话中途的文字输入时才启用输入框，否则只能说话 |
+| 中断 | 开口说话即可打断；界面发起的中断以 `UserInterruptEvent` 经 `agent.send()` 送达 |
+
+`launch_realtime_ui` 支持以下参数：
+
+<ParamField path="agent" type="RealtimeAgent" required>
+  已连接的实时语音智能体。
+</ParamField>
+
+<ParamField path="transport" type="TransportBase" required>
+  已启动的音频传输，负责采集与播放音频。
+</ParamField>
+
+<ParamField path="messages" type="Sequence[Msg]" default="()">
+  开始交互前先显示的历史消息。
+</ParamField>
+
+<ParamField path="user_name" type="str" default="user">
+  输入框发出的消息的发送者名称。
+</ParamField>
+
+## 嵌入界面组件
+
+开发者已有自己的 Textual 应用时，可以直接使用 `agentscope.tui` 的两个组件。组件只负责显示 `Msg`，不消费事件也不修改对话历史，两者的分工如下：
+
+| 组件 | 内容 |
+|------|------|
+| `MessagesUI` | 只读的消息列表，渲染 Markdown、工具调用与附件 |
+| `ChatUI` | 在 `MessagesUI` 之上增加输入框与确认、`AskUser` 表单，用户操作以 Textual 消息的形式发出 |
+
+下面的例子把 `ChatUI` 接到开发者自己的运行后端 `runtime` 上，由后端把事件应用到消息（`Msg.append_event()`）并推送变化的消息：
+
+```python 在 Textual 应用中嵌入 ChatUI
+from textual import on
+from textual.app import App, ComposeResult
+
+from agentscope.tui import ChatUI
+
+
+class RuntimeApp(App):
+    def compose(self) -> ComposeResult:
+        # history 为初始显示的消息列表
+        yield ChatUI(messages=history, id="chat")
+
+    def on_mount(self) -> None:
+        self.run_worker(self.consume_messages())
+
+    async def consume_messages(self) -> None:
+        chat = self.query_one("#chat", ChatUI)
+        # 只推送发生变化的消息，界面按消息 ID 就地更新
+        async for message in runtime.changed_messages:
+            await chat.update_message(message)
+
+    @on(ChatUI.Submitted)
+    async def submit(self, event: ChatUI.Submitted) -> None:
+        # 用户发送的新消息
+        await runtime.submit(event.msg)
+
+    @on(ChatUI.Confirmed)
+    async def confirm(self, event: ChatUI.Confirmed) -> None:
+        # 工具确认结果，event.value 为 UserConfirmResultEvent
+        await runtime.submit(event.value)
+
+    @on(ChatUI.ExternalExecutionSubmitted)
+    async def external_result(
+        self,
+        event: ChatUI.ExternalExecutionSubmitted,
+    ) -> None:
+        # AskUser 等外部工具的结果
+        await runtime.submit(event.value)
+
+    @on(ChatUI.InterruptRequested)
+    async def interrupt(self, event: ChatUI.InterruptRequested) -> None:
+        await runtime.interrupt(event.reply_id)
+```
+
+<Note>
+直接修改原有的 `Msg` 对象不会刷新界面。初始加载或整体替换历史时调用 `set_messages()`，流式更新时调用 `update_message()`。
+</Note>

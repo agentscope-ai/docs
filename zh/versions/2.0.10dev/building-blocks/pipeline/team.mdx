@@ -1,0 +1,192 @@
+---
+title: "团队流水线"
+description: "由一个队长统筹多个各有专长的智能体，协作完成单个智能体难以独立完成的任务"
+---
+
+`TeamPipeline` 是由一个队长与若干成员组成的流水线：队长通过工具调用把任务分派给成员，成员在各自的上下文里完成任务，最终回复作为工具结果交回队长。
+
+其中的分派关系如下所示：
+
+```
+              ┌── TeamAssign(member="Researcher") ──▶ Researcher ──┐
+              │                                                    │
+输入 ─▶ 队长 ┤                                                    ├──▶ 工具结果 ─▶ 队长 ─▶ 输出
+              │                                                    │
+              └── TeamAssign(member="Coder") ───────▶ Coder ───────┘
+```
+
+与[目标流水线](/zh/versions/2.0.10dev/building-blocks/pipeline/goal)的固定循环不同，团队流水线只固化「谁能被分派、结果回到哪里」，分派给谁、分派几次由队长自己决定。它的特点如下：
+
+| 特点 | 说明 |
+|------|------|
+| 只看结果 | 队长只收到成员的最终回复，看不到成员中间的推理与工具调用，上下文不会被成员的过程撑满 |
+| 并发执行 | 同一轮里分派给不同成员的任务并发运行；分派给同一成员的多个任务按调用顺序依次运行 |
+| 成员互不通信 | 成员之间不直接对话，成员的结果总是回到队长 |
+| 逐个处理人机交互 | 任一成员停在工具授权上时，授权请求原样流出，答复按 `reply_id` 送回该成员，队长等它完成后再继续 |
+
+<Note>
+流水线模块处于实验阶段，接口可能在后续版本调整。
+</Note>
+
+## 运行流水线
+
+以下示例组建一个由队长、研究员和程序员组成的团队，队长根据任务决定分派给谁：
+
+```python team_pipeline.py
+import asyncio
+import os
+
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.model import DashScopeChatModel
+from agentscope.pipeline import TeamMember, TeamPipeline
+from agentscope.tool import Toolkit
+from agentscope.workspace import LocalWorkspace
+
+
+async def main() -> None:
+    async with LocalWorkspace(workdir="./workspace") as workspace:
+        model = DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.getenv("DASHSCOPE_API_KEY"),
+            ),
+            model="qwen3.8-max",
+        )
+
+        # 队长：负责拆解任务、分派与汇总。它必须带有工具箱，
+        # 流水线会往里注册分派工具 TeamAssign
+        leader = Agent(
+            name="Leader",
+            system_prompt="You're a team leader named 'Leader'.",
+            model=model,
+            toolkit=Toolkit(),
+        )
+
+        # 成员：普通的智能体，名字即队长分派时引用它的方式
+        researcher = Agent(
+            name="Researcher",
+            system_prompt="You're a researcher named 'Researcher'.",
+            model=model,
+            toolkit=Toolkit(tools=await workspace.list_tools()),
+            offloader=workspace,
+        )
+        coder = Agent(
+            name="Coder",
+            system_prompt="You're a programmer named 'Coder'.",
+            model=model,
+            toolkit=Toolkit(tools=await workspace.list_tools()),
+            offloader=workspace,
+        )
+
+        pipe = TeamPipeline(
+            leader=leader,
+            members=[
+                # description 会写进分派工具的说明，队长据此决定分派给谁
+                TeamMember(
+                    agent=researcher,
+                    description="Investigates a question and reports findings.",
+                ),
+                TeamMember(
+                    agent=coder,
+                    description="Writes and runs code in the workspace.",
+                ),
+            ],
+        )
+
+        # 流水线满足 PipelineProtocol，可以直接交给终端 UI
+        await launch_console(agent=pipe)
+
+
+asyncio.run(main())
+```
+
+<Tip>
+成员之间需要通过文件协作时，建议让它们共用同一个[工作区](/zh/versions/2.0.10dev/building-blocks/workspace/overview)，如上例中研究员与程序员共享的 `LocalWorkspace`，一方产出的文件另一方可以直接读取。
+</Tip>
+
+### 构造参数
+
+`TeamPipeline` 的构造参数如下：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `leader` | `Agent` | 负责分派任务的队长，需要带有工具箱 |
+| `members` | `list[TeamMember]` | 队长可以分派任务的成员 |
+| `reset_members` | `bool`，默认 `True` | 队长每次回复结束后，是否清空所有成员的上下文 |
+
+每个成员由 `TeamMember` 描述，字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `agent` | `Agent` | 成员智能体，它的 `name` 就是队长分派时引用的名字 |
+| `description` | `str` | 成员擅长什么、何时分派给它、会交回什么，写进分派工具的说明供队长阅读 |
+
+<Warning>
+成员的名字必须互不相同，且不能与队长同名，否则构造时抛出 `ValueError`。
+</Warning>
+
+## 分派任务
+
+流水线第一次运行时，会向队长的工具箱注册一个外部工具 `TeamAssign`，它的参数如下：
+
+| 参数 | 说明 |
+|------|------|
+| `member` | 成员名字，只能取 `members` 中的名字之一 |
+| `prompt` | 交给成员的完整任务。成员看不到队长的上下文，任务所需的信息都要写进来 |
+
+一次分派的完整流程如下：
+
+<Steps>
+  <Step title="队长分派">
+    队长调用 `TeamAssign`，指明成员与任务。该工具不经过权限确认，成员自己的工具仍按各自的权限检查。
+  </Step>
+  <Step title="成员执行">
+    流水线把 `prompt` 作为用户消息交给对应成员，成员在自己的上下文里运行，事件从流水线的 `reply_stream` 流出。
+  </Step>
+  <Step title="结果交回">
+    成员的最终回复（文本与数据块）作为 `TeamAssign` 的工具结果交回队长；同一轮多个分派的结果按队长的调用顺序排列。
+  </Step>
+  <Step title="队长继续">
+    队长读到结果后继续推理，可以再次分派，也可以直接给出最终回复。
+  </Step>
+</Steps>
+
+成员回复的结束原因决定了工具结果的状态：
+
+| 成员回复结束原因 | 工具结果状态 |
+|------------------|--------------|
+| 正常完成，或达到最大迭代次数 | `SUCCESS` |
+| 被中断 | `INTERRUPTED` |
+| 出错 | `ERROR` |
+
+`reset_members` 决定成员以什么样的上下文迎接下一次分派。默认为 `True`：同一次队长回复内，队长可以就同一件事追问成员；队长回复结束后，所有成员的上下文与摘要被清空，下一次回复中的分派从头开始。设为 `False` 则成员跨回复保留对话。
+
+## 中断与恢复
+
+团队中任一方停在工具授权上时，处理方式与单个智能体一致：`reply_stream` 在所有参与者都已完成或挂起后结束，开发者把答复重新喂回来即可继续。
+
+```python 中断后恢复
+# 某个成员中途出现 RequireUserConfirmEvent，事件流随即结束
+async for event in pipe.reply_stream(user_msg):
+    ...
+
+# 把用户的答复递回去，流水线按 reply_id 交给挂起的那个成员
+async for event in pipe.reply_stream(user_confirm_result_event):
+    ...
+```
+
+成员挂起期间，队长也停在对应的分派上；该成员完成后，它的回复作为工具结果交回，队长随之继续。同一轮中未挂起的成员照常运行完毕，已经完成的结果会先交给队长。
+
+`reply_stream` 接受的输入如下：
+
+| 输入类型 | 含义 |
+|----------|------|
+| `Msg` / `list[Msg]` | 交给队长，开始一次新的回复 |
+| `UserConfirmResultEvent` | 用户对工具授权的答复，按 `reply_id` 交给挂起的一方 |
+| `ExternalExecutionResultEvent` | 外部执行的结果，按 `reply_id` 交给挂起的一方 |
+| `UserInterruptEvent` | 中断所有挂起的成员与队长 |
+
+<Note>
+流水线的协程被取消时，会像收到 `UserInterruptEvent` 一样关掉挂起的队长与成员，再按队长的 `interruption_raise_cancelled_error` 配置决定是否继续抛出取消。
+</Note>
