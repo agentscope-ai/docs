@@ -122,10 +122,35 @@ async for chunk in agent.reply_stream(
 
 </CodeGroup>
 
+两个回复方法也支持直接传入 JSON Schema 字典或 JSON 字符串，适合使用表单编辑器或配置文件定义输出格式的场景。Schema 必须在顶层声明 `"type": "object"`。JSON 格式或 Schema 不合法时，智能体会在修改会话、调用模型之前报错。
+
+下面沿用前面的智能体，以 JSON 字符串指定输出格式：
+
+```python JSON Schema 输入
+import json
+from agentscope.message import UserMsg
+
+schema = {
+    "type": "object",
+    "properties": {
+        "city": {"type": "string"},
+        "temperature": {"type": "number"},
+    },
+    "required": ["city", "temperature"],
+}
+result = await agent.reply(
+    UserMsg(name="user", content="杭州今天天气怎么样？"),
+    structured_schema=json.dumps(schema),  # 也可以直接传入 schema 字典。
+)
+print(result.structured_output)  # {"city": "杭州", "temperature": ...}
+```
+
+JSON Schema 输入使用 Draft 2020-12 校验并填充 Schema 中声明的默认值，不执行 Pydantic 自定义校验器或类型转换。默认允许多余字段；如果需要禁止，可在 Schema 中设置 `"additionalProperties": false`。
+
 结构化输出的要求以单次回复为作用域，并且能跨越人机交互暂停、状态持久化和进程重启，因为 schema 会以普通 dict 的形式存入智能体状态。恢复一次暂停的回复时，不要再次传入 `structured_schema`；回复会沿用暂停时保存的 schema 继续。
 
 <Note>
-- 校验方式随回复的运行方式自适应。进程内运行时，由模型类本身校验输出：默认值（含 `default_factory`）会被填充、多余字段被丢弃、自定义校验器会执行。从序列化状态恢复后，只剩下 JSON schema：schema 中声明的默认值会被填充、多余字段被保留、自定义校验器被跳过。
+- 传入 Pydantic 类时，进程内的输出由该类校验，支持 `default_factory`、自定义校验器和该类配置的多余字段处理方式。从序列化状态恢复后，只保留 JSON Schema，改用上面说明的 JSON Schema 校验规则。
 - 达到 `max_iters` 仍无输出时，智能体会在 `structured_output_grace_iters`（默认 5）次额外迭代内强制调用 `GenerateStructuredOutput`。若仍失败，回复以 `finished_reason=EXCEED_MAX_ITERS` 结束且 `structured_output` 为 `None`，使用前请先判空。
 </Note>
 

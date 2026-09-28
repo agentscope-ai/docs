@@ -122,10 +122,35 @@ async for chunk in agent.reply_stream(
 
 </CodeGroup>
 
+You can also pass a JSON Schema dictionary or a JSON string to either reply method. This is useful when the schema comes from a form builder or configuration file instead of a Python class. The schema must declare `"type": "object"` at the top level. Invalid JSON or schemas are rejected before a new reply changes the conversation or calls the model.
+
+The following example uses the same agent with a schema supplied as JSON:
+
+```python JSON Schema Input
+import json
+from agentscope.message import UserMsg
+
+schema = {
+    "type": "object",
+    "properties": {
+        "city": {"type": "string"},
+        "temperature": {"type": "number"},
+    },
+    "required": ["city", "temperature"],
+}
+result = await agent.reply(
+    UserMsg(name="user", content="What is the weather in Hangzhou?"),
+    structured_schema=json.dumps(schema),  # Passing schema directly also works.
+)
+print(result.structured_output)  # {"city": "Hangzhou", "temperature": ...}
+```
+
+JSON Schema inputs use Draft 2020-12 validation and fill schema-declared defaults. They do not run Pydantic custom validators or perform Pydantic type coercion. Extra fields are allowed unless the schema forbids them, for example with `"additionalProperties": false`.
+
 The requirement is scoped to one reply and survives human-in-the-loop pauses, state persistence, and process restarts, because the schema is stored in the agent state as a plain dict. When resuming a parked reply, do not pass `structured_schema` again; the reply continues with the schema it was parked with.
 
 <Note>
-- Validation adapts to how the reply runs. In process, the class itself validates the output: defaults (including `default_factory`) are filled, extra fields are dropped, and custom validators are executed. After reloading a serialized state, only the JSON schema remains: schema-declared defaults are filled, extra fields are kept, and custom validators are skipped.
+- When you pass a Pydantic class, the class validates the output in process, including `default_factory`, custom validators, and its configured extra-field behavior. After reloading a serialized state, only the JSON Schema remains, so the JSON Schema validation rules above apply instead.
 - On reaching `max_iters` without output, the agent forces the `GenerateStructuredOutput` call within `structured_output_grace_iters` extra iterations (default 5). If it still fails, the reply ends with `finished_reason=EXCEED_MAX_ITERS` and `structured_output` is `None`; check for `None` before use.
 </Note>
 
