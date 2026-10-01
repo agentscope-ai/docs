@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataMuse - Sales Analyst</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f5f5f5;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: #1e293b;
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+header h1 { font-size: 17px; font-weight: 600; }
+
+header .badge {
+    background: #334155;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+#chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* --- Messages --- */
+.msg-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.msg-row.user { align-items: flex-end; }
+.msg-row.assistant { align-items: flex-start; }
+
+.msg-row .label {
+    font-size: 11px;
+    color: #64748b;
+    padding: 0 4px;
+}
+
+.bubble {
+    max-width: 720px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.7;
+    font-size: 14px;
+    word-break: break-word;
+}
+
+.bubble.user {
+    background: #1e293b;
+    color: #f1f5f9;
+    border-bottom-right-radius: 4px;
+}
+
+.bubble.assistant {
+    background: #fff;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Markdown inside bubbles */
+.bubble.assistant h1, .bubble.assistant h2, .bubble.assistant h3 {
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+.bubble.assistant h1 { font-size: 16px; }
+.bubble.assistant h2 { font-size: 15px; }
+.bubble.assistant h3 { font-size: 14px; font-weight: 600; }
+.bubble.assistant p { margin-bottom: 8px; }
+.bubble.assistant ul, .bubble.assistant ol { padding-left: 20px; margin-bottom: 8px; }
+.bubble.assistant table { border-collapse: collapse; margin: 8px 0; font-size: 13px; width: 100%; }
+.bubble.assistant th, .bubble.assistant td {
+    border: 1px solid #e2e8f0;
+    padding: 4px 10px;
+    text-align: left;
+}
+.bubble.assistant th { background: #f8fafc; font-weight: 600; }
+.bubble.assistant code {
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+}
+.bubble.assistant pre {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+    font-size: 12px;
+}
+.bubble.assistant pre code {
+    background: none;
+    padding: 0;
+}
+.bubble.assistant strong { font-weight: 600; }
+
+/* --- Tool calls --- */
+.tool-card {
+    max-width: 720px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin: 4px 0;
+    overflow: hidden;
+}
+
+.tool-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.tool-card-header .icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #6366f1;
+}
+
+.tool-card-header .name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4338ca;
+}
+
+.tool-card-header .state {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.tool-card-header .state.running { background: #dbeafe; color: #1d4ed8; }
+.tool-card-header .state.success { background: #dcfce7; color: #166534; }
+.tool-card-header .state.denied { background: #fee2e2; color: #991b1b; }
+
+.tool-card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.tool-card.expanded .tool-card-body {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.tool-card-body-inner {
+    padding: 10px 14px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #475569;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.tool-card-body-inner .section-label {
+    font-family: -apple-system, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    margin-top: 8px;
+}
+
+.tool-card-body-inner .section-label:first-child { margin-top: 0; }
+
+.tool-card-body-inner .result-text {
+    color: #166534;
+    background: #f0fdf4;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-top: 4px;
+}
+
+.tool-card-body-inner .result-text.denied-text {
+    color: #991b1b;
+    background: #fef2f2;
+}
+
+/* --- Confirm card --- */
+.confirm-card {
+    max-width: 720px;
+    background: #fffbeb;
+    border: 2px solid #fbbf24;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 6px 0;
+}
+
+.confirm-card h3 {
+    color: #92400e;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.confirm-card .summary {
+    background: #fef3c7;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.confirm-card .summary .tool-name { font-weight: 600; color: #92400e; }
+
+.confirm-card .summary .preview {
+    margin-top: 6px;
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+    color: #78716c;
+    max-height: 80px;
+    overflow: hidden;
+}
+
+.confirm-card .buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.confirm-card button {
+    padding: 7px 18px;
+    border-radius: 6px;
+    border: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.confirm-card button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+.confirm-card .btn-allow { background: #059669; color: #fff; }
+.confirm-card .btn-deny { background: #e2e8f0; color: #475569; }
+
+.confirm-card .result-badge {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 4px;
+}
+.confirm-card .result-badge.allowed { background: #dcfce7; color: #166534; }
+.confirm-card .result-badge.denied-badge { background: #fee2e2; color: #991b1b; }
+
+/* --- Input area --- */
+#input-area {
+    padding: 14px 24px;
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+#input-area input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#input-area input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px #eef2ff; }
+
+#input-area button {
+    padding: 10px 20px;
+    background: #1e293b;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+#input-area button:hover { background: #334155; }
+#input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#status-bar {
+    font-size: 12px;
+    color: #64748b;
+    padding: 6px 24px;
+    background: #fff;
+    border-top: 1px solid #f1f5f9;
+    flex-shrink: 0;
+    min-height: 28px;
+}
+
+.dot-pulse {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: #6366f1;
+    border-radius: 50%;
+    animation: pulse 1.2s infinite;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.2; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+}
+
+.toggle-arrow {
+    display: inline-block;
+    transition: transform 0.2s;
+    font-size: 10px;
+}
+
+.tool-card.expanded .toggle-arrow { transform: rotate(90deg); }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>DataMuse</h1>
+    <span class="badge">Sales Analyst</span>
+    <span class="badge">Tutorial 15</span>
+</header>
+
+<div id="chat-container">
+    <div class="msg-row assistant">
+        <div class="label">DataMuse</div>
+        <div class="bubble assistant">
+            <p>Hello! I'm DataMuse, your data analyst. I can analyze the sales dataset for you.</p>
+            <p>Try asking me to:</p>
+            <ul>
+                <li>Inspect the sales data structure</li>
+                <li>Compare revenue by category or region</li>
+                <li>Write a full analysis report</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div id="status-bar"></div>
+
+<div id="input-area">
+    <input type="text" id="user-input"
+           placeholder="e.g. Analyze sales by category and region, then write a report"
+           autofocus>
+    <button id="send-btn" onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+const chatContainer = document.getElementById('chat-container');
+const userInput = document.getElementById('user-input');
+const sendBtn = document.getElementById('send-btn');
+const statusBar = document.getElementById('status-bar');
+
+let streaming = false;
+
+marked.setOptions({ breaks: true, gfm: true });
+
+userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !streaming) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+function setStatus(text, showDot) {
+    if (text) {
+        statusBar.innerHTML = text + (showDot ? '<span class="dot-pulse"></span>' : '');
+    } else {
+        statusBar.innerHTML = '';
+    }
+}
+
+function scrollToBottom() {
+    requestAnimationFrame(() => {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    });
+}
+
+function addUserMessage(text) {
+    const row = document.createElement('div');
+    row.className = 'msg-row user';
+    row.innerHTML = `
+        <div class="label">You</div>
+        <div class="bubble user">${escapeHtml(text)}</div>
+    `;
+    chatContainer.appendChild(row);
+    scrollToBottom();
+}
+
+function createAssistantBubble() {
+    const row = document.createElement('div');
+    row.className = 'msg-row assistant';
+    row.innerHTML = `
+        <div class="label">DataMuse</div>
+        <div class="bubble assistant"></div>
+    `;
+    chatContainer.appendChild(row);
+    scrollToBottom();
+    return row.querySelector('.bubble');
+}
+
+function createToolCard(toolName) {
+    const card = document.createElement('div');
+    card.className = 'tool-card';
+    card.innerHTML = `
+        <div class="tool-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+            <span class="icon"><span class="toggle-arrow">&#9654;</span></span>
+            <span class="name">${escapeHtml(toolName)}</span>
+            <span class="state running">running</span>
+        </div>
+        <div class="tool-card-body">
+            <div class="tool-card-body-inner">
+                <div class="section-label">Input</div>
+                <div class="input-content"></div>
+            </div>
+        </div>
+    `;
+    chatContainer.appendChild(card);
+    scrollToBottom();
+    return card;
+}
+
+function finalizeToolCard(card, state, resultText) {
+    const stateEl = card.querySelector('.state');
+    stateEl.className = `state ${state === 'denied' ? 'denied' : 'success'}`;
+    stateEl.textContent = state;
+
+    if (resultText) {
+        const bodyInner = card.querySelector('.tool-card-body-inner');
+        const resultClass = state === 'denied' ? 'result-text denied-text' : 'result-text';
+        bodyInner.innerHTML += `
+            <div class="section-label">Result</div>
+            <div class="${resultClass}">${escapeHtml(resultText)}</div>
+        `;
+    }
+}
+
+async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text || streaming) return;
+
+    userInput.value = '';
+    streaming = true;
+    sendBtn.disabled = true;
+    addUserMessage(text);
+    setStatus('Thinking', true);
+
+    let bubbleEl = null;
+    let assistantText = '';
+    let currentToolCard = null;
+    let currentToolName = '';
+    let currentToolInput = '';
+    let toolResultText = '';
+
+    try {
+        const response = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text }),
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') continue;
+                if (!data) continue;
+
+                let event;
+                try { event = JSON.parse(data); }
+                catch { continue; }
+
+                handleEvent(event);
+            }
+        }
+    } catch (err) {
+        setStatus(`Error: ${err.message}`, false);
+    }
+
+    streaming = false;
+    sendBtn.disabled = false;
+    setStatus('', false);
+
+    function handleEvent(event) {
+        switch (event.type) {
+            case 'REPLY_START':
+                setStatus('Generating', true);
+                break;
+
+            case 'TEXT_BLOCK_START':
+                bubbleEl = createAssistantBubble();
+                assistantText = '';
+                break;
+
+            case 'TEXT_BLOCK_DELTA':
+                assistantText += event.delta;
+                if (bubbleEl) {
+                    bubbleEl.innerHTML = marked.parse(assistantText);
+                    scrollToBottom();
+                }
+                break;
+
+            case 'TEXT_BLOCK_END':
+                break;
+
+            case 'TOOL_CALL_START':
+                currentToolName = event.tool_call_name;
+                currentToolInput = '';
+                currentToolCard = createToolCard(currentToolName);
+                setStatus(`Calling ${currentToolName}`, true);
+                break;
+
+            case 'TOOL_CALL_DELTA':
+                currentToolInput += event.delta || '';
+                break;
+
+            case 'TOOL_CALL_END': {
+                if (currentToolCard) {
+                    const inputEl = currentToolCard.querySelector('.input-content');
+                    inputEl.textContent = formatJson(currentToolInput);
+                }
+                setStatus(`Running ${currentToolName}`, true);
+                break;
+            }
+
+            case 'TOOL_RESULT_START':
+                toolResultText = '';
+                break;
+
+            case 'TOOL_RESULT_TEXT_DELTA':
+                toolResultText += event.delta || '';
+                break;
+
+            case 'TOOL_RESULT_END': {
+                const state = event.state || 'success';
+                if (currentToolCard) {
+                    finalizeToolCard(currentToolCard, state, toolResultText);
+                }
+                currentToolCard = null;
+                toolResultText = '';
+                setStatus('Generating', true);
+                break;
+            }
+
+            case 'REQUIRE_USER_CONFIRM':
+                showConfirmDialog(event);
+                setStatus('Waiting for confirmation', false);
+                break;
+
+            case 'WAITING_CONFIRM':
+                break;
+
+            case 'REPLY_END':
+                setStatus('', false);
+                break;
+        }
+    }
+}
+
+function showConfirmDialog(event) {
+    const toolCalls = event.tool_calls || [];
+    const card = document.createElement('div');
+    card.className = 'confirm-card';
+
+    const summaryHtml = toolCalls.map(tc => {
+        const inputObj = safeParseJson(tc.input);
+        const preview = inputObj
+            ? summarizeInput(tc.name, inputObj)
+            : tc.input.slice(0, 120);
+        return `
+            <span class="tool-name">${escapeHtml(tc.name)}</span>
+            <div class="preview">${escapeHtml(preview)}</div>
+        `;
+    }).join('');
+
+    card.innerHTML = `
+        <h3>&#9888;&#65039; Permission Required</h3>
+        <div class="summary">${summaryHtml}</div>
+        <div class="buttons">
+            <button class="btn-allow" onclick="handleConfirm(this, true)">Allow</button>
+            <button class="btn-deny" onclick="handleConfirm(this, false)">Deny</button>
+        </div>
+    `;
+
+    card.dataset.replyId = event.reply_id;
+    card.dataset.toolCalls = JSON.stringify(toolCalls);
+    chatContainer.appendChild(card);
+    scrollToBottom();
+}
+
+function summarizeInput(toolName, inputObj) {
+    if (toolName === 'ReportWriter') {
+        const title = inputObj.title || '';
+        const filename = inputObj.filename || 'report.md';
+        const mdLen = (inputObj.markdown || '').length;
+        return `Writing "${title}" to ${filename} (${mdLen} chars)`;
+    }
+    return JSON.stringify(inputObj, null, 2).slice(0, 200);
+}
+
+async function handleConfirm(btn, confirmed) {
+    const card = btn.closest('.confirm-card');
+    const replyId = card.dataset.replyId;
+    const toolCalls = JSON.parse(card.dataset.toolCalls);
+
+    const badgeClass = confirmed ? 'result-badge allowed' : 'result-badge denied-badge';
+    const badgeText = confirmed ? 'Allowed' : 'Denied';
+    card.querySelector('.buttons').innerHTML = `<span class="${badgeClass}">${badgeText}</span>`;
+
+    setStatus(confirmed ? 'Executing' : 'Denied, continuing', true);
+
+    await fetch('/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            reply_id: replyId,
+            tool_calls: toolCalls,
+            confirmed: confirmed,
+        }),
+    });
+}
+
+function escapeHtml(str) {
+    const el = document.createElement('div');
+    el.textContent = str;
+    return el.innerHTML;
+}
+
+function formatJson(str) {
+    try {
+        return JSON.stringify(JSON.parse(str), null, 2);
+    } catch {
+        return str;
+    }
+}
+
+function safeParseJson(str) {
+    try { return JSON.parse(str); }
+    catch { return null; }
+}
+</script>
+</body>
+</html>
