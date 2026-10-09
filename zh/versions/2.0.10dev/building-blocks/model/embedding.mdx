@@ -131,6 +131,10 @@ asyncio.run(main())
 | `source` | `"api" \| "cache"` | 结果来自 API 还是缓存 |
 | `id` / `created_at` / `type` | `str` | 响应标识与时间戳；`type` 恒为 `"embedding"` |
 
+<Note>
+使用 `OpenAIEmbeddingModel` 进行单批次调用时，兼容 API 可能省略 `usage` 或将其设为 `null`。此时仍会返回嵌入向量，`response.usage.tokens` 为 `None`，`response.usage.time` 记录调用耗时。API 明确返回的 `0` 会保留为 `0`；`None` 表示 API 未报告 token 数。
+</Note>
+
 ### 多模态嵌入
 
 多模态模型（`DashScopeEmbeddingModel` 搭配 `qwen3-vl-embedding` 等，`GeminiEmbeddingModel` 搭配 `gemini-embedding-2`）在字符串之外还接受 `DataBlock` 输入（图片支持 URL 或 base64，视频支持 URL）：

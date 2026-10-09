@@ -131,6 +131,10 @@ Each `EmbeddingResponse` carries:
 | `source` | `"api" \| "cache"` | Whether the result came from the API or the cache |
 | `id` / `created_at` / `type` | `str` | Response identity and timestamp; `type` is always `"embedding"` |
 
+<Note>
+For a single-batch `OpenAIEmbeddingModel` call, compatible endpoints may omit `usage` or return it as `null`. The embedding vectors are still returned, with `response.usage.tokens` set to `None` and `response.usage.time` recording the elapsed time. A reported token count of `0` remains `0`; `None` means the endpoint did not report a count.
+</Note>
+
 ### Multimodal Embedding
 
 Multimodal models (`DashScopeEmbeddingModel` with `qwen3-vl-embedding` etc., `GeminiEmbeddingModel` with `gemini-embedding-2`) accept `DataBlock` inputs alongside strings (images as URL or base64, videos as URL):
