@@ -92,11 +92,16 @@ agent = Agent(
         max_iters=30,                     # at most 30 reasoning-acting iterations
         structured_output_grace_iters=3,  # extra iterations to finish structured output
         stop_on_reject=True,              # stop replying when tool calls are rejected
+        reject_truncated_tool_call=True,  # reject an incomplete final tool call after truncation
     ),
 )
 ```
 
 </CodeGroup>
+
+<Note>
+  `reject_truncated_tool_call` defaults to `False`. When enabled, the agent rejects a tool call only when the model API reports a length limit, the call is the final response block, and its arguments are not valid JSON. The rejected call produces an error `ToolResult`, and the existing ReAct loop decides whether to continue. Earlier tool calls and final calls with valid JSON keep their existing behavior.
+</Note>
 
 ## Parameters
 
