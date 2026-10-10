@@ -92,11 +92,16 @@ agent = Agent(
         max_iters=30,                     # 最多 30 轮推理-行动迭代
         structured_output_grace_iters=3,  # 为完成结构化输出追加的迭代次数
         stop_on_reject=True,              # 工具调用被拒绝时停止回复
+        reject_truncated_tool_call=True,  # 拒绝被截断且参数不完整的末尾工具调用
     ),
 )
 ```
 
 </CodeGroup>
+
+<Note>
+  `reject_truncated_tool_call` 默认为 `False`。启用后，仅当模型 API 报告长度限制、工具调用位于响应末尾，并且参数不是合法 JSON 时，智能体才会拒绝执行。被拒绝的调用会生成错误 `ToolResult`，是否继续推理由原有 ReAct 循环决定。响应中更早的工具调用和参数完整的末尾调用保持原有行为。
+</Note>
 
 ## 参数说明
 
