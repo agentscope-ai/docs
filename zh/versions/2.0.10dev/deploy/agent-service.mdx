@@ -598,6 +598,8 @@ ModelCard 包含以下字段：
 | `parameter_schema` | 请求参数的 JSON schema，自动与各模型 overrides 合并。 |
 | `parameters_overrides` | 叠加在基础参数 schema 之上的各模型差异。 |
 
+聊天服务创建模型时，还会用匹配模型卡 YAML 中声明的 `parameter_overrides.<parameter>.default` 补齐会话配置中省略的参数。会话显式配置的值（包括 `null`）优先。`maximum` 等覆盖项只描述参数结构约束，不会成为运行时参数值。没有匹配模型卡的模型继续使用模型 API 参数类的默认值。
+
 下面的 YAML 示例描述一个接受文本、图像、视频，并输出文本与思考链路的多模态模型：
 
 ```yaml qwen3.6-plus.yaml
