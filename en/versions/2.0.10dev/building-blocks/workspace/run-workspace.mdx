@@ -137,12 +137,17 @@ Each backend has its own persistence model and directory layout. Pick the tab ma
         api_key="your-daytona-api-key",  # "" reads the SDK's env config
         api_url="",                      # optional, for self-hosted deployments
         timeout_seconds=300,
+        auto_stop_interval=60,            # provider idle-stop interval in minutes
         extra_pip=["numpy", "pandas"],
         default_mcps=[],
         skill_paths=["./skills/web-search"],
     )
     await workspace.initialize()
     ```
+
+    Set `auto_stop_interval` to a positive integer (in minutes) to configure Daytona's idle-stop policy, or to `0` to disable auto-stop for long-running tasks. The default, `None`, leaves the provider policy unchanged. AgentScope applies an explicit value to both newly created and reattached sandboxes. This setting is separate from `timeout_seconds`, which limits individual sandbox operations in seconds, and does not change Daytona's auto-pause policy.
+
+    For pause-capable sandbox classes, Daytona does not allow both auto-stop and auto-pause to have nonzero intervals. Before setting a positive auto-stop interval, choose a compatible [Daytona lifecycle policy](https://www.daytona.io/docs/en/persistence/).
   </Tab>
 
   <Tab title="Kubernetes">

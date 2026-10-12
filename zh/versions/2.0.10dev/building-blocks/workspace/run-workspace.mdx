@@ -137,12 +137,17 @@ description: "在任意后端上创建工作区，并接入智能体"
         api_key="your-daytona-api-key",  # "" 时读取 SDK 的环境配置
         api_url="",                      # 可选，用于自建部署
         timeout_seconds=300,
+        auto_stop_interval=60,            # Daytona 空闲停机间隔，单位为分钟
         extra_pip=["numpy", "pandas"],
         default_mcps=[],
         skill_paths=["./skills/web-search"],
     )
     await workspace.initialize()
     ```
+
+    将 `auto_stop_interval` 设为正整数分钟数可配置 Daytona 的空闲停机策略；长时间运行的任务可设为 `0`，禁用自动停机。默认值 `None` 保持 Daytona 策略不变。AgentScope 会将显式值应用于新建和重新挂接的沙箱。此配置与限制单次沙箱操作秒数的 `timeout_seconds` 相互独立，也不会修改 Daytona 的自动暂停策略。
+
+    对于支持自动暂停的沙箱类型，Daytona 不允许自动停机和自动暂停间隔同时为非零值。设置正数停机间隔前，请先选择兼容的 [Daytona 生命周期策略](https://www.daytona.io/docs/en/persistence/)。
   </Tab>
 
   <Tab title="Kubernetes">
