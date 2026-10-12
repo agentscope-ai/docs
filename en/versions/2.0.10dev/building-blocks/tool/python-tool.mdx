@@ -391,6 +391,8 @@ weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
 
 <Note>
 `FunctionTool` also resolves the deferred annotations produced by `from __future__ import annotations`. When automatic inference cannot express the constraints you need, prefer `input_schema`.
+
+When wrapping a `functools.partial`, provide an explicit `name` and set `description` as needed. Schema inference resolves deferred custom types and `Annotated` metadata for the remaining parameters. Positionally bound parameters are omitted; keyword-bound parameters keep their defaults and can still be overridden by a call.
 </Note>
 
 <Note>

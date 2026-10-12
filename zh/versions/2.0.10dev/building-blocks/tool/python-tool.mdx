@@ -391,6 +391,8 @@ weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
 
 <Note>
 `FunctionTool` 也会解析 `from __future__ import annotations` 产生的延迟注解。如果自动推导无法表达所需约束，优先使用 `input_schema`。
+
+使用 `functools.partial` 预先绑定参数时，请显式指定 `name`，并按需设置 `description`。自动推导仍会解析剩余参数的延迟自定义类型和 `Annotated` 元数据。按位置绑定的参数不会出现在参数描述中；按关键字绑定的参数会保留默认值，调用时仍可覆盖。
 </Note>
 
 <Note>
