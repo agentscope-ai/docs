@@ -53,6 +53,10 @@ hub = ClawSkillHub(
 | `timeout` | `30.0` | 单次请求超时时间，单位为秒 |
 | `max_retries` | `3` | 请求被限流后放弃前的重试次数 |
 
+<Note>
+`ClawSkillHub` 支持读取带有或不带开头字节顺序标记（BOM）的 UTF-8 `SKILL.md` 文件。技能卡片的 Markdown 正文不包含 YAML 前置信息。目录未提供描述时，卡片使用前置信息中的 `description`。
+</Note>
+
 ## 快速上手
 
 <Steps>
