@@ -82,6 +82,8 @@ grep = Grep(cwd="./project")
 
 [`LocalWorkspace.list_tools()`](/zh/versions/2.0.11dev/building-blocks/workspace/run-workspace) 会自动将工作区的 `workdir` 配置为这两个工具的搜索目录。
 
+`Grep` 的可选参数 `glob` 用于限定搜索的文件。整个字符串作为一个模式传入，空格和逗号不会将它拆分为多个模式。例如，`glob="*.{py,txt}"` 可同时搜索 Python 和文本文件。
+
 ### Bash
 
 `Bash` 工具执行 shell 命令并返回 stdout / stderr。它实现了所有可选接口方法，提供精细的权限控制。

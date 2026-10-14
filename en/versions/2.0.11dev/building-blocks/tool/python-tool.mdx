@@ -82,6 +82,8 @@ With `cwd` configured, `path="."` searches that directory and `path="src"` searc
 
 [`LocalWorkspace.list_tools()`](/en/versions/2.0.11dev/building-blocks/workspace/run-workspace) configures both search tools with the workspace's `workdir` automatically.
 
+The optional `glob` argument of `Grep` restricts which files are searched. Pass one complete pattern: spaces and commas do not split it into multiple patterns. For example, `glob="*.{py,txt}"` searches Python and text files.
+
 ### Bash
 
 The `Bash` tool executes shell commands and returns stdout/stderr. It implements every optional interface method to provide fine-grained permission control.
