@@ -146,6 +146,8 @@ workspace_manager = DaytonaWorkspaceManager(
     target="",
     # Sandbox operation timeout on the Daytona side.
     timeout_seconds=300,
+    # Provider idle-stop interval in minutes; 0 disables auto-stop.
+    auto_stop_interval=60,
     ttl=3600.0,
 )
 
@@ -209,6 +211,10 @@ app = create_app(
 ```
 
 </CodeGroup>
+
+For `DaytonaWorkspaceManager`, `auto_stop_interval` configures the sandbox's provider-side idle-stop policy in minutes: `None` preserves the provider policy, `0` disables auto-stop, and a positive integer sets the interval. Explicit values apply when creating or reattaching a sandbox. This is independent of `timeout_seconds` (individual operation timeout in seconds) and `ttl` (the manager's workspace-cache eviction interval in seconds). It does not alter the provider's auto-pause policy.
+
+For pause-capable sandbox classes, Daytona requires that auto-stop and auto-pause are not both nonzero. Choose a compatible [Daytona lifecycle policy](https://www.daytona.io/docs/en/persistence/) before setting a positive auto-stop interval.
 
 ## Isolation grain
 

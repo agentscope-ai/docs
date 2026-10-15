@@ -146,6 +146,8 @@ workspace_manager = DaytonaWorkspaceManager(
     target="",
     # Daytona 侧的沙箱操作超时时间。
     timeout_seconds=300,
+    # Daytona 空闲停机间隔，单位为分钟；0 禁用自动停机。
+    auto_stop_interval=60,
     ttl=3600.0,
 )
 
@@ -208,6 +210,10 @@ app = create_app(
 )
 ```
 </CodeGroup>
+
+`DaytonaWorkspaceManager` 的 `auto_stop_interval` 以分钟为单位配置 Daytona 侧的沙箱空闲停机策略：`None` 保留 Daytona 策略，`0` 禁用自动停机，正整数设置停机间隔。显式值会在新建或重新挂接沙箱时生效。此配置与 `timeout_seconds`（单次操作的超时秒数）及 `ttl`（工作区管理器缓存的空闲淘汰秒数）相互独立，也不会改变 Daytona 的自动暂停策略。
+
+对于支持自动暂停的沙箱类型，Daytona 要求自动停机和自动暂停间隔不能同时为非零值。设置正数停机间隔前，请先选择兼容的 [Daytona 生命周期策略](https://www.daytona.io/docs/en/persistence/)。
 
 ## 隔离粒度
 
