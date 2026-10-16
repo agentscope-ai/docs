@@ -273,6 +273,10 @@ AgentScope 推荐通过**知识库句柄 `KnowledgeBase`** 作为入口使用 RA
     ```
 
     </CodeGroup>
+
+    <Note>
+    `MilvusLiteStore` 的 `batch_size` 必须为正数。传入零或负数时，构造函数会抛出 `ValueError`。
+    </Note>
   </Step>
 </Steps>
 

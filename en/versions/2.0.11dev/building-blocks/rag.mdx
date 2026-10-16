@@ -273,6 +273,10 @@ Indexing a file goes through three steps — **file parsing → chunking → emb
     ```
 
     </CodeGroup>
+
+    <Note>
+    `MilvusLiteStore` requires a positive `batch_size`. Passing zero or a negative value raises `ValueError` when the store is constructed.
+    </Note>
   </Step>
 </Steps>
 
