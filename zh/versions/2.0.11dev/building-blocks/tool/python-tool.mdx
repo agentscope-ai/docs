@@ -364,8 +364,8 @@ toolkit = Toolkit(tools=[FunctionTool(get_weather)])
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `func` | `Callable` | 待包装的 Python 函数 |
-| `name` | `str \| None` | 覆盖工具名（默认取 `func.__name__`） |
-| `description` | `str \| None` | 覆盖描述（默认取 docstring） |
+| `name` | `str \| None` | 覆盖工具名（不传时从可调用对象推导） |
+| `description` | `str \| None` | 覆盖描述（不传时从可调用对象的 docstring 推导） |
 | `input_schema` | `dict \| type[BaseModel] \| None` | 显式指定 JSON Schema 或 Pydantic 参数模型；不传时从函数注解推导 |
 | `is_concurrency_safe` | `bool` | 是否可并发调用（默认 `True`） |
 | `is_read_only` | `bool` | 是否无副作用（默认 `False`） |
@@ -391,6 +391,8 @@ weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
 
 <Note>
 `FunctionTool` 也会解析 `from __future__ import annotations` 产生的延迟注解。如果自动推导无法表达所需约束，优先使用 `input_schema`。
+
+使用 `functools.partial` 预先绑定参数时，`FunctionTool` 默认沿用底层函数的名称和文档字符串；若 partial 自身显式设置了名称或文档字符串，则优先使用它们。仍可通过 `name` 和 `description` 覆盖工具名称和描述。自动推导会解析剩余参数的延迟自定义类型和 `Annotated` 元数据；partial 上显式设置且可解析的注解会覆盖原函数的对应注解。按位置绑定的参数不会出现在参数描述中；按关键字绑定的参数会保留默认值，调用时仍可覆盖。
 </Note>
 
 <Note>
