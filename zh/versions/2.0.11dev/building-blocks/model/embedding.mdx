@@ -131,6 +131,10 @@ asyncio.run(main())
 | `source` | `"api" \| "cache"` | 结果来自 API 还是缓存 |
 | `id` / `created_at` / `type` | `str` | 响应标识与时间戳；`type` 恒为 `"embedding"` |
 
+<Note>
+无法获取 token 用量时，`usage.tokens` 为 `None`。请求拆分为多个批次后，只要任一批次缺少用量信息或 token 数未知，合并后的总量就为 `None`。开发者统计用量时，请勿将 `None` 当作零。所有批次都有明确的 token 数时才会求和，缓存命中返回的零也参与计算。
+</Note>
+
 ### 多模态嵌入
 
 多模态模型（`DashScopeEmbeddingModel` 搭配 `qwen3-vl-embedding` 等，`GeminiEmbeddingModel` 搭配 `gemini-embedding-2`）在字符串之外还接受 `DataBlock` 输入（图片支持 URL 或 base64，视频支持 URL）：

@@ -131,6 +131,10 @@ Each `EmbeddingResponse` carries:
 | `source` | `"api" \| "cache"` | Whether the result came from the API or the cache |
 | `id` / `created_at` / `type` | `str` | Response identity and timestamp; `type` is always `"embedding"` |
 
+<Note>
+`usage.tokens` is `None` when the token count is unavailable. When a request spans multiple batches, the total is `None` if any batch has no usage information or an unknown token count. Do not treat `None` as zero when tracking usage. Reported counts, including zero-token cache hits, are summed when every batch has a known count.
+</Note>
+
 ### Multimodal Embedding
 
 Multimodal models (`DashScopeEmbeddingModel` with `qwen3-vl-embedding` etc., `GeminiEmbeddingModel` with `gemini-embedding-2`) accept `DataBlock` inputs alongside strings (images as URL or base64, videos as URL):
