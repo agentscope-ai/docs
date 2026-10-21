@@ -122,6 +122,8 @@ async def main():
 asyncio.run(main())
 ```
 
+For a single Ollama API batch, `response.usage.tokens` preserves the API's `prompt_eval_count`, including zero. If the API omits the count or returns null, that batch's token count is `None`. A full embedding-cache hit reports zero tokens.
+
 Each `EmbeddingResponse` carries:
 
 | Field | Type | Description |

@@ -122,6 +122,8 @@ async def main():
 asyncio.run(main())
 ```
 
+对于单个 Ollama API 批次，`response.usage.tokens` 保留 API 返回的 `prompt_eval_count`，包括零值。API 未返回该字段或返回空值时，该批次的 token 数为 `None`。嵌入缓存完全命中时，token 数为零。
+
 每个 `EmbeddingResponse` 包含：
 
 | 字段 | 类型 | 说明 |
