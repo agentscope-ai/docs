@@ -262,6 +262,8 @@ class MyProviderEmbeddingModel(EmbeddingModelBase[str]):
         ...
 ```
 
+调用基类构造函数时，`batch_size` 必须为正整数；传入零或负数会抛出 `ValueError`。
+
 按模型 API 支持的输入类型绑定泛型参数：纯文本用 `EmbeddingModelBase[str]`，多模态用 `EmbeddingModelBase[str | DataBlock]`，IDE 会据此为调用方提示正确的 `inputs` 类型。
 
 ### 步骤 3：添加模型卡片（可选）
