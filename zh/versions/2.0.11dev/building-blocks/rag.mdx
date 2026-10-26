@@ -3,7 +3,7 @@ title: "RAG"
 description: "为智能体构建检索增强生成（RAG）能力。"
 ---
 
-AgentScope 中的 RAG 由如下**可独立替换**的功能模块组成：
+AgentScope 支持在本地组织检索流程，也支持连接托管知识库。本地 RAG 流程由以下几个**可独立替换**的模块组成：
 
 | 功能模块 | 描述 |
 | ---- | ---- |
@@ -368,7 +368,7 @@ AgentScope 的 RAG 原生支持多模态数据的入库与检索，关键在于�
 
 ### 集成到智能体
 
-通过 `RAGMiddleware` 把检索接入智能体类 `Agent` 的推理-行动循环。中间件不拥有嵌入模型或向量库——它消费的是**一组已经构造好的 `KnowledgeBase` 句柄**，可以混合多个使用不同嵌入模型的知识库。
+通过 `RAGMiddleware` 把检索接入智能体类 `Agent` 的推理-行动循环。中间件接收**一组已经构造好的 `KnowledgeBaseBase` 句柄**，既支持本地的 `KnowledgeBase`，也支持托管的 `RAGFlowKnowledgeBase`。智能体使用这些句柄期间，需要保持其资源可用。
 
 `RAGMiddleware` 支持两种工作模式（`RAGMiddleware.Parameters.mode`），可以单独使用，也可以**叠加使用**（同时挂两个不同 `mode` 的实例）：
 
@@ -500,6 +500,76 @@ rag_mw = RAGMiddleware(
 <Warning>
 重排每次检索都会额外调用一次大模型。候选数越多、内容越长，延迟与成本越高，建议从默认的 `2 × top_k` 开始调整。
 </Warning>
+
+## 使用 RAGFlow 数据集
+
+通过 `RAGFlowKnowledgeBase`，可以检索由 [RAGFlow](https://ragflow.io/) 负责解析、切块、嵌入和索引的数据集。在 RAGFlow 中完成这些服务的配置后，使用 API 密钥把 AgentScope 连接到该数据集。
+
+运行示例前，开发者需要准备可访问的 RAGFlow 服务、API 密钥，以及已经完成文档索引的数据集。将 `RAGFLOW_BASE_URL` 设为服务根地址，例如 `http://localhost:9380`；AgentScope 会为请求添加 `/api/v1` 路径。将 `RAGFLOW_API_KEY` 和 `RAGFLOW_DATASET_ID` 分别设为控制台中的密钥与数据集标识。
+
+下面的完整程序检索数据集、查看少量分块，并在结束时关闭 HTTP 客户端：
+
+```python ragflow_knowledge.py
+import asyncio
+import os
+
+from agentscope.rag import RAGFlowConfig, RAGFlowKnowledgeBase
+
+
+async def main():
+    knowledge = RAGFlowKnowledgeBase(
+        name="handbook",
+        description="Company policies indexed in RAGFlow.",
+        config=RAGFlowConfig(
+            api_key=os.environ["RAGFLOW_API_KEY"],
+            base_url=os.environ["RAGFLOW_BASE_URL"],
+            dataset_id=os.environ["RAGFLOW_DATASET_ID"],
+            similarity_threshold=0.2,  # 未单独指定阈值时使用此默认值。
+        ),
+    )
+    try:
+        hits = await knowledge.search(
+            ["What is the leave policy?"],
+            top_k=3,
+            score_threshold=0.1,  # 仅覆盖本次调用的检索阈值。
+        )
+        for hit in hits:
+            print(hit.document_id, hit.chunk.source, hit.score)
+
+        documents = await knowledge.list_documents()
+        if documents:
+            chunks = await knowledge.list_chunks(
+                documents[0].document_id,
+                offset=0,  # 文档内从零开始的分块位置。
+                limit=3,
+            )
+            print("Chunk indices:", [chunk.chunk_index for chunk in chunks])
+    finally:
+        await knowledge.aclose()
+
+
+asyncio.run(main())
+```
+
+程序先输出命中文档的标识、来源和分数。数据集中存在文档时，最后一行会输出至多三个分块索引。
+
+`search` 接收字符串和 `TextBlock` 查询。由于检索接口只接收文本，`DataBlock` 查询会被忽略。多个查询的结果按 RAGFlow 分块标识去重，并按分数排序。可以显式传入 `score_threshold=0.0`；省略此参数时，使用 `RAGFlowConfig.similarity_threshold`。
+
+句柄还提供以下文档操作：
+
+| 方法 | 行为 |
+| --- | --- |
+| `upload_document(blob, filename, metadata=None)` | 上传文件字节，可选写入文档元数据，然后启动解析并返回文档标识 |
+| `list_documents()` | 列出文档，并通过各摘要的 `metadata` 返回处理状态 |
+| `list_chunks(document_id, offset=0, limit=30)` | 返回文档内指定范围的分块 |
+| `delete_document(document_id)` | 删除文档及其托管分块 |
+| `aclose()` | 关闭句柄持有的 HTTP 客户端 |
+
+上传会在 RAGFlow 中启动异步任务。检索刚上传的文件前，需要通过 `list_documents()` 检查其处理状态，等待索引完成。上传被接受，并不代表该文档已经可以检索。
+
+需要在服务端按元数据筛选时，按 [RAGFlow 原生筛选语法](https://ragflow.io/docs/v1.0.0-rc2/http_api_reference#retrieve-chunks) 设置 `RAGFlowConfig.metadata_condition`。`knn_top_k`、`rerank_id` 等检索默认值也在 `RAGFlowConfig` 中配置。
+
+要让智能体使用该数据集，可在[集成到智能体](#集成到智能体)的示例中，将句柄传给 `RAGMiddleware(knowledge_bases=[knowledge], ...)`。两种知识库实现都遵循 `KnowledgeBaseBase` 接口。在智能体结束使用或应用退出时，调用 `aclose()` 释放资源。
 
 ## 自定义拓展
 
