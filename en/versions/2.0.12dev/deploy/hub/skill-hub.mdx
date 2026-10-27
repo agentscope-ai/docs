@@ -54,6 +54,10 @@ hub = ClawSkillHub(
 | `timeout` | `30.0` | Per-request timeout in seconds |
 | `max_retries` | `3` | Retries before giving up on a rate-limited request |
 
+<Note>
+`ClawSkillHub` reads UTF-8 `SKILL.md` files with or without a leading byte order mark (BOM). The skill card's Markdown excludes YAML frontmatter. If the catalog provides no description, the card uses the frontmatter's `description`.
+</Note>
+
 ## Quickstart
 
 <Steps>
