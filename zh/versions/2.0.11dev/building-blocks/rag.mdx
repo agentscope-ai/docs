@@ -555,6 +555,8 @@ asyncio.run(main())
 
 `search` 接收字符串和 `TextBlock` 查询。由于检索接口只接收文本，`DataBlock` 查询会被忽略。多个查询的结果按 RAGFlow 分块标识去重，并按分数排序。可以显式传入 `score_threshold=0.0`；省略此参数时，使用 `RAGFlowConfig.similarity_threshold`。
 
+一次 `search` 调用中的查询作为一个整体执行。任意查询失败时，会取消其余请求并等待它们结束，再抛出原始异常。取消检索任务也会停止其请求，因此可以像示例一样在 `finally` 中安全调用 `aclose()`。
+
 句柄还提供以下文档操作：
 
 | 方法 | 行为 |

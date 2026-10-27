@@ -556,6 +556,8 @@ The first output lines identify matching documents and their scores. When the da
 
 `search` accepts text strings and `TextBlock` queries; it ignores `DataBlock` queries because the retrieval endpoint accepts text. Results are deduplicated across queries by RAGFlow chunk ID and sorted by score. Passing `score_threshold=0.0` is supported; omitting the argument uses `RAGFlowConfig.similarity_threshold`.
 
+`search` treats its queries as one operation. If a query fails, it cancels and waits for the remaining requests before raising the original error. Cancelling the search also stops its requests, so `aclose()` can safely run in a `finally` block.
+
 The handle exposes the following document operations:
 
 | Method | Behavior |
