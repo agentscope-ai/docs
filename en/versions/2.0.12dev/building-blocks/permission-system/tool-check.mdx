@@ -1,0 +1,108 @@
+---
+title: "Tool-Level Checks"
+description: "Runtime safety analysis each tool performs on its own inputs"
+---
+
+Beyond rules and modes, each tool analyzes its actual call inputs at runtime through two interface methods: `check_read_only()` powers the read-only fast path, and `check_permissions()` performs the tool's own safety analysis. AgentScope's built-in tools cover three areas:
+
+| Check | What It Does | Active In |
+|-------|--------------|-----------|
+| [Read-only detection](#read-only-commands) | Parses each invocation and auto-allows factually read-only calls | Every mode |
+| [Dangerous path protection](#dangerous-path-protection) | Flags operations touching sensitive files with a bypass-immune safety ASK | `DEFAULT` / `ACCEPT_EDITS` (converted to DENY in `DONT_ASK`; skipped in `BYPASS`) |
+| Working-directory auto-allow | Auto-allows `Write` / `Edit` inside configured working directories; `Bash` filesystem commands require **every** target path inside a working directory | `ACCEPT_EDITS` / `DONT_ASK` |
+
+The working-directory auto-allow is always subordinate to the safety checks: a dangerous operation inside a working directory still ASKs or DENYs.
+
+## Custom Tools
+
+A custom tool implements `check_permissions()` to add tool-specific permission logic. Tools whose read-only status depends on the input (like `Bash`: `ls` is read-only, `rm` is not) should also override `check_read_only()`.
+
+```python
+from agentscope.tool import ToolBase
+from agentscope.permission import PermissionContext, PermissionDecision, PermissionBehavior
+
+class MyTool(ToolBase):
+    name = "MyTool"
+    # Static default. For tools whose answer depends on input, leave
+    # this as the conservative default and override check_read_only().
+    is_read_only = False
+
+    async def check_read_only(self, tool_input: dict) -> bool:
+        """Optional: dynamic read-only check.
+
+        Defaults to returning self.is_read_only. Override when whether
+        an invocation modifies state depends on the input. The engine
+        calls this for the read-only fast path in every mode (the
+        auto-allow that runs before check_permissions).
+        """
+        return tool_input.get("operation") in {"list", "describe", "get"}
+
+    async def check_permissions(
+        self,
+        tool_input: dict,
+        context: PermissionContext,
+    ) -> PermissionDecision:
+        target = tool_input.get("target")
+
+        # Custom safety check: block operations on production resources.
+        # Setting bypass_immune=True makes this ASK survive allow rules
+        # in DEFAULT/ACCEPT_EDITS/DONT_ASK; BYPASS still skips it.
+        if target and target.startswith("prod-"):
+            return PermissionDecision(
+                behavior=PermissionBehavior.ASK,
+                message=f"Operation targets production resource: {target}",
+                decision_reason="Safety check: production resource",
+                bypass_immune=True,
+            )
+
+        # Return PASSTHROUGH to let the engine continue with rules/mode
+        return PermissionDecision(behavior=PermissionBehavior.PASSTHROUGH)
+```
+
+## Safety Check Contract
+
+A **safety check** is a tool-emitted ASK that the tool considers too dangerous to be silently overridden, e.g. `Write` to `~/.bashrc` or `Bash` with `rm -rf /`. Setting `bypass_immune=True` on the decision asks the engine to surface the ASK to the user even when an allow rule matches or the mode would otherwise auto-allow.
+
+Use it whenever a wrong call would cause damage the user almost certainly didn't intend. Example: a custom `DeployTool` returns `bypass_immune=True` when the target is `prod-*`, so a blanket `allow_rules["DeployTool"] = ["*"]` configured for staging cannot accidentally authorize a production deploy.
+
+The exact handling per mode:
+
+| Mode | `bypass_immune=True` ASK is... |
+|------|-------------------------------|
+| `DEFAULT` | honored; allow rules cannot override it |
+| `ACCEPT_EDITS` | honored; same as `DEFAULT` |
+| `EXPLORE` | not applicable (the engine does not call `check_permissions` in EXPLORE; the read-only verdict is final) |
+| `BYPASS` | **ignored**; BYPASS skips all safety ASKs by design |
+| `DONT_ASK` | converted to DENY (no user available to answer) |
+
+A regular ASK (`bypass_immune=False`, the default) can be overridden by a matching allow rule in `DEFAULT`/`ACCEPT_EDITS`, and is silently allowed by `BYPASS`'s fallback.
+
+## Read-Only Commands
+
+Common read-only bash commands are auto-allowed without any rules, in **every mode** (including `DEFAULT`). A compound command (`&&`, `||`, `;`, `|`) is read-only only if **all** subcommands are read-only. Output redirections (`>`, `>>`) always make a command non-read-only. A command flagged with command-injection risk (e.g. `ls $(rm -rf /)`) is **not** treated as read-only, so it is not auto-allowed here; it falls through to the tool's safety check.
+
+<AccordionGroup>
+  <Accordion title="Full read-only command list">
+    | Category | Commands |
+    |----------|----------|
+    | Git | `git status`, `git log`, `git diff`, `git show`, `git branch`, `git blame`, `git grep`, `git reflog`, `git config --list` |
+    | Files | `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `find`, `tree`, `stat`, `wc`, `pwd`, `which` |
+    | Docker | `docker ps`, `docker images`, `docker logs`, `docker inspect`, `docker info` |
+    | GitHub CLI | `gh repo view`, `gh issue list`, `gh pr list`, `gh status` |
+    | Package managers | `npm list`, `pip list`, `pip show`, `node --version`, `python --version` |
+  </Accordion>
+</AccordionGroup>
+
+## Dangerous Path Protection
+
+<Warning>
+Operations targeting the following paths trigger a bypass-immune ASK in `DEFAULT`, `ACCEPT_EDITS`, and `DONT_ASK` (converted to DENY in `DONT_ASK`). `BYPASS` mode explicitly skips this check; if you need dangerous-path protection while running in BYPASS, add deny rules for the specific paths.
+</Warning>
+
+| Category | Paths |
+|----------|-------|
+| Shell configs | `.bashrc`, `.zshrc`, `.bash_profile`, `.profile` |
+| Git configs | `.gitconfig`, `.gitmodules` |
+| SSH | `.ssh/config`, `.ssh/authorized_keys`, `id_rsa`, `id_ed25519` |
+| Credentials | `.env`, `.env.local`, `.npmrc`, `.pypirc`, `.aws/credentials` |
+| Directories | `.git/`, `.ssh/`, `.claude/`, `.vscode/`, `.aws/`, `.kube/` |
