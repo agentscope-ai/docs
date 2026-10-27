@@ -187,6 +187,10 @@ Indexing a file goes through three steps — **file parsing → chunking → emb
     ```
 
     </CodeGroup>
+
+    <Note>
+    `PPTParser` emits the original bytes of embedded images and, when available, their media type. Choose an embedding model that supports the embedded image format.
+    </Note>
   </Step>
 
   <Step title="Split into Chunks">
