@@ -1,0 +1,107 @@
+---
+title: "工具内置检查"
+description: "工具在运行时对自身输入执行的安全分析"
+---
+
+在规则与模式之外，每个工具还会在运行时通过两个接口方法分析真实的调用入参：`check_read_only()` 支撑只读快速通道，`check_permissions()` 执行工具自身的安全分析。AgentScope 内置工具覆盖三类检查：
+
+| 检查 | 作用 | 生效模式 |
+|------|------|----------|
+| [只读判定](#只读命令) | 解析每一次调用，自动放行事实上只读的调用 | 所有模式 |
+| [危险路径保护](#危险路径保护) | 对触及敏感文件的操作发出不可绕过的安全 ASK | `DEFAULT` / `ACCEPT_EDITS`（`DONT_ASK` 下转为 DENY；`BYPASS` 下跳过） |
+| 工作目录自动放行 | 自动放行已配置工作目录内的 `Write` / `Edit`；Bash 文件系统命令要求**所有**目标路径都在工作目录内 | `ACCEPT_EDITS` / `DONT_ASK` |
+
+工作目录自动放行始终从属于安全检查：工作目录内的危险操作仍会询问或拒绝。
+
+## 自定义工具
+
+自定义工具通过实现 `check_permissions()` 添加自己的权限逻辑。如果工具的只读性取决于输入（比如 `Bash`：`ls` 是只读，`rm` 不是），还应该覆写 `check_read_only()`。
+
+```python
+from agentscope.tool import ToolBase
+from agentscope.permission import PermissionContext, PermissionDecision, PermissionBehavior
+
+class MyTool(ToolBase):
+    name = "MyTool"
+    # 静态默认值。对于结果取决于输入的工具，把这里设成保守默认，
+    # 然后覆写 check_read_only()。
+    is_read_only = False
+
+    async def check_read_only(self, tool_input: dict) -> bool:
+        """可选：动态只读判定。
+
+        默认返回 self.is_read_only。当某次调用是否修改状态取决于
+        输入时进行覆写。引擎在每种模式下都会用它执行只读快速通道
+        （即在 check_permissions 之前运行的自动放行）。
+        """
+        return tool_input.get("operation") in {"list", "describe", "get"}
+
+    async def check_permissions(
+        self,
+        tool_input: dict,
+        context: PermissionContext,
+    ) -> PermissionDecision:
+        target = tool_input.get("target")
+
+        # 自定义安全检查：阻止操作生产资源。
+        # 设置 bypass_immune=True 让这条 ASK 在 DEFAULT / ACCEPT_EDITS /
+        # DONT_ASK 下不被允许规则覆盖；BYPASS 模式仍然会跳过。
+        if target and target.startswith("prod-"):
+            return PermissionDecision(
+                behavior=PermissionBehavior.ASK,
+                message=f"Operation targets production resource: {target}",
+                decision_reason="Safety check: production resource",
+                bypass_immune=True,
+            )
+
+        # 返回 PASSTHROUGH 让引擎继续按规则 / 模式评估
+        return PermissionDecision(behavior=PermissionBehavior.PASSTHROUGH)
+```
+
+## 安全检查契约
+
+**安全检查**（safety check）是工具自己发出、认为太危险而不能被静默放行的 ASK，例如写入 `~/.bashrc` 的 `Write`、执行 `rm -rf /` 的 `Bash`。在决策上设置 `bypass_immune=True`，即使命中了允许规则或处于会自动放行的模式，引擎也仍然把 ASK 呈现给用户。
+
+适用于「一次错误调用就会造成用户几乎肯定不想发生的破坏」的场景。例如：自定义的 `DeployTool` 在目标是 `prod-*` 时返回 `bypass_immune=True`，那么为预发环境配置的 `allow_rules["DeployTool"] = ["*"]` 也不会意外授权生产部署。
+
+各模式下的具体处理：
+
+| 模式 | `bypass_immune=True` 的 ASK |
+|------|----------------------------|
+| `DEFAULT` | 尊重，允许规则不能将其覆盖 |
+| `ACCEPT_EDITS` | 尊重，同 `DEFAULT` |
+| `EXPLORE` | 不适用（EXPLORE 不会调用 `check_permissions`，只读判定就已经决断了一切） |
+| `BYPASS` | **忽略**，BYPASS 按设计跳过所有安全 ASK |
+| `DONT_ASK` | 转为 DENY（没有用户可以回答） |
+
+普通 ASK（`bypass_immune=False`，默认值）可以被 `DEFAULT` / `ACCEPT_EDITS` 下命中的允许规则覆盖，在 `BYPASS` 下被兜底放行。
+
+## 只读命令
+
+常见的只读 bash 命令在没有任何规则的情况下也会被自动放行，在**所有模式**（包括 `DEFAULT`）下都生效。复合命令（`&&`、`||`、`;`、`|`）只有在**所有**子命令都只读时才视为只读。输出重定向（`>`、`>>`）会让命令立即失去只读属性。被标记为命令注入风险的命令（如 `ls $(rm -rf /)`）**不**视为只读，因此不会在此自动放行，而是落到工具的安全检查上。
+
+<AccordionGroup>
+  <Accordion title="完整只读命令列表">
+    | 类别 | 命令 |
+    |------|------|
+    | Git | `git status`、`git log`、`git diff`、`git show`、`git branch`、`git blame`、`git grep`、`git reflog`、`git config --list` |
+    | 文件 | `ls`、`cat`、`head`、`tail`、`grep`、`rg`、`find`、`tree`、`stat`、`wc`、`pwd`、`which` |
+    | Docker | `docker ps`、`docker images`、`docker logs`、`docker inspect`、`docker info` |
+    | GitHub CLI | `gh repo view`、`gh issue list`、`gh pr list`、`gh status` |
+    | 包管理器 | `npm list`、`pip list`、`pip show`、`node --version`、`python --version` |
+  </Accordion>
+</AccordionGroup>
+
+## 危险路径保护
+
+<Warning>
+针对以下路径的操作在 `DEFAULT`、`ACCEPT_EDITS`、`DONT_ASK` 下触发不可绕过的 ASK（`DONT_ASK` 下转为 DENY）。`BYPASS` 模式按设计跳过此检查；如果在 BYPASS 下仍需要危险路径保护，请为具体路径添加拒绝规则。
+</Warning>
+
+| 类别 | 路径 |
+|------|------|
+| Shell 配置 | `.bashrc`、`.zshrc`、`.bash_profile`、`.profile` |
+| Git 配置 | `.gitconfig`、`.gitmodules` |
+| SSH | `.ssh/config`、`.ssh/authorized_keys`、`id_rsa`、`id_ed25519` |
+| 凭证 | `.env`、`.env.local`、`.npmrc`、`.pypirc`、`.aws/credentials` |
+| 目录 | `.git/`、`.ssh/`、`.claude/`、`.vscode/`、`.aws/`、`.kube/` |
