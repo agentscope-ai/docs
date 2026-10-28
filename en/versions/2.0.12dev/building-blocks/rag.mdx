@@ -3,7 +3,7 @@ title: "RAG"
 description: "Build retrieval-augmented generation (RAG) capabilities for agents."
 ---
 
-In AgentScope, RAG is composed of the following **independently replaceable** modules:
+AgentScope supports local retrieval pipelines and managed knowledge bases. A local RAG pipeline uses the following **independently replaceable** modules:
 
 | Module | Description |
 | ---- | ---- |
@@ -368,7 +368,7 @@ When the parser yields `Chunk`s containing multimodal content and `embedding_mod
 
 ### Integrating with an Agent
 
-`RAGMiddleware` plugs retrieval into the `Agent` class's reasoning-acting loop. The middleware does not own the embedding model or the vector store — it consumes **a list of pre-built `KnowledgeBase` handles**, which may mix knowledge bases that use different embedding models.
+`RAGMiddleware` plugs retrieval into the `Agent` class's reasoning-acting loop. It consumes **a list of pre-built `KnowledgeBaseBase` handles**, including local `KnowledgeBase` and managed `RAGFlowKnowledgeBase` instances. Keep each handle's resources open until the agent has finished using it.
 
 `RAGMiddleware` supports two working modes (`RAGMiddleware.Parameters.mode`), which can be used individually or **combined** (by attaching two instances with different `mode`s):
 
@@ -501,6 +501,78 @@ Reranking applies to both modes. What to keep in mind:
 <Warning>
 Reranking costs one extra LLM call per retrieval. The more and the longer the candidates, the higher the latency and cost, so start from the default `2 × top_k` and tune from there.
 </Warning>
+
+## Use a RAGFlow Dataset
+
+Use `RAGFlowKnowledgeBase` to retrieve from a dataset whose parsing, chunking, embedding and indexing are managed by [RAGFlow](https://ragflow.io/). Configure those services in RAGFlow, then connect AgentScope to the dataset with an API key.
+
+Before running the example, the developer needs a reachable RAGFlow server, an API key and an existing dataset with indexed documents. Set `RAGFLOW_BASE_URL` to the server root, such as `http://localhost:9380`; AgentScope adds `/api/v1` to requests. Set `RAGFLOW_API_KEY` and `RAGFLOW_DATASET_ID` to the key and dataset identifier from the RAGFlow console.
+
+The following program searches the dataset, inspects a small chunk window and closes the HTTP client:
+
+```python ragflow_knowledge.py
+import asyncio
+import os
+
+from agentscope.rag import RAGFlowConfig, RAGFlowKnowledgeBase
+
+
+async def main():
+    knowledge = RAGFlowKnowledgeBase(
+        name="handbook",
+        description="Company policies indexed in RAGFlow.",
+        config=RAGFlowConfig(
+            api_key=os.environ["RAGFLOW_API_KEY"],
+            base_url=os.environ["RAGFLOW_BASE_URL"],
+            dataset_id=os.environ["RAGFLOW_DATASET_ID"],
+            similarity_threshold=0.2,  # Default for searches without an override.
+        ),
+    )
+    try:
+        hits = await knowledge.search(
+            ["What is the leave policy?"],
+            top_k=3,
+            score_threshold=0.1,  # Override the default for this call only.
+        )
+        for hit in hits:
+            print(hit.document_id, hit.chunk.source, hit.score)
+
+        documents = await knowledge.list_documents()
+        if documents:
+            chunks = await knowledge.list_chunks(
+                documents[0].document_id,
+                offset=0,  # Zero-based position within this document.
+                limit=3,
+            )
+            print("Chunk indices:", [chunk.chunk_index for chunk in chunks])
+    finally:
+        await knowledge.aclose()
+
+
+asyncio.run(main())
+```
+
+The first output lines identify matching documents and their scores. When the dataset contains documents, the last line prints up to three chunk indices.
+
+`search` accepts text strings and `TextBlock` queries; it ignores `DataBlock` queries because the retrieval endpoint accepts text. Results are deduplicated across queries by RAGFlow chunk ID and sorted by score. Passing `score_threshold=0.0` is supported; omitting the argument uses `RAGFlowConfig.similarity_threshold`.
+
+`search` treats its queries as one operation. If a query fails, it cancels and waits for the remaining requests before raising the original error. Cancelling the search also stops its requests, so `aclose()` can safely run in a `finally` block.
+
+The handle exposes the following document operations:
+
+| Method | Behavior |
+| --- | --- |
+| `upload_document(blob, filename, metadata=None)` | Uploads file bytes, optionally writes document metadata, starts parsing and returns a document ID |
+| `list_documents()` | Lists documents and includes processing status in each summary's `metadata` |
+| `list_chunks(document_id, offset=0, limit=30)` | Returns a chunk window within a document |
+| `delete_document(document_id)` | Deletes the document and its managed chunks |
+| `aclose()` | Closes the HTTP client owned by the handle |
+
+Uploading starts asynchronous work in RAGFlow. Before searching a newly uploaded file, check its processing status through `list_documents()` and wait for indexing to finish. An accepted upload does not guarantee that the document is already searchable.
+
+For server-side metadata filtering, set `RAGFlowConfig.metadata_condition` using [RAGFlow's native filter syntax](https://ragflow.io/docs/v1.0.0-rc2/http_api_reference#retrieve-chunks). Other retrieval defaults, such as `knn_top_k` and `rerank_id`, are also configured on `RAGFlowConfig`.
+
+To use this dataset in an agent, supply the handle in `RAGMiddleware(knowledge_bases=[knowledge], ...)` in the [agent integration examples](#integrating-with-an-agent). Both knowledge implementations share the `KnowledgeBaseBase` interface. Call `aclose()` after the agent finishes or during application shutdown.
 
 ## Custom Extensions
 
