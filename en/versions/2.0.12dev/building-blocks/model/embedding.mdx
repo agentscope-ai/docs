@@ -194,6 +194,8 @@ async def main():
 asyncio.run(main())
 ```
 
+Both `max_file_number` and `max_cache_size` accept non-negative integers or `None`. `None` leaves the corresponding budget unlimited. A zero file-count budget removes embedding files after a write; a zero size budget discards the newly written entry without evicting older entries beyond what the file-count budget requires. Negative values raise `ValueError` when the cache is constructed.
+
 When `max_file_number` or `max_cache_size` is exceeded, the oldest files are evicted first. To use a different backend (Redis, SQLite, ...), subclass `EmbeddingCacheBase` and implement its four methods: `store`, `retrieve`, `remove`, and `clear`.
 
 ## Custom Embedding Provider
