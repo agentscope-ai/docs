@@ -649,6 +649,8 @@ A model card carries the following fields:
 | `parameter_schema` | JSON schema for the request parameters, auto-merged with per-model overrides. |
 | `parameters_overrides` | Per-model deltas applied on top of the base parameter schema. |
 
+When the chat service constructs a model, it also uses defaults declared as `parameter_overrides.<parameter>.default` in the matching card's YAML to fill parameters omitted from the session configuration. Explicit session values, including `null`, take precedence. Overrides such as `maximum` only describe schema constraints; they do not become runtime parameter values. Models without a matching card keep the provider parameter class's defaults.
+
 Example YAML for a multimodal model that accepts text, images, and video and emits text plus thinking traces:
 
 ```yaml qwen3.6-plus.yaml
