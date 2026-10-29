@@ -83,6 +83,47 @@ model = DashScopeChatModel(
 | `context_size` | `int` | 上下文窗口大小，用于上下文压缩 |
 | `formatter` | `FormatterBase \| None` | 覆盖默认的消息格式化器（参见[格式化器](#格式化器)） |
 
+### Kimi K3.1 Pro
+
+通过 `MoonshotChatModel` 调用 `kimi-k3.1-pro` 或 `kimi-k3.1-pro-highspeed`。两种型号均支持 1,048,576 token 上下文、视觉输入、流式输出和工具调用。直接创建模型对象时，请设置 `context_size=1048576`，使 AgentScope 使用正确的上下文预算。
+
+以下示例返回包含思考过程和答案的内容块：
+
+```python K3.1 Pro
+import asyncio
+import os
+from agentscope.credential import MoonshotCredential
+from agentscope.message import UserMsg
+from agentscope.model import MoonshotChatModel
+
+async def main():
+    model = MoonshotChatModel(
+        credential=MoonshotCredential(api_key=os.environ["MOONSHOT_API_KEY"]),
+        model="kimi-k3.1-pro",  # 也可选择 kimi-k3.1-pro-highspeed
+        context_size=1048576,
+        stream=False,
+        parameters=MoonshotChatModel.Parameters(
+            max_tokens=4096,  # 请求中使用 max_completion_tokens
+            reasoning_effort="low",
+        ),
+    )
+    try:
+        response = await model([UserMsg("user", "Explain binary search.")])
+        print(response.content)
+    finally:
+        await model.client.close()
+
+asyncio.run(main())
+```
+
+思考模式始终开启。`reasoning_effort` 可选 `low`、`high`、`max`，不设置时使用 API 默认值 `max`。调用时传入的 `reasoning_effort` 优先于 `Parameters` 中的配置。
+
+`Parameters.max_tokens` 和调用时传入的 `max_tokens` 均转换为 `max_completion_tokens`。调用参数优先于模型配置；调用时同时传入两种字段名，以 `max_completion_tokens` 为准。不设置预算时使用 API 默认值 131072，API 允许的最大值为 1048576。
+
+对于这两种型号，AgentScope 会自动省略 `temperature`、`top_p`、`n`、`presence_penalty`、`frequency_penalty` 和 `thinking`，即使开发者在调用参数或 `extra_body` 中显式设置了这些字段。API 的采样参数固定为 1.0、0.95、1、0、0。模型卡片隐藏采样字段和思考开关；结构化输出回退也会保持思考开启。
+
+单智能体使用默认的 `MoonshotChatFormatter`，多智能体场景使用 `MoonshotMultiAgentFormatter`。回传工具结果时，应在对话中保留模型返回的思考和工具调用内容块，不要仅保留纯文本。接口约定见 [K3.1 Pro 官方指南](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart)。
+
 ## 调用模型
 
 通过传入一组 `Msg` 对象（以及可选的 `tools` 和 `tool_choice`）调用模型：

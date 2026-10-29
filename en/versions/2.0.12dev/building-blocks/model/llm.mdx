@@ -83,6 +83,47 @@ Common constructor arguments shared by every chat model:
 | `context_size` | `int` | Context window used for context compression |
 | `formatter` | `FormatterBase \| None` | Override message formatter (see [Formatter](#formatter)) |
 
+### Kimi K3.1 Pro
+
+Use `MoonshotChatModel` with `kimi-k3.1-pro` or `kimi-k3.1-pro-highspeed`. Both models support a 1,048,576-token context window, vision, streaming, and tool calls. When constructing a model directly, set `context_size=1048576` so AgentScope uses the correct context budget.
+
+The following example returns content blocks containing the model's reasoning and answer:
+
+```python K3.1 Pro
+import asyncio
+import os
+from agentscope.credential import MoonshotCredential
+from agentscope.message import UserMsg
+from agentscope.model import MoonshotChatModel
+
+async def main():
+    model = MoonshotChatModel(
+        credential=MoonshotCredential(api_key=os.environ["MOONSHOT_API_KEY"]),
+        model="kimi-k3.1-pro",  # Or kimi-k3.1-pro-highspeed
+        context_size=1048576,
+        stream=False,
+        parameters=MoonshotChatModel.Parameters(
+            max_tokens=4096,  # Sent as max_completion_tokens
+            reasoning_effort="low",
+        ),
+    )
+    try:
+        response = await model([UserMsg("user", "Explain binary search.")])
+        print(response.content)
+    finally:
+        await model.client.close()
+
+asyncio.run(main())
+```
+
+Thinking is always enabled. Set `reasoning_effort` to `low`, `high`, or `max`; omitting it uses the API default of `max`. A call-level `reasoning_effort` overrides the value in `Parameters`.
+
+`Parameters.max_tokens` and call-level `max_tokens` are sent as `max_completion_tokens`. Call-level budgets override the model configuration; if both call-level names are supplied, `max_completion_tokens` takes precedence. Omit the budget to use the API default of 131072; the API maximum is 1048576.
+
+For these two models, AgentScope automatically omits `temperature`, `top_p`, `n`, `presence_penalty`, `frequency_penalty`, and `thinking`, even when explicitly supplied as call arguments or inside `extra_body`. The API uses fixed sampling values (1.0, 0.95, 1, 0, and 0 respectively). The model cards hide the sampling fields and thinking toggle. Structured-output fallback also keeps thinking enabled.
+
+Use the default `MoonshotChatFormatter`, or `MoonshotMultiAgentFormatter` for multiple agents. Keep the returned thinking and tool-call blocks in the conversation when adding tool results; do not reduce the model response to plain text. See the [official K3.1 Pro guide](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart) for the API contract.
+
 ## Call Chat Model
 
 Invoke the model by calling it with a list of `Msg` objects, plus optional `tools` and `tool_choice`:
