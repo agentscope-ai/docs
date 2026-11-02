@@ -150,7 +150,7 @@ Steps and the run as a whole share one set of phases, `SOPPhase`:
 
 | Phase | Meaning |
 |-------|---------|
-| `PENDING` | Not started, or refused and waiting to be retried |
+| `PENDING` | Not started, refused and waiting to be retried, or interrupted without a verdict |
 | `RUNNING` | In progress |
 | `AWAITING` | Parked until an outside answer arrives |
 | `COMPLETED` | Accepted |
@@ -181,6 +181,14 @@ async for event in engine.reply_stream(user_confirm_result_event):
 | `ExternalExecutionResultEvent` | The result of an external execution, passed to the parked step |
 | `UserInterruptEvent` | Abandon the parked call. The attempt is dropped without counting as a refusal, and the step goes back to `PENDING` |
 | `None` | Continue from the current state with no new input |
+
+### Interrupt an Active Run
+
+If cancelling the task that consumes `reply_stream` makes the active executor or verifier return a final message with `finished_reason=INTERRUPTED`, the engine forwards the remaining interruption events and stops dispatching. It does not treat the missing structured output as a reason to retry, start the verifier, or advance to the next step.
+
+The interrupted step returns to `PENDING`, its current submission is cleared, and no refusal or verification verdict is recorded for that attempt. Developers can send a new explicit request to run the abandoned step again. This differs from answering a tool confirmation, which resumes a parked call.
+
+Interruption does not roll back tools or other external side effects that have already happened. Check those effects before explicitly retrying work that is not safe to repeat.
 
 ### Persist the Run State
 

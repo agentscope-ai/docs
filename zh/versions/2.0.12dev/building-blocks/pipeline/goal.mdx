@@ -162,6 +162,12 @@ async for event in pipe.reply_stream(user_confirm_result_event):
 迭代预算记在流水线实例上，而不是 `reply_stream` 的局部变量里，因此中断恢复不会让已经用掉的次数回满。
 </Note>
 
+### 中断正在执行的运行
+
+取消消费 `reply_stream` 的任务后，如果当前执行者或验证者返回 `finished_reason=INTERRUPTED` 的最终消息，流水线会继续转发剩余的中断事件，然后结束本次运行。中断回复缺少结构化输出时，不会触发重试或调度另一个智能体，也不会额外消耗重试或验证预算。
+
+需要重新执行时，向 `reply_stream` 传入新的 `Msg` 或 `list[Msg]`。这会开始新的运行，而不是恢复已中断的尝试。中断不会撤销已完成的工具操作或外部副作用，重复执行前应先核对这些结果。
+
 ## 终端调试
 
 调试流水线最省事的方式，是把它整个交给[终端 UI](/zh/versions/2.0.12dev/building-blocks/console)，不需要任何适配代码：
