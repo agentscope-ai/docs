@@ -162,6 +162,12 @@ Resuming does not require saying who to resume. The event carries the `reply_id`
 The attempt budget lives on the pipeline instance rather than inside `reply_stream`, so resuming does not hand the run a fresh set of attempts.
 </Note>
 
+### Interrupt an Active Run
+
+If cancelling the task that consumes `reply_stream` makes the active executor or verifier return a final message with `finished_reason=INTERRUPTED`, the pipeline forwards the remaining interruption events and ends the run. Missing structured output in that interrupted reply does not trigger another attempt or dispatch the other agent, and the interruption consumes no additional retry or verification budget.
+
+To start again, pass a new `Msg` or `list[Msg]` to `reply_stream`. This starts a fresh run rather than resuming the interrupted attempt. Interruption does not undo completed tools or external side effects, so check those effects before repeating the work.
+
 ## Debugging in the Terminal
 
 The quickest way to watch a pipeline is to hand the whole thing to the [console](/en/versions/2.0.12dev/building-blocks/console), with no adapter code:
