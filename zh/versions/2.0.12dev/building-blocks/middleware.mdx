@@ -143,6 +143,45 @@ agent = Agent(
 Agent 收到 `ExternalExecutionResultEvent`（外部执行的工具结果）时，`TracingMiddleware` 会为每条外部执行结果合成一个补偿 span，让外部系统执行的工具也能保留完整可观测性。
 </Info>
 
+#### 将追踪数据发送到 MLflow
+
+开发者可以通过 MLflow 的 [OTLP 接收端点](https://mlflow.org/docs/latest/genai/tracing/opentelemetry/ingest/)，将现有的智能体回复、模型调用和工具执行追踪发送到指定实验。此方式要求 MLflow 3.6.0 或更新版本，并使用 SQL 数据库作为追踪服务的存储后端。`/v1/traces` 端点接收 OTLP/HTTP protobuf，不支持 OTLP/gRPC。
+
+安装 MLflow 后，使用 SQLite 后端启动本地追踪服务：
+
+```bash 本地追踪服务
+mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
+```
+
+在 MLflow 界面中创建或选择实验，并将实验 ID 写入环境变量 `MLFLOW_EXPERIMENT_ID`。运行智能体前，用以下配置替换上面的通用收集器配置：
+
+```python MLflow 导出器
+import os
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+provider = TracerProvider()
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="http://127.0.0.1:5000/v1/traces",
+            # 将导出的全部追踪数据写入指定的 MLflow 实验。
+            headers={"x-mlflow-experiment-id": os.environ["MLFLOW_EXPERIMENT_ID"]},
+            timeout=10,
+        ),
+    ),
+)
+trace.set_tracer_provider(provider)
+```
+
+保留上面为智能体配置的 `TracingMiddleware`。应用退出时，应刷新并关闭由当前进程创建的 `TracerProvider`，以便发送队列中的追踪数据。[可运行的 MLflow 追踪示例](https://github.com/agentscope-ai/agentscope/tree/main/examples/mlflow)提供了完整的配置和清理说明。此方式导出追踪数据，不会自动创建 MLflow 实验运行、记录运行指标或附件，也不会自动计算费用。
+
+<Warning>
+`TracingMiddleware` 会在追踪数据中包含消息内容、工具参数和工具结果。请使用不含敏感信息的示例数据，或在发送到追踪服务前审查并脱敏。
+</Warning>
+
 #### 添加自定义 Span
 
 如需在智能体生命周期内追踪自定义操作，可直接使用 [OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/)。获取一个作用域为 AgentScope 的 tracer，并将目标代码包裹在 span 中：
