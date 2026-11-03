@@ -1,0 +1,54 @@
+---
+title: "Skill"
+description: "Extend agent capabilities with markdown instruction sets"
+---
+
+Skills are markdown-based instruction sets that extend agent capabilities without writing new tool code. Each skill is a directory containing a `SKILL.md` file with frontmatter metadata and detailed instructions.
+
+Unlike tools, skills are not callable directly. The agent uses the auto-registered `Skill` viewer tool to read a skill's instructions, then follows those instructions using its existing tools.
+
+## Register Skill
+
+Pass skill sources to the `Toolkit` constructor through `skills_or_loaders`. Each entry can be a directory path string, a `Skill` object, or a `SkillLoaderBase` subclass:
+
+<CodeGroup>
+```python Directory path (simple)
+from agentscope.tool import Toolkit
+
+toolkit = Toolkit(
+    skills_or_loaders=["/path/to/skills"],
+)
+```
+
+```python LocalSkillLoader (with subdirectory scanning)
+from agentscope.tool import Toolkit
+from agentscope.skill import LocalSkillLoader
+
+loader = LocalSkillLoader(
+    directory="/path/to/skills",
+    scan_subdir=True,
+)
+
+toolkit = Toolkit(skills_or_loaders=[loader])
+```
+</CodeGroup>
+
+## How Skill Works
+
+When a `Toolkit` is constructed with skills, the registration and lookup flow runs in two phases.
+
+At initialization:
+
+- The toolkit scans every registered skill source and collects each skill's name, description, and directory.
+- It auto-registers the built-in `Skill` viewer tool.
+- It composes a system-prompt fragment listing the available skills (name and description only) and instructing the agent to invoke the `Skill` viewer to read the full content.
+
+At runtime:
+
+- The agent picks a skill by name and calls the `Skill` viewer.
+- The viewer reads the corresponding `SKILL.md` and returns its full markdown.
+- The agent follows those instructions using its already-equipped tools.
+
+<Note>
+Skills are not tools: the agent cannot call a skill directly. It must first use the `Skill` viewer to read the instructions, then execute the steps described within using its other tools.
+</Note>
