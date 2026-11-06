@@ -522,15 +522,70 @@ bash = Bash(middlewares=[LoggingMiddleware(), RetryMiddleware(max_attempts=3)])
 
 ### 执行前校验
 
-通过 `ToolMiddlewareBase`，开发者可以在工具函数执行前检查待执行的动作。[执行前校验示例](https://github.com/agentscope-ai/agentscope/tree/main/examples/action_validation)检查通知参数的结构、工具名称、允许的收件人，以及宿主提供的智能体身份、工作流和有效期。通过校验的通知只记录到本地列表，无需模型或邮件服务器。
+挂载 `ToolValidationMiddleware(validator)`，可以在执行前按 `tool.input_schema` 和应用策略校验工具的最终参数。开发者需提供签名为 `validator(tool: ToolBase, arguments: dict[str, Any]) -> str | None` 的**同步**回调，只检查参数，不修改参数或执行受保护的动作。
 
-`NotificationValidationMiddleware` 使用 `jsonschema.validate` 检查最终参数。任何一项校验失败时，它都会产出 `state=ToolResultState.DENIED` 的 `ToolChunk` 并立即返回，不调用 `next_handler`，因此工具函数不会执行。
+传入不可调用的值或协程形式的校验器，会在构造中间件时抛出 `TypeError`。
+
+以下示例只允许宿主指定的收件人，通过校验的通知记录到本地列表：
+
+```python title="校验通知"
+import asyncio
+from agentscope.tool import FunctionTool, ToolBase, ToolValidationMiddleware
+
+allowed_recipient = "support@example.com"  # 宿主提供的可信策略，不由模型输入。
+sent = []
+
+
+def send_notification(recipient: str, message: str) -> str:
+    """只在本地记录通知，不发送邮件。"""
+    sent.append((recipient, message))
+    return "通知已记录。"
+
+
+def validate_notification(tool: ToolBase, arguments: dict) -> str | None:
+    if tool.name != "send_notification":
+        return "未授权的动作。"
+    if arguments["recipient"] != allowed_recipient:
+        return "未授权的收件人。"
+    return None  # 只有返回 None 才允许执行函数。
+
+
+async def main():
+    tool = FunctionTool(
+        send_notification,
+        middlewares=[ToolValidationMiddleware(validate_notification)],
+    )
+    for recipient in (allowed_recipient, "outside@example.com"):
+        async for chunk in await tool(recipient=recipient, message="Ready"):
+            print(chunk.content[0].text)
+    assert len(sent) == 1
+
+
+asyncio.run(main())
+```
+
+示例依次输出 `通知已记录。` 和 `未授权的收件人。`，只有第一次调用会执行工具函数。
+
+中间件按以下规则处理校验结果：
+
+| 结果 | 行为 |
+|---|---|
+| 参数不符合工具的 JSON Schema | 产出 `ToolChunk(state=ToolResultState.DENIED)`，不调用回调或工具函数 |
+| 回调返回 `None` | 使用通过校验的参数执行工具，透传工具输出 |
+| 回调返回字符串，包括空字符串 `""` | 产出 `DENIED`，使用该字符串作为拒绝原因，不执行工具函数 |
+| 回调返回其他类型，包括可等待对象 | 抛出 `TypeError`，不执行工具函数 |
+| 回调修改传入的参数副本 | 抛出 `ValueError`，不执行工具函数 |
+| 参数结构定义无效、复制参数失败或回调抛出异常 | 向调用方传递异常，不执行工具函数 |
+
+直接消费工具调用产生的流时，异常会向外传播。`Toolkit.call_tool` 仍按原有规则处理错误，包括将普通异常转换为 `ERROR` 结果。
 
 将校验中间件放在列表的**最后**，让它在所有改写参数的中间件之后执行。智能体侧的参数结构校验发生得更早，无法检查后续改写的结果。外层中间件应通过调用链委托执行受保护的动作，不能在校验前自行执行该动作。
 
-宿主在模型参数之外提供 `ExecutionContext`。智能体身份、工作流授权和带时区的有效期应来自应用的可信状态，不能由模型参数授予权限。将工具实例绑定到对应工作流，不要跨工作流共享其中的授权。
+开始消费校验流时，中间件会深拷贝业务参数。回调收到另一份独立副本，工具函数收到通过校验的副本，因此回调即使保留参数引用，也无法改写后续执行的工具参数。对于启用状态注入、且既非 MCP 也非外部执行的工具，内部 `_agent_state` 不参与业务参数校验，而是按原始引用传给工具。它不能作为调用者身份的凭据。
 
-在 AgentScope 仓库根目录运行离线示例：
+通过宿主闭包或 `functools.partial` 绑定可信的身份、工作流授权、目标和有效期，不要从模型输入中获取授权，也不要跨工作流共享已授权的工具实例。检查有效期时，在每次回调执行时读取时钟，到达或超过截止时间即拒绝。校验发生在消费调用流时，而不是仅创建流时；通过校验表示允许开始执行，不保证动作在截止时间前完成，也不会中止或撤销已经开始的动作。
+
+[完整的执行前校验示例](https://github.com/agentscope-ai/agentscope/tree/main/examples/action_validation)进一步演示如何绑定宿主提供的智能体身份、工作流和带时区的有效期。在 AgentScope 仓库根目录运行，无需模型或邮件服务器：
 
 ```bash title="运行校验示例"
 # 从当前源码安装 AgentScope。
@@ -541,7 +596,7 @@ python examples/action_validation/main.py
 示例会记录一条合法通知，拒绝未经授权的收件人和无效参数，最后输出 `Notifications recorded: 1`。
 
 <Note>
-该示例仅覆盖通过 `await tool(...)` 或 `Toolkit.call_tool` 调用的指定 `FunctionTool`。智能体调用时仍须通过原有权限检查；直接调用工具不会运行智能体的权限引擎。直接调用 `tool.call(...)` 或原始函数会绕过中间件，外部执行工具和未挂载校验中间件的工具也不在保护范围内。示例不负责身份认证、防重放，也无法撤销已经开始的动作。
+该中间件覆盖通过 `await tool(...)` 或 `Toolkit.call_tool` 调用的已挂载工具。智能体调用时仍须通过原有权限检查；直接调用工具不会运行智能体的权限引擎。直接调用 `tool.call(...)` 或原始函数会绕过中间件，外部执行工具和未挂载校验中间件的工具也不在保护范围内。它不负责身份认证或防重放。
 </Note>
 
 <Note>

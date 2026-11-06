@@ -522,15 +522,70 @@ bash = Bash(middlewares=[LoggingMiddleware(), RetryMiddleware(max_attempts=3)])
 
 ### Validate Before Execution
 
-Use `ToolMiddlewareBase` to check a proposed action before the wrapped function executes. The [pre-execution validation example](https://github.com/agentscope-ai/agentscope/tree/main/examples/action_validation) checks a notification's argument schema, tool name, allowed recipient, and host-provided agent/workflow context with an expiry. It records accepted notifications in a local list, without a model or mail server.
+Attach `ToolValidationMiddleware(validator)` to check the final tool arguments against `tool.input_schema` and an application policy before execution. Supply a **synchronous** callback with the signature `validator(tool: ToolBase, arguments: dict[str, Any]) -> str | None`. It must inspect the arguments without modifying them or performing the protected action.
 
-`NotificationValidationMiddleware` validates the final arguments with `jsonschema.validate`. If a check fails, it yields a `ToolChunk` with `state=ToolResultState.DENIED` and returns without calling `next_handler`, so the wrapped function does not run.
+Passing a non-callable value or a coroutine validator raises `TypeError` at construction.
+
+This runnable example allows only the host-selected recipient and records accepted notifications locally:
+
+```python title="Validate A Notification"
+import asyncio
+from agentscope.tool import FunctionTool, ToolBase, ToolValidationMiddleware
+
+allowed_recipient = "support@example.com"  # Trusted host policy, not model input.
+sent = []
+
+
+def send_notification(recipient: str, message: str) -> str:
+    """Record a notification locally without sending email."""
+    sent.append((recipient, message))
+    return "Notification recorded."
+
+
+def validate_notification(tool: ToolBase, arguments: dict) -> str | None:
+    if tool.name != "send_notification":
+        return "The action is not authorized."
+    if arguments["recipient"] != allowed_recipient:
+        return "The recipient is not authorized."
+    return None  # Only None allows the function to run.
+
+
+async def main():
+    tool = FunctionTool(
+        send_notification,
+        middlewares=[ToolValidationMiddleware(validate_notification)],
+    )
+    for recipient in (allowed_recipient, "outside@example.com"):
+        async for chunk in await tool(recipient=recipient, message="Ready"):
+            print(chunk.content[0].text)
+    assert len(sent) == 1
+
+
+asyncio.run(main())
+```
+
+The example prints `Notification recorded.` followed by `The recipient is not authorized.`. Only the first call reaches the function.
+
+The middleware handles validation outcomes as follows:
+
+| Outcome | Behavior |
+|---|---|
+| Arguments fail the tool's JSON Schema | Yield `ToolChunk(state=ToolResultState.DENIED)` without calling the validator or function |
+| Callback returns `None` | Execute with the checked arguments and forward the tool's output |
+| Callback returns a string, including `""` | Yield `DENIED` with that reason, without calling the function |
+| Callback returns any other type, including an awaitable | Raise `TypeError` without calling the function |
+| Callback modifies its argument copy | Raise `ValueError` without calling the function |
+| Invalid schema, argument-copy failure, or callback exception | Propagate the error without calling the function |
+
+Errors propagate when consuming a direct tool invocation. `Toolkit.call_tool` retains its normal error handling, including converting ordinary exceptions into an `ERROR` result.
 
 Register this validation middleware **last**, after any middleware that rewrites arguments. Agent-side schema validation happens earlier and cannot check later rewrites. Outer middleware must delegate the protected action rather than perform it before validation.
 
-The host supplies `ExecutionContext` outside the model's arguments. Derive identity, workflow authorization, and the timezone-aware expiry from trusted application state; model input must not grant itself authority. Bind the tool instance to that workflow instead of sharing its authority across workflows.
+Business arguments are deep-copied when the validation stream is consumed. The callback receives a separate copy; the function receives the checked copy, so retaining the callback's argument reference cannot change the later tool payload. For state-injected, non-MCP, non-external tools, internal `_agent_state` is excluded from business validation and forwarded by reference. It is not evidence of caller identity.
 
-From a checkout of the AgentScope repository, run the offline example:
+Bind trusted identity, workflow authorization, destinations, and validity windows through a host closure or `functools.partial`, outside model input. Do not share a tool instance carrying one workflow's authority across workflows. For expiry checks, read the clock inside the callback and reject at or after the deadline: validation runs when the invocation stream is consumed, not merely when it is created. Passing that check admits execution; it does not impose a hard deadline, revoke running work, or undo its effects.
+
+The [complete pre-execution validation example](https://github.com/agentscope-ai/agentscope/tree/main/examples/action_validation) adds a host-bound agent/workflow context and timezone-aware expiry. From a checkout of the AgentScope repository, run it without a model or mail server:
 
 ```bash title="Run The Validation Example"
 # Install AgentScope from this checkout.
@@ -541,7 +596,7 @@ python examples/action_validation/main.py
 The example accepts one notification, blocks an unauthorized recipient and invalid arguments, and prints `Notifications recorded: 1`.
 
 <Note>
-This example applies to the selected `FunctionTool` through `await tool(...)` or `Toolkit.call_tool`. Agent permission checks still apply when an agent calls it; direct calls do not run the permission engine. Calling `tool.call(...)` or the original function bypasses the middleware, and externally executed or unwrapped tools are outside its scope. The example does not authenticate identity, implement replay protection, or undo an action that has already started.
+This middleware protects the wrapped tool through `await tool(...)` or `Toolkit.call_tool`. Agent permission checks still apply when an agent calls it; direct calls do not run the permission engine. Calling `tool.call(...)` or the original function bypasses the middleware, and externally executed or unwrapped tools are outside its scope. It does not authenticate identity or provide replay protection.
 </Note>
 
 <Note>
