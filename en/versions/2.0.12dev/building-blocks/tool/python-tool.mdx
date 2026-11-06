@@ -520,6 +520,30 @@ class RetryMiddleware(ToolMiddlewareBase):
 bash = Bash(middlewares=[LoggingMiddleware(), RetryMiddleware(max_attempts=3)])
 ```
 
+### Validate Before Execution
+
+Use `ToolMiddlewareBase` to check a proposed action before the wrapped function executes. The [pre-execution validation example](https://github.com/agentscope-ai/agentscope/tree/main/examples/action_validation) checks a notification's argument schema, tool name, allowed recipient, and host-provided agent/workflow context with an expiry. It records accepted notifications in a local list, without a model or mail server.
+
+`NotificationValidationMiddleware` validates the final arguments with `jsonschema.validate`. If a check fails, it yields a `ToolChunk` with `state=ToolResultState.DENIED` and returns without calling `next_handler`, so the wrapped function does not run.
+
+Register this validation middleware **last**, after any middleware that rewrites arguments. Agent-side schema validation happens earlier and cannot check later rewrites. Outer middleware must delegate the protected action rather than perform it before validation.
+
+The host supplies `ExecutionContext` outside the model's arguments. Derive identity, workflow authorization, and the timezone-aware expiry from trusted application state; model input must not grant itself authority. Bind the tool instance to that workflow instead of sharing its authority across workflows.
+
+From a checkout of the AgentScope repository, run the offline example:
+
+```bash title="Run The Validation Example"
+# Install AgentScope from this checkout.
+pip install -e .
+python examples/action_validation/main.py
+```
+
+The example accepts one notification, blocks an unauthorized recipient and invalid arguments, and prints `Notifications recorded: 1`.
+
+<Note>
+This example applies to the selected `FunctionTool` through `await tool(...)` or `Toolkit.call_tool`. Agent permission checks still apply when an agent calls it; direct calls do not run the permission engine. Calling `tool.call(...)` or the original function bypasses the middleware, and externally executed or unwrapped tools are outside its scope. The example does not authenticate identity, implement replay protection, or undo an action that has already started.
+</Note>
+
 <Note>
 **Tool middleware vs. agent middleware**: use `ToolMiddlewareBase` for cross-cutting concerns that belong to the tool itself (logging, metrics, retry). Use `MiddlewareBase.on_acting` when you need access to the broader agent context, such as permission decisions, the tool-call event, or the surrounding ReAct round. See [Middleware](/en/versions/2.0.12dev/building-blocks/middleware) for the full agent-level hook reference.
 </Note>

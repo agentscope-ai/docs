@@ -520,6 +520,30 @@ class RetryMiddleware(ToolMiddlewareBase):
 bash = Bash(middlewares=[LoggingMiddleware(), RetryMiddleware(max_attempts=3)])
 ```
 
+### 执行前校验
+
+通过 `ToolMiddlewareBase`，开发者可以在工具函数执行前检查待执行的动作。[执行前校验示例](https://github.com/agentscope-ai/agentscope/tree/main/examples/action_validation)检查通知参数的结构、工具名称、允许的收件人，以及宿主提供的智能体身份、工作流和有效期。通过校验的通知只记录到本地列表，无需模型或邮件服务器。
+
+`NotificationValidationMiddleware` 使用 `jsonschema.validate` 检查最终参数。任何一项校验失败时，它都会产出 `state=ToolResultState.DENIED` 的 `ToolChunk` 并立即返回，不调用 `next_handler`，因此工具函数不会执行。
+
+将校验中间件放在列表的**最后**，让它在所有改写参数的中间件之后执行。智能体侧的参数结构校验发生得更早，无法检查后续改写的结果。外层中间件应通过调用链委托执行受保护的动作，不能在校验前自行执行该动作。
+
+宿主在模型参数之外提供 `ExecutionContext`。智能体身份、工作流授权和带时区的有效期应来自应用的可信状态，不能由模型参数授予权限。将工具实例绑定到对应工作流，不要跨工作流共享其中的授权。
+
+在 AgentScope 仓库根目录运行离线示例：
+
+```bash title="运行校验示例"
+# 从当前源码安装 AgentScope。
+pip install -e .
+python examples/action_validation/main.py
+```
+
+示例会记录一条合法通知，拒绝未经授权的收件人和无效参数，最后输出 `Notifications recorded: 1`。
+
+<Note>
+该示例仅覆盖通过 `await tool(...)` 或 `Toolkit.call_tool` 调用的指定 `FunctionTool`。智能体调用时仍须通过原有权限检查；直接调用工具不会运行智能体的权限引擎。直接调用 `tool.call(...)` 或原始函数会绕过中间件，外部执行工具和未挂载校验中间件的工具也不在保护范围内。示例不负责身份认证、防重放，也无法撤销已经开始的动作。
+</Note>
+
 <Note>
 **工具中间件 vs. 智能体中间件**：对属于工具本身的横切关注点（日志、指标、重试），使用 `ToolMiddlewareBase`。若需要访问更广泛的智能体上下文（权限决策、工具调用事件或所在的 ReAct 轮次），请使用 `MiddlewareBase.on_acting`。完整的智能体级钩子参考见[中间件](/zh/versions/2.0.12dev/building-blocks/middleware)。
 </Note>
