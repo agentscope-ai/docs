@@ -1,0 +1,54 @@
+---
+title: "Skill"
+description: "用 Markdown 指令集拓展智能体能力"
+---
+
+Skill（技能）是 Markdown 格式的指令集，无需写代码即可拓展智能体能力。每个 skill 是一个目录，固定包含一个带 frontmatter 元数据与详细指令的 `SKILL.md` 文件。
+
+与工具不同，skill 不能被直接调用。智能体通过自动注册的 `Skill` 查看器读取 skill 指令，再用现有的工具按指令执行。
+
+## 注册 Skill
+
+通过 `Toolkit` 的 `skills_or_loaders` 参数传入 skill 来源。每一项可以是目录路径字符串、`Skill` 对象，或 `SkillLoaderBase` 子类：
+
+<CodeGroup>
+```python 目录路径（简单）
+from agentscope.tool import Toolkit
+
+toolkit = Toolkit(
+    skills_or_loaders=["/path/to/skills"],
+)
+```
+
+```python LocalSkillLoader（含子目录扫描）
+from agentscope.tool import Toolkit
+from agentscope.skill import LocalSkillLoader
+
+loader = LocalSkillLoader(
+    directory="/path/to/skills",
+    scan_subdir=True,
+)
+
+toolkit = Toolkit(skills_or_loaders=[loader])
+```
+</CodeGroup>
+
+## Skill 的工作方式
+
+`Toolkit` 在含 skill 时，注册与查看分两阶段进行。
+
+初始化阶段：
+
+- Toolkit 扫描所有注册的 skill 来源，收集每个 skill 的名称、描述与目录。
+- 自动注册内置的 `Skill` 查看器。
+- 组装一段系统提示片段，列出可用 skill（仅名称与描述），并指示智能体通过 `Skill` 查看器读取完整内容。
+
+运行时阶段：
+
+- 智能体按名字选定一个 skill，调用 `Skill` 查看器。
+- 查看器读取对应 `SKILL.md`，返回完整 Markdown。
+- 智能体用已装备的工具按这些指令执行。
+
+<Note>
+Skill 不是工具：智能体不能直接调用 skill。它必须先用 `Skill` 查看器读取指令，再用其他工具按描述的步骤执行。
+</Note>

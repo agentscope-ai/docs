@@ -1,0 +1,114 @@
+---
+title: "Changelog"
+description: "Core differences between AgentScope 2.0 and 1.0"
+---
+
+AgentScope 2.0 is a breaking release. The notes below summarize the differences against 1.0, grouped by module.
+
+## Agent
+
+- Refactor `ReActAgent` into a new unified `Agent` class implementation.
+- Replace the `__call__` method in 1.0 with the `reply_stream` and `reply` public methods.
+- Support yielding agent events from `reply_stream` for richer observability and control.
+- Support **permission checks** and **human-in-the-loop** confirmations through the event stream.
+- Support offloading the compressed context and oversized tool results via a new `Offloader` interface.
+- Deprecate the hook mechanism and replace it with a new agent middleware system.
+- Deprecate the `state_dict` and `load_state_dict` methods, moving towards explicit state management through the new `AgentState` type.
+- Deprecate the `print` interface of the agent class, turning the agent into a pure producer.
+- Deprecate the OpenTelemetry integration within the agent class and leave it to a new middleware implementation.
+
+## Event <Badge color="green" size="sm">New</Badge>
+
+- Add event system for better frontend integration and human-in-the-loop support.
+
+## Message
+
+Content blocks refactor:
+
+- Refactor all content blocks by inheriting from the Pydantic `BaseModel` for better validation, serialization, and extensibility.
+- Refactor `ImageBlock`, `AudioBlock`, `VideoBlock` into a unified `DataBlock` with a `media_type` field for extensibility.
+- Add `HintBlock` for agent guidance and intermediate reasoning.
+- Rename `ToolUseBlock` to `ToolCallBlock`.
+- Add `state` and `suggested_rules` fields to `ToolCallBlock` for richer tool-call lifecycle modeling.
+- Add `state` field to `ToolResultBlock` for richer tool-call lifecycle modeling.
+- Add `id` field for all blocks for better traceability and referencing.
+
+
+`Msg` class refactor:
+
+- Refactor `Msg` to inherit from `BaseModel` and enforce content validation.
+- Add `created_at`, `finished_at`, and `usage` fields to the `Msg` class for better observability and accounting.
+- Add `append_event` method to `Msg` for yielding events from the agent's reply stream.
+- Add factory methods `UserMsg`, `AssistantMsg`, and `SystemMsg` to create messages with the appropriate role.
+- Add `content` field constraints with the specified `role` types.
+
+
+## Permission <Badge color="green" size="sm">New</Badge>
+
+- Add a new permission system for gating tool execution, human-in-the-loop confirmation, and overall agent autonomy control.
+
+
+## Tool
+
+- Add `ToolBase` abstraction for all tools.
+- Refactor built-in tools:
+	- Add `Bash`, `Edit`, `Glob`, `Grep`, `Read`, and `Write` with permission control.
+	- Add `TaskCreate`, `TaskGet`, `TaskList`, and `TaskUpdate` for task management.
+
+`Toolkit` refactor:
+
+- Support tools, skills, MCPs, and tool groups as first-class citizens in the `Toolkit` abstraction.
+- Add `ToolGroup` for on-demand activation, with the reserved `basic` group always active.
+- Add the `ResetTools` meta-tool for the agent to switch tool groups at runtime.
+- Add `MCPTool` and `FunctionTool` adapters for uniform tool registration.
+
+## MCP
+
+- Refactor MCP implementation into a single `MCPClient` class for a unified client surface.
+- Add `StdioMCPConfig` and `HttpMCPConfig` declarative configuration types for typed MCP setup.
+
+## Skill <Badge color="green" size="sm">New</Badge>
+
+- Add skill loader abstraction to support in-time skill loading from the filesystem/sandbox/web.
+- Add `LocalSkillLoader` class to support directory-based skill loading and monitoring.
+- Support packaging skills into `ToolGroup`s for on-demand activation and better organization.
+
+## Workspace <Badge color="green" size="sm">New</Badge>
+
+- Add the workspace abstraction supplying tools, MCPs, skills, and context offloading through one unified interface.
+- Add `LocalWorkspace`, `DockerWorkspace`, and `E2BWorkspace` implementations sharing the same agent-facing API for swappable execution backends.
+- Add the `Offloader` protocol consumed by `Agent` for context compression and oversized tool-result handling.
+- Add `LocalWorkspaceManager`, `DockerWorkspaceManager`, and `E2BWorkspaceManager` with **agent-level isolation** for multi-tenant services.
+- Add an in-workspace **MCP gateway** so host-side agents can reach MCP servers running inside containers and sandboxes.
+
+## Model
+
+- Decouple credential management from the model classes and centralize it in a new `Credential` module.
+- Support credential-aware model listing and retrieval.
+- Support Kimi, Moonshot, DeepSeek, XAI, and OpenAI Response API.
+- Integrate formatter into the chat model abstraction and support default formatters for different model providers.
+- Add the `ModelCard` schema describing model identity, capabilities, and parameter overrides.
+- Add class method `list_models` for frontend model listing and selection.
+- Deprecate the `Trinity` model wrapper.
+
+## Middleware <Badge color="green" size="sm">New</Badge>
+
+- Refactor the hook mechanism into a more general agent middleware system.
+- Add `TracingMiddleware` as the new entry point for OpenTelemetry tracing, replacing the in-agent integration.
+
+## Agent Service <Badge color="green" size="sm">New</Badge>
+
+- Add a new FastAPI-based agent service and sandbox support in the `app` module.
+- Add the `create_app` FastAPI factory exposing agent, chat, model, credential, session, schedule, workspace, and background-task routers.
+- Add lifespan-scoped `SessionManager`, `SchedulerManager`, `BackgroundTaskManager`, and workspace managers for multi-tenant resource allocation.
+- Add `AGUIProtocolMiddleware` for streaming and `ToolOffloadMiddleware` for oversized payloads.
+- Add Redis-backed storage.
+
+## Memory
+
+- Deprecate the memory module in 2.0 due to its tight coupling with agent logic.
+
+## RAG & Long-Term Memory
+
+- Unify RAG and long-term memory into one module.
+- Migration from 1.0 to 2.0 is in progress; the module — knowledge bases, document readers, and stores — will return on top of the 2.0 architecture in upcoming releases.
