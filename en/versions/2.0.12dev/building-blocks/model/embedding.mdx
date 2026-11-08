@@ -262,6 +262,8 @@ class MyProviderEmbeddingModel(EmbeddingModelBase[str]):
         ...
 ```
 
+Pass a positive integer for `batch_size` to the base constructor; zero and negative values raise `ValueError`.
+
 Bind the generic parameter to the input type your provider supports: `EmbeddingModelBase[str]` for text-only, `EmbeddingModelBase[str | DataBlock]` for multimodal, so IDEs surface the correct `inputs` type to callers.
 
 ### Step 3: Add Model Cards (optional)
