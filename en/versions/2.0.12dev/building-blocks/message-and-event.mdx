@@ -62,6 +62,10 @@ These content blocks carry different data information, and their detailed fields
 <AccordionGroup>
   <Accordion title="TextBlock" description="Text data">
 
+    <Note>
+    Text and thinking blocks can retain model-specific metadata. When building conversation history from Gemini responses, keep the complete blocks in `response.content` so that thought signatures survive the next turn. Preserve the blocks with `Msg.model_dump_json()` and `Msg.model_validate_json()` when saving and restoring messages. Rebuilding blocks from visible text or combining signed blocks can discard the model's reasoning context.
+    </Note>
+
     | Field | Type | Description |
     |------|------|-------------|
     | `type` | `str` | Fixed as `"text"`. |

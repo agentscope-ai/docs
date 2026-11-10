@@ -57,6 +57,10 @@ AgentScope 中`Msg`类的一个实例容纳一次完整的对话信息——一�
 <AccordionGroup>
   <Accordion title="TextBlock" description="文本数据">
 
+    <Note>
+    文本块和思考块可以保留模型 API 的专用元数据。开发者手动构建 Gemini 的对话历史时，应保留 `response.content` 中的完整内容块，以便在下一轮请求中回传思考签名。保存和恢复消息时，可使用 `Msg.model_dump_json()` 和 `Msg.model_validate_json()`。仅根据可见文本重建内容块，或合并带签名的内容块，可能丢失模型的推理上下文。
+    </Note>
+
 
     | 字段 | 类型 | 说明 |
     |------|------|------|
