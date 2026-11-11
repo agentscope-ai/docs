@@ -83,6 +83,58 @@ Common constructor arguments shared by every chat model:
 | `context_size` | `int` | Context window used for context compression |
 | `formatter` | `FormatterBase \| None` | Override message formatter (see [Formatter](#formatter)) |
 
+### Use Gemini 4
+
+`GeminiChatModel` supports `gemini-4-argon` and `gemini-4-carbon`. Install `agentscope[model-gemini]` with `google-genai>=2.30.1`, and set the `GEMINI_API_KEY` environment variable before running this example. Change the model name to use Argon with the same configuration.
+
+The example requests a brief answer with medium reasoning effort and thought summaries:
+
+```python Gemini 4
+import asyncio
+import os
+
+from agentscope.credential import GeminiCredential
+from agentscope.message import UserMsg
+from agentscope.model import GeminiChatModel
+
+
+async def main():
+    model = GeminiChatModel(
+        credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
+        model="gemini-4-carbon",
+        stream=False,
+        parameters=GeminiChatModel.Parameters(
+            thinking_level="medium",
+            thinking_enable=True,  # Include summaries, not a reasoning toggle.
+            max_tokens=65_536,  # Budget shared by thinking and answer tokens.
+        ),
+    )
+    response = await model(
+        [UserMsg(name="user", content="Explain binary search briefly.")],
+    )
+    print(response.content)
+
+
+asyncio.run(main())
+```
+
+The response contains text and, when the model provides them, thought summaries. Set `stream=True` to consume the response as shown in [Call Chat Model](#call-chat-model).
+
+The adapter applies these rules to both Gemini 4 models:
+
+| Setting | Behavior |
+|---------|----------|
+| `thinking_level` | Accepts `"low"`, `"medium"`, or `"high"`. When omitted, the model defaults to medium. |
+| `thinking_enable` | Controls thought summaries. `False` does not disable reasoning. |
+| `thinking_budget` | Rejected in the final request configuration. Use `thinking_level`. |
+| `max_tokens` | Must not exceed 65,536 in the final configuration. The adapter does not support requesting larger long-decode budgets. |
+| `temperature`, `top_p`, `top_k` | Ignored. Each non-`None` value produces a warning and is omitted from the request, whether supplied at model level or per call. |
+| Client timeout | Defaults to 900,000 milliseconds (15 minutes). Explicit `client_kwargs={"http_options": {"timeout": ...}}` values are preserved; `0` disables the SDK's client timeout. Server limits still apply. |
+
+Per-call SDK configuration overrides model-level parameters before model-specific validation. For example, `await model(messages, thinking_config={"thinking_level": "LOW"}, max_output_tokens=32768)` overrides the configured effort and token budget. An explicit `None` clears the corresponding model-level setting; a supplied `thinking_config` replaces that whole setting rather than merging its nested fields. Validation runs before message formatting reads or downloads media.
+
+For these settings, per-call `thinkingConfig`, `maxOutputTokens`, `topP`, and `topK` are accepted as aliases for their snake_case names. Nested thinking fields are normalized by the SDK. Supplying both names for the same field is rejected. Prefer snake_case in Python code.
+
 ## Call Chat Model
 
 Invoke the model by calling it with a list of `Msg` objects, plus optional `tools` and `tool_choice`:
