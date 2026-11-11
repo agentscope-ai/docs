@@ -1,0 +1,1001 @@
+order_id,date,product,category,quantity,unit_price,discount,total,region,payment_method,customer_tier
+ORD-00123,2024-01-01,Mechanical Keyboard,Electronics,9,71.99,0.2,647.91,Central,Cash on Delivery,Premium
+ORD-00480,2024-01-01,Data Science Handbook,Books,3,38.24,0.15,114.72,Central,Cash on Delivery,VIP
+ORD-00569,2024-01-01,Coffee Maker,Home & Kitchen,9,80.99,0.1,728.91,North,Bank Transfer,VIP
+ORD-00646,2024-01-01,Air Purifier,Home & Kitchen,10,179.99,0.1,1799.9,West,Cash on Delivery,Premium
+ORD-00661,2024-01-01,USB-C Hub,Electronics,4,42.49,0.15,169.96,South,Credit Card,Premium
+ORD-00810,2024-01-01,Resistance Bands Set,Sports,5,19.99,0,99.95,North,Credit Card,Premium
+ORD-00019,2024-01-02,Machine Learning Guide,Books,3,52.24,0.05,156.72,East,PayPal,VIP
+ORD-00966,2024-01-02,Jump Rope,Sports,4,12.99,0,51.96,South,Bank Transfer,Premium
+ORD-00540,2024-01-03,Data Science Handbook,Books,1,38.24,0.15,38.24,South,PayPal,VIP
+ORD-00612,2024-01-03,Resistance Bands Set,Sports,2,19.99,0,39.98,Central,Cash on Delivery,VIP
+ORD-00649,2024-01-03,Machine Learning Guide,Books,5,54.99,0,274.95,North,Credit Card,VIP
+ORD-00004,2024-01-04,Desk Organizer,Home & Kitchen,5,18.39,0.2,91.95,South,Cash on Delivery,Premium
+ORD-00027,2024-01-04,Resistance Bands Set,Sports,10,19.99,0,199.9,North,Credit Card,Standard
+ORD-00345,2024-01-04,Jump Rope,Sports,8,12.99,0,103.92,Central,Cash on Delivery,Standard
+ORD-00907,2024-01-04,Mechanical Keyboard,Electronics,2,89.99,0,179.98,South,Credit Card,VIP
+ORD-00050,2024-01-05,Desk Organizer,Home & Kitchen,7,20.69,0.1,144.83,North,Credit Card,VIP
+ORD-00684,2024-01-05,Denim Jeans,Clothing,3,47.49,0.05,142.47,South,Cash on Delivery,Premium
+ORD-00483,2024-01-06,Webcam HD,Electronics,6,56.99,0.05,341.94,East,PayPal,Standard
+ORD-00854,2024-01-06,Running Shoes,Clothing,3,79.99,0,239.97,North,Credit Card,Standard
+ORD-00862,2024-01-06,USB-C Hub,Electronics,9,39.99,0.2,359.91,West,Cash on Delivery,VIP
+ORD-00105,2024-01-07,Winter Jacket,Clothing,2,103.99,0.2,207.98,Central,Bank Transfer,Premium
+ORD-00439,2024-01-07,Yoga Mat,Sports,1,23.99,0.2,23.99,South,Credit Card,Premium
+ORD-00552,2024-01-07,Smart Lamp,Home & Kitchen,4,34.99,0,139.96,North,Credit Card,VIP
+ORD-00584,2024-01-07,Dumbbell Set,Sports,7,55.99,0.2,391.93,Central,Credit Card,Standard
+ORD-00034,2024-01-08,Laptop Pro 15,Electronics,9,1039.99,0.2,9359.91,North,PayPal,Standard
+ORD-00167,2024-01-08,Webcam HD,Electronics,1,59.99,0,59.99,East,PayPal,VIP
+ORD-00428,2024-01-08,Laptop Pro 15,Electronics,10,1299.99,0,12999.9,East,PayPal,Standard
+ORD-00280,2024-01-09,Dumbbell Set,Sports,8,55.99,0.2,447.92,East,Bank Transfer,VIP
+ORD-00118,2024-01-11,Wireless Mouse,Electronics,10,26.99,0.1,269.9,East,Credit Card,Standard
+ORD-00546,2024-01-11,Webcam HD,Electronics,2,50.99,0.15,101.98,North,Credit Card,Premium
+ORD-00544,2024-01-12,Denim Jeans,Clothing,3,49.99,0,149.97,Central,PayPal,Standard
+ORD-00944,2024-01-12,USB-C Hub,Electronics,4,49.99,0,199.96,South,Bank Transfer,Premium
+ORD-00156,2024-01-13,Python Programming,Books,4,37.99,0.05,151.96,Central,Bank Transfer,VIP
+ORD-00696,2024-01-14,Mechanical Keyboard,Electronics,9,89.99,0,809.91,West,Credit Card,Standard
+ORD-00780,2024-01-14,Cotton T-Shirt,Clothing,3,19.99,0,59.97,Central,Bank Transfer,VIP
+ORD-00058,2024-01-15,Machine Learning Guide,Books,9,54.99,0,494.91,North,Bank Transfer,Standard
+ORD-00079,2024-01-15,Running Shoes,Clothing,7,75.99,0.05,531.93,West,Bank Transfer,VIP
+ORD-00518,2024-01-15,Running Shoes,Clothing,2,79.99,0,159.98,West,Credit Card,Standard
+ORD-00832,2024-01-15,Machine Learning Guide,Books,1,54.99,0,54.99,West,Credit Card,Standard
+ORD-00469,2024-01-16,USB-C Hub,Electronics,10,49.99,0,499.9,East,Credit Card,Premium
+ORD-00516,2024-01-16,Jump Rope,Sports,2,11.04,0.15,22.08,South,Bank Transfer,Premium
+ORD-00002,2024-01-17,Yoga Mat,Sports,10,28.49,0.05,284.9,North,Credit Card,Standard
+ORD-00012,2024-01-17,Python Programming,Books,4,31.99,0.2,127.96,East,Cash on Delivery,Premium
+ORD-00820,2024-01-17,USB-C Hub,Electronics,6,42.49,0.15,254.94,East,Cash on Delivery,Standard
+ORD-00744,2024-01-18,Water Bottle,Home & Kitchen,7,14.99,0,104.93,East,Credit Card,VIP
+ORD-00950,2024-01-18,Denim Jeans,Clothing,9,42.49,0.15,382.41,East,Bank Transfer,Standard
+ORD-00440,2024-01-19,Machine Learning Guide,Books,3,54.99,0,164.97,Central,Cash on Delivery,Standard
+ORD-00297,2024-01-20,Resistance Bands Set,Sports,9,16.99,0.15,152.91,South,Cash on Delivery,Standard
+ORD-00052,2024-01-21,Cotton T-Shirt,Clothing,5,19.99,0,99.95,East,PayPal,VIP
+ORD-00990,2024-01-21,AI Revolution,Books,9,25.49,0.15,229.41,North,Bank Transfer,Premium
+ORD-00089,2024-01-22,Python Programming,Books,10,31.99,0.2,319.9,East,Cash on Delivery,VIP
+ORD-00193,2024-01-22,Dumbbell Set,Sports,2,66.49,0.05,132.98,West,Credit Card,Premium
+ORD-00717,2024-01-22,AI Revolution,Books,3,25.49,0.15,76.47,Central,Credit Card,Premium
+ORD-00752,2024-01-22,Coffee Maker,Home & Kitchen,5,80.99,0.1,404.95,East,PayPal,Premium
+ORD-00234,2024-01-23,Monitor 27-inch,Electronics,6,399.99,0,2399.94,East,Bank Transfer,VIP
+ORD-00236,2024-01-23,Coffee Maker,Home & Kitchen,5,89.99,0,449.95,South,Credit Card,Premium
+ORD-00323,2024-01-23,Yoga Mat,Sports,4,25.49,0.15,101.96,West,Cash on Delivery,Standard
+ORD-00352,2024-01-24,Wool Scarf,Clothing,8,24.99,0,199.92,North,Bank Transfer,VIP
+ORD-00228,2024-01-25,Data Science Handbook,Books,5,44.99,0,224.95,South,Cash on Delivery,VIP
+ORD-00038,2024-01-26,Yoga Mat,Sports,6,29.99,0,179.94,Central,Cash on Delivery,VIP
+ORD-00457,2024-01-26,Running Shoes,Clothing,7,71.99,0.1,503.93,East,Bank Transfer,Standard
+ORD-00491,2024-01-26,AI Revolution,Books,4,29.99,0,119.96,West,Cash on Delivery,Standard
+ORD-00755,2024-01-26,Python Programming,Books,8,35.99,0.1,287.92,Central,Cash on Delivery,Premium
+ORD-00048,2024-01-27,Machine Learning Guide,Books,5,43.99,0.2,219.95,North,Cash on Delivery,Premium
+ORD-00106,2024-01-27,Water Bottle,Home & Kitchen,6,14.99,0,89.94,East,Cash on Delivery,Standard
+ORD-00168,2024-01-27,Python Programming,Books,3,39.99,0,119.97,South,Cash on Delivery,VIP
+ORD-00442,2024-01-27,Python Programming,Books,9,33.99,0.15,305.91,South,PayPal,VIP
+ORD-00718,2024-01-27,Smart Lamp,Home & Kitchen,4,34.99,0,139.96,South,Credit Card,Standard
+ORD-00865,2024-01-27,Desk Organizer,Home & Kitchen,3,20.69,0.1,62.07,East,Credit Card,Premium
+ORD-00915,2024-01-27,Jump Rope,Sports,1,12.99,0,12.99,Central,PayPal,Standard
+ORD-00104,2024-01-28,Resistance Bands Set,Sports,5,19.99,0,99.95,Central,Bank Transfer,VIP
+ORD-00564,2024-01-28,Air Purifier,Home & Kitchen,9,179.99,0.1,1619.91,North,PayPal,VIP
+ORD-00589,2024-01-28,Water Bottle,Home & Kitchen,6,13.49,0.1,80.94,North,Bank Transfer,Standard
+ORD-00605,2024-01-28,Python Programming,Books,2,39.99,0,79.98,South,Bank Transfer,VIP
+ORD-00615,2024-01-28,Wireless Mouse,Electronics,10,23.99,0.2,239.9,Central,Cash on Delivery,VIP
+ORD-00762,2024-01-28,Data Science Handbook,Books,2,44.99,0,89.98,South,PayPal,Premium
+ORD-00850,2024-01-28,Python Programming,Books,6,35.99,0.1,215.94,North,Bank Transfer,Standard
+ORD-00919,2024-01-28,Mechanical Keyboard,Electronics,10,85.49,0.05,854.9,West,PayPal,Standard
+ORD-00999,2024-01-28,Denim Jeans,Clothing,1,49.99,0,49.99,North,Cash on Delivery,VIP
+ORD-00350,2024-01-29,Water Bottle,Home & Kitchen,9,14.24,0.05,128.16,North,PayPal,Standard
+ORD-00471,2024-01-29,Running Shoes,Clothing,9,63.99,0.2,575.91,South,Cash on Delivery,Premium
+ORD-00585,2024-01-29,Air Purifier,Home & Kitchen,1,169.99,0.15,169.99,South,Bank Transfer,Standard
+ORD-00750,2024-01-29,Jump Rope,Sports,2,10.39,0.2,20.78,East,Bank Transfer,Premium
+ORD-00243,2024-01-30,Machine Learning Guide,Books,5,46.74,0.15,233.7,North,Cash on Delivery,Premium
+ORD-00880,2024-01-30,Laptop Pro 15,Electronics,10,1299.99,0,12999.9,Central,PayPal,VIP
+ORD-00110,2024-01-31,Smart Lamp,Home & Kitchen,10,31.49,0.1,314.9,Central,Credit Card,Standard
+ORD-00559,2024-01-31,Cotton T-Shirt,Clothing,3,16.99,0.15,50.97,South,Credit Card,Premium
+ORD-00766,2024-01-31,Yoga Mat,Sports,5,29.99,0,149.95,East,PayPal,VIP
+ORD-00459,2024-02-01,Wireless Mouse,Electronics,2,29.99,0,59.98,South,PayPal,Standard
+ORD-00586,2024-02-01,AI Revolution,Books,3,23.99,0.2,71.97,East,PayPal,VIP
+ORD-00026,2024-02-02,Coffee Maker,Home & Kitchen,4,89.99,0,359.96,East,Credit Card,VIP
+ORD-00436,2024-02-02,Machine Learning Guide,Books,5,49.49,0.1,247.45,East,Credit Card,Premium
+ORD-00629,2024-02-02,Wireless Mouse,Electronics,8,29.99,0,239.92,East,Bank Transfer,Standard
+ORD-00233,2024-02-04,Python Programming,Books,6,31.99,0.2,191.94,East,PayPal,VIP
+ORD-00616,2024-02-04,Yoga Mat,Sports,5,25.49,0.15,127.45,East,Credit Card,Standard
+ORD-00668,2024-02-04,Mechanical Keyboard,Electronics,2,89.99,0,179.98,West,PayPal,VIP
+ORD-00805,2024-02-04,AI Revolution,Books,6,28.49,0.05,170.94,West,Credit Card,Premium
+ORD-00813,2024-02-04,Running Shoes,Clothing,5,63.99,0.2,319.95,East,Bank Transfer,VIP
+ORD-00878,2024-02-04,Webcam HD,Electronics,1,47.99,0.2,47.99,North,Cash on Delivery,Standard
+ORD-00708,2024-02-05,Dumbbell Set,Sports,7,69.99,0,489.93,South,PayPal,Premium
+ORD-00890,2024-02-05,Water Bottle,Home & Kitchen,7,14.24,0.05,99.68,Central,PayPal,Standard
+ORD-00604,2024-02-06,Wool Scarf,Clothing,7,21.24,0.15,148.68,South,Credit Card,Premium
+ORD-00734,2024-02-06,Data Science Handbook,Books,10,38.24,0.15,382.4,North,PayPal,VIP
+ORD-00887,2024-02-06,Python Programming,Books,1,39.99,0,39.99,Central,Bank Transfer,Premium
+ORD-00899,2024-02-06,Resistance Bands Set,Sports,10,19.99,0,199.9,North,PayPal,Premium
+ORD-00916,2024-02-06,Mechanical Keyboard,Electronics,9,89.99,0,809.91,South,Cash on Delivery,VIP
+ORD-00203,2024-02-07,Yoga Mat,Sports,6,26.99,0.1,161.94,East,Cash on Delivery,Premium
+ORD-00315,2024-02-07,Python Programming,Books,4,35.99,0.1,143.96,North,Cash on Delivery,Premium
+ORD-00359,2024-02-07,Dumbbell Set,Sports,4,59.49,0.15,237.96,North,Bank Transfer,Standard
+ORD-00153,2024-02-08,AI Revolution,Books,2,28.49,0.05,56.98,South,PayPal,VIP
+ORD-00356,2024-02-08,Mechanical Keyboard,Electronics,4,71.99,0.2,287.96,East,Cash on Delivery,Premium
+ORD-00488,2024-02-08,Data Science Handbook,Books,7,44.99,0,314.93,Central,Credit Card,Premium
+ORD-00074,2024-02-09,Air Purifier,Home & Kitchen,5,189.99,0.05,949.95,East,PayPal,Premium
+ORD-00748,2024-02-09,Jump Rope,Sports,10,12.99,0,129.9,East,Cash on Delivery,Standard
+ORD-00866,2024-02-09,Coffee Maker,Home & Kitchen,3,80.99,0.1,242.97,East,Bank Transfer,Standard
+ORD-00657,2024-02-10,USB-C Hub,Electronics,4,49.99,0,199.96,Central,Credit Card,VIP
+ORD-00800,2024-02-10,Water Bottle,Home & Kitchen,7,14.24,0.05,99.68,Central,Credit Card,Standard
+ORD-00039,2024-02-11,Resistance Bands Set,Sports,1,17.99,0.1,17.99,South,Credit Card,VIP
+ORD-00083,2024-02-11,Smart Lamp,Home & Kitchen,7,34.99,0,244.93,West,Credit Card,VIP
+ORD-00713,2024-02-11,Machine Learning Guide,Books,1,54.99,0,54.99,South,Credit Card,Premium
+ORD-00414,2024-02-12,Python Programming,Books,6,39.99,0,239.94,East,PayPal,Standard
+ORD-00602,2024-02-12,Data Science Handbook,Books,6,40.49,0.1,242.94,North,PayPal,VIP
+ORD-00177,2024-02-13,Coffee Maker,Home & Kitchen,2,71.99,0.2,143.98,North,Cash on Delivery,Standard
+ORD-00212,2024-02-13,Air Purifier,Home & Kitchen,10,169.99,0.15,1699.9,East,Cash on Delivery,VIP
+ORD-00364,2024-02-13,USB-C Hub,Electronics,7,47.49,0.05,332.43,Central,PayPal,VIP
+ORD-00423,2024-02-13,Denim Jeans,Clothing,5,42.49,0.15,212.45,South,Bank Transfer,VIP
+ORD-00492,2024-02-14,USB-C Hub,Electronics,1,47.49,0.05,47.49,East,Cash on Delivery,Standard
+ORD-00609,2024-02-14,USB-C Hub,Electronics,5,44.99,0.1,224.95,East,Cash on Delivery,Premium
+ORD-00826,2024-02-14,Webcam HD,Electronics,10,47.99,0.2,479.9,East,Cash on Delivery,Standard
+ORD-00122,2024-02-15,Desk Organizer,Home & Kitchen,1,21.84,0.05,21.84,East,Bank Transfer,Premium
+ORD-00531,2024-02-15,Resistance Bands Set,Sports,6,16.99,0.15,101.94,South,Bank Transfer,Standard
+ORD-00139,2024-02-16,Wireless Mouse,Electronics,5,29.99,0,149.95,West,Credit Card,VIP
+ORD-00721,2024-02-16,Wireless Mouse,Electronics,3,28.49,0.05,85.47,Central,Bank Transfer,VIP
+ORD-00363,2024-02-17,Laptop Pro 15,Electronics,6,1169.99,0.1,7019.94,Central,Bank Transfer,Premium
+ORD-00557,2024-02-17,Desk Organizer,Home & Kitchen,5,19.54,0.15,97.7,East,Bank Transfer,Standard
+ORD-00351,2024-02-18,Water Bottle,Home & Kitchen,6,13.49,0.1,80.94,Central,Credit Card,Standard
+ORD-00030,2024-02-19,Water Bottle,Home & Kitchen,4,14.99,0,59.96,West,Bank Transfer,Premium
+ORD-00844,2024-02-19,Jump Rope,Sports,6,11.69,0.1,70.14,West,PayPal,Premium
+ORD-00824,2024-02-20,Dumbbell Set,Sports,6,69.99,0,419.94,Central,PayPal,Standard
+ORD-00876,2024-02-20,AI Revolution,Books,5,29.99,0,149.95,East,Cash on Delivery,Premium
+ORD-00135,2024-02-21,Wool Scarf,Clothing,10,24.99,0,249.9,West,Credit Card,VIP
+ORD-00215,2024-02-21,Denim Jeans,Clothing,2,49.99,0,99.98,Central,Credit Card,VIP
+ORD-00322,2024-02-21,Wireless Mouse,Electronics,4,29.99,0,119.96,Central,Credit Card,Premium
+ORD-00548,2024-02-21,USB-C Hub,Electronics,7,42.49,0.15,297.43,Central,Bank Transfer,VIP
+ORD-00906,2024-02-21,Wool Scarf,Clothing,1,24.99,0,24.99,Central,Cash on Delivery,Standard
+ORD-00418,2024-02-22,Wireless Mouse,Electronics,7,29.99,0,209.93,North,Bank Transfer,Premium
+ORD-00549,2024-02-23,Resistance Bands Set,Sports,7,15.99,0.2,111.93,Central,Credit Card,Premium
+ORD-00070,2024-02-24,Denim Jeans,Clothing,1,39.99,0.2,39.99,West,PayPal,Standard
+ORD-00196,2024-02-24,Python Programming,Books,7,31.99,0.2,223.93,South,Cash on Delivery,VIP
+ORD-00266,2024-02-24,Running Shoes,Clothing,9,71.99,0.1,647.91,East,PayPal,Premium
+ORD-00739,2024-02-24,Wool Scarf,Clothing,9,23.74,0.05,213.66,Central,Bank Transfer,VIP
+ORD-00087,2024-02-25,Yoga Mat,Sports,3,29.99,0,89.97,Central,Credit Card,Premium
+ORD-00484,2024-02-25,USB-C Hub,Electronics,5,39.99,0.2,199.95,North,Credit Card,Premium
+ORD-00807,2024-02-25,Denim Jeans,Clothing,10,49.99,0,499.9,Central,Credit Card,Premium
+ORD-00981,2024-02-25,Water Bottle,Home & Kitchen,1,14.99,0,14.99,North,Credit Card,Premium
+ORD-00016,2024-02-26,Coffee Maker,Home & Kitchen,1,71.99,0.2,71.99,South,PayPal,VIP
+ORD-00283,2024-02-26,Cotton T-Shirt,Clothing,10,16.99,0.15,169.9,South,Credit Card,Premium
+ORD-00922,2024-02-26,Yoga Mat,Sports,5,29.99,0,149.95,West,Cash on Delivery,Premium
+ORD-00989,2024-02-26,USB-C Hub,Electronics,2,47.49,0.05,94.98,Central,PayPal,Premium
+ORD-00300,2024-02-27,Jump Rope,Sports,5,12.99,0,64.95,East,PayPal,VIP
+ORD-00321,2024-02-27,Data Science Handbook,Books,5,44.99,0,224.95,North,Cash on Delivery,VIP
+ORD-00198,2024-02-28,Cotton T-Shirt,Clothing,9,16.99,0.15,152.91,Central,PayPal,Premium
+ORD-00060,2024-02-29,Machine Learning Guide,Books,10,49.49,0.1,494.9,West,PayPal,Premium
+ORD-00158,2024-02-29,Laptop Pro 15,Electronics,5,1234.99,0.05,6174.95,North,PayPal,VIP
+ORD-00108,2024-03-01,Dumbbell Set,Sports,2,69.99,0,139.98,Central,Cash on Delivery,VIP
+ORD-00334,2024-03-01,Wireless Mouse,Electronics,4,25.49,0.15,101.96,West,PayPal,VIP
+ORD-00391,2024-03-01,Python Programming,Books,3,39.99,0,119.97,South,Bank Transfer,Standard
+ORD-00778,2024-03-01,Monitor 27-inch,Electronics,9,339.99,0.15,3059.91,South,Bank Transfer,Standard
+ORD-00898,2024-03-01,USB-C Hub,Electronics,1,47.49,0.05,47.49,South,Cash on Delivery,VIP
+ORD-00911,2024-03-01,Monitor 27-inch,Electronics,4,399.99,0,1599.96,Central,Credit Card,VIP
+ORD-00040,2024-03-02,Webcam HD,Electronics,4,56.99,0.05,227.96,Central,PayPal,VIP
+ORD-00101,2024-03-02,Cotton T-Shirt,Clothing,4,19.99,0,79.96,Central,PayPal,Standard
+ORD-00417,2024-03-02,Webcam HD,Electronics,6,47.99,0.2,287.94,West,PayPal,Premium
+ORD-00455,2024-03-02,Machine Learning Guide,Books,5,43.99,0.2,219.95,North,PayPal,VIP
+ORD-00903,2024-03-02,Smart Lamp,Home & Kitchen,7,34.99,0,244.93,Central,PayPal,Premium
+ORD-00969,2024-03-02,Smart Lamp,Home & Kitchen,8,29.74,0.15,237.92,East,Credit Card,Premium
+ORD-00252,2024-03-03,Running Shoes,Clothing,9,79.99,0,719.91,South,PayPal,Standard
+ORD-00998,2024-03-03,Data Science Handbook,Books,8,44.99,0,359.92,East,Cash on Delivery,Premium
+ORD-00238,2024-03-04,Python Programming,Books,6,39.99,0,239.94,East,Cash on Delivery,Premium
+ORD-00257,2024-03-04,Desk Organizer,Home & Kitchen,1,18.39,0.2,18.39,Central,PayPal,Premium
+ORD-00255,2024-03-05,Water Bottle,Home & Kitchen,10,14.99,0,149.9,East,Credit Card,Premium
+ORD-00259,2024-03-05,Data Science Handbook,Books,9,44.99,0,404.91,East,Credit Card,VIP
+ORD-00435,2024-03-05,AI Revolution,Books,3,29.99,0,89.97,East,Credit Card,Standard
+ORD-00949,2024-03-05,Laptop Pro 15,Electronics,6,1169.99,0.1,7019.94,West,Bank Transfer,Premium
+ORD-00461,2024-03-06,Wireless Mouse,Electronics,8,23.99,0.2,191.92,North,Bank Transfer,Standard
+ORD-00617,2024-03-06,Jump Rope,Sports,6,12.99,0,77.94,South,Credit Card,Premium
+ORD-00979,2024-03-06,Python Programming,Books,2,39.99,0,79.98,South,PayPal,Premium
+ORD-00049,2024-03-07,Laptop Pro 15,Electronics,6,1039.99,0.2,6239.94,East,PayPal,VIP
+ORD-00192,2024-03-07,Mechanical Keyboard,Electronics,7,89.99,0,629.93,West,PayPal,VIP
+ORD-00411,2024-03-07,AI Revolution,Books,9,26.99,0.1,242.91,Central,Cash on Delivery,Premium
+ORD-00451,2024-03-07,Yoga Mat,Sports,7,25.49,0.15,178.43,South,Bank Transfer,Premium
+ORD-00044,2024-03-08,Resistance Bands Set,Sports,9,19.99,0,179.91,East,Credit Card,Standard
+ORD-00313,2024-03-08,Jump Rope,Sports,1,12.34,0.05,12.34,Central,Cash on Delivery,Premium
+ORD-00929,2024-03-08,Webcam HD,Electronics,7,59.99,0,419.93,East,Bank Transfer,Standard
+ORD-00977,2024-03-08,Coffee Maker,Home & Kitchen,2,71.99,0.2,143.98,North,Cash on Delivery,Premium
+ORD-00419,2024-03-09,Data Science Handbook,Books,7,35.99,0.2,251.93,South,Credit Card,VIP
+ORD-00450,2024-03-09,Monitor 27-inch,Electronics,2,359.99,0.1,719.98,West,Credit Card,VIP
+ORD-00724,2024-03-09,Cotton T-Shirt,Clothing,7,19.99,0,139.93,East,Credit Card,Premium
+ORD-00395,2024-03-10,USB-C Hub,Electronics,1,47.49,0.05,47.49,South,Cash on Delivery,VIP
+ORD-00075,2024-03-11,AI Revolution,Books,9,29.99,0,269.91,South,PayPal,Premium
+ORD-00285,2024-03-11,Jump Rope,Sports,1,11.04,0.15,11.04,Central,PayPal,VIP
+ORD-00434,2024-03-11,Cotton T-Shirt,Clothing,1,16.99,0.15,16.99,North,PayPal,Premium
+ORD-00556,2024-03-11,Laptop Pro 15,Electronics,1,1299.99,0,1299.99,South,Bank Transfer,Premium
+ORD-00776,2024-03-11,Resistance Bands Set,Sports,4,16.99,0.15,67.96,Central,PayPal,Standard
+ORD-00855,2024-03-11,Water Bottle,Home & Kitchen,3,14.99,0,44.97,West,Cash on Delivery,VIP
+ORD-00931,2024-03-11,Yoga Mat,Sports,8,28.49,0.05,227.92,West,PayPal,Premium
+ORD-00964,2024-03-11,Jump Rope,Sports,10,10.39,0.2,103.9,South,PayPal,Premium
+ORD-00226,2024-03-12,USB-C Hub,Electronics,8,42.49,0.15,339.92,West,Cash on Delivery,VIP
+ORD-00355,2024-03-12,Desk Organizer,Home & Kitchen,6,21.84,0.05,131.04,North,Bank Transfer,Standard
+ORD-00365,2024-03-12,Resistance Bands Set,Sports,7,19.99,0,139.93,East,Bank Transfer,Premium
+ORD-00573,2024-03-12,Laptop Pro 15,Electronics,3,1234.99,0.05,3704.97,West,Credit Card,Premium
+ORD-00634,2024-03-12,Desk Organizer,Home & Kitchen,1,20.69,0.1,20.69,West,PayPal,Standard
+ORD-00846,2024-03-12,Coffee Maker,Home & Kitchen,2,89.99,0,179.98,Central,Credit Card,Standard
+ORD-00267,2024-03-13,USB-C Hub,Electronics,8,49.99,0,399.92,North,Credit Card,Premium
+ORD-00611,2024-03-14,Desk Organizer,Home & Kitchen,5,19.54,0.15,97.7,East,Bank Transfer,Standard
+ORD-00641,2024-03-14,Denim Jeans,Clothing,7,44.99,0.1,314.93,Central,PayPal,VIP
+ORD-00129,2024-03-15,Air Purifier,Home & Kitchen,8,179.99,0.1,1439.92,West,PayPal,VIP
+ORD-00166,2024-03-15,Wool Scarf,Clothing,1,24.99,0,24.99,South,Bank Transfer,Standard
+ORD-00199,2024-03-15,Data Science Handbook,Books,4,44.99,0,179.96,East,PayPal,Standard
+ORD-00656,2024-03-15,Coffee Maker,Home & Kitchen,2,71.99,0.2,143.98,West,Cash on Delivery,Standard
+ORD-00777,2024-03-15,Data Science Handbook,Books,7,35.99,0.2,251.93,Central,PayPal,Premium
+ORD-00796,2024-03-15,Resistance Bands Set,Sports,3,15.99,0.2,47.97,South,Credit Card,Premium
+ORD-00802,2024-03-15,Cotton T-Shirt,Clothing,6,19.99,0,119.94,North,Bank Transfer,Premium
+ORD-00476,2024-03-16,Running Shoes,Clothing,1,79.99,0,79.99,Central,PayPal,Standard
+ORD-00635,2024-03-17,Monitor 27-inch,Electronics,5,399.99,0,1999.95,South,PayPal,Premium
+ORD-00818,2024-03-17,Dumbbell Set,Sports,6,69.99,0,419.94,East,Credit Card,Premium
+ORD-00926,2024-03-17,Desk Organizer,Home & Kitchen,4,20.69,0.1,82.76,Central,Credit Card,Premium
+ORD-00942,2024-03-18,Python Programming,Books,3,37.99,0.05,113.97,South,Credit Card,Premium
+ORD-00085,2024-03-19,Denim Jeans,Clothing,1,44.99,0.1,44.99,South,PayPal,Premium
+ORD-00216,2024-03-19,Data Science Handbook,Books,10,42.74,0.05,427.4,South,PayPal,VIP
+ORD-00722,2024-03-19,Laptop Pro 15,Electronics,6,1104.99,0.15,6629.94,Central,Credit Card,Standard
+ORD-00431,2024-03-20,Python Programming,Books,9,39.99,0,359.91,Central,Bank Transfer,Premium
+ORD-00453,2024-03-20,Denim Jeans,Clothing,10,49.99,0,499.9,North,PayPal,Premium
+ORD-00673,2024-03-20,Denim Jeans,Clothing,10,49.99,0,499.9,North,Credit Card,Standard
+ORD-00702,2024-03-20,AI Revolution,Books,7,29.99,0,209.93,East,Credit Card,Standard
+ORD-00816,2024-03-20,Webcam HD,Electronics,3,56.99,0.05,170.97,West,Bank Transfer,Premium
+ORD-00268,2024-03-22,Desk Organizer,Home & Kitchen,7,22.99,0,160.93,East,Bank Transfer,Standard
+ORD-00384,2024-03-22,Wool Scarf,Clothing,3,22.49,0.1,67.47,East,Cash on Delivery,Premium
+ORD-00470,2024-03-22,Dumbbell Set,Sports,10,69.99,0,699.9,North,PayPal,VIP
+ORD-00222,2024-03-23,Yoga Mat,Sports,5,29.99,0,149.95,East,Cash on Delivery,VIP
+ORD-00551,2024-03-23,Running Shoes,Clothing,7,79.99,0,559.93,North,Cash on Delivery,Standard
+ORD-00637,2024-03-23,Water Bottle,Home & Kitchen,4,13.49,0.1,53.96,West,Credit Card,Standard
+ORD-00638,2024-03-23,Wireless Mouse,Electronics,10,26.99,0.1,269.9,South,Credit Card,VIP
+ORD-00692,2024-03-23,Jump Rope,Sports,2,12.99,0,25.98,East,PayPal,Premium
+ORD-00354,2024-03-24,Winter Jacket,Clothing,2,129.99,0,259.98,Central,PayPal,VIP
+ORD-00783,2024-03-24,Water Bottle,Home & Kitchen,8,14.99,0,119.92,South,PayPal,Standard
+ORD-00961,2024-03-24,Water Bottle,Home & Kitchen,8,14.99,0,119.92,West,Cash on Delivery,Standard
+ORD-00420,2024-03-25,Yoga Mat,Sports,10,25.49,0.15,254.9,West,Bank Transfer,VIP
+ORD-00691,2024-03-26,Machine Learning Guide,Books,3,43.99,0.2,131.97,East,Cash on Delivery,VIP
+ORD-00695,2024-03-26,Running Shoes,Clothing,2,79.99,0,159.98,West,Credit Card,Standard
+ORD-00195,2024-03-28,Mechanical Keyboard,Electronics,1,89.99,0,89.99,Central,Cash on Delivery,VIP
+ORD-00260,2024-03-28,Wool Scarf,Clothing,10,24.99,0,249.9,Central,Bank Transfer,VIP
+ORD-00831,2024-03-28,Running Shoes,Clothing,10,79.99,0,799.9,North,Bank Transfer,VIP
+ORD-00142,2024-03-30,Desk Organizer,Home & Kitchen,3,22.99,0,68.97,North,Cash on Delivery,VIP
+ORD-00909,2024-03-30,Machine Learning Guide,Books,7,54.99,0,384.93,Central,Credit Card,VIP
+ORD-00948,2024-03-30,Wool Scarf,Clothing,5,24.99,0,124.95,South,PayPal,Standard
+ORD-00370,2024-03-31,Data Science Handbook,Books,8,44.99,0,359.92,West,Bank Transfer,Premium
+ORD-00577,2024-03-31,Desk Organizer,Home & Kitchen,8,20.69,0.1,165.52,Central,PayPal,VIP
+ORD-00054,2024-04-01,Denim Jeans,Clothing,7,49.99,0,349.93,East,Cash on Delivery,VIP
+ORD-00103,2024-04-01,Running Shoes,Clothing,4,79.99,0,319.96,East,Credit Card,VIP
+ORD-00792,2024-04-01,Smart Lamp,Home & Kitchen,8,34.99,0,279.92,West,PayPal,Premium
+ORD-00803,2024-04-01,Laptop Pro 15,Electronics,2,1234.99,0.05,2469.98,South,Bank Transfer,VIP
+ORD-00967,2024-04-01,Coffee Maker,Home & Kitchen,5,85.49,0.05,427.45,West,PayPal,Standard
+ORD-00119,2024-04-02,Desk Organizer,Home & Kitchen,8,22.99,0,183.92,Central,Cash on Delivery,VIP
+ORD-00639,2024-04-02,Cotton T-Shirt,Clothing,3,19.99,0,59.97,Central,Cash on Delivery,VIP
+ORD-00714,2024-04-02,Coffee Maker,Home & Kitchen,9,85.49,0.05,769.41,South,Bank Transfer,Premium
+ORD-00740,2024-04-02,Water Bottle,Home & Kitchen,2,14.99,0,29.98,Central,Cash on Delivery,VIP
+ORD-00235,2024-04-03,Winter Jacket,Clothing,8,110.49,0.15,883.92,South,Credit Card,VIP
+ORD-00694,2024-04-04,Machine Learning Guide,Books,7,54.99,0,384.93,North,PayPal,VIP
+ORD-00728,2024-04-04,Webcam HD,Electronics,9,56.99,0.05,512.91,North,Bank Transfer,VIP
+ORD-00882,2024-04-04,Resistance Bands Set,Sports,2,16.99,0.15,33.98,East,Bank Transfer,Premium
+ORD-00983,2024-04-04,Resistance Bands Set,Sports,10,19.99,0,199.9,East,Credit Card,Standard
+ORD-00394,2024-04-05,Winter Jacket,Clothing,5,129.99,0,649.95,East,Cash on Delivery,VIP
+ORD-00857,2024-04-05,Water Bottle,Home & Kitchen,6,14.99,0,89.94,West,Credit Card,VIP
+ORD-00543,2024-04-06,Running Shoes,Clothing,8,79.99,0,639.92,South,Cash on Delivery,Standard
+ORD-00032,2024-04-07,Python Programming,Books,4,39.99,0,159.96,Central,Cash on Delivery,Standard
+ORD-00490,2024-04-07,Laptop Pro 15,Electronics,6,1299.99,0,7799.94,West,Bank Transfer,VIP
+ORD-00823,2024-04-07,Mechanical Keyboard,Electronics,9,89.99,0,809.91,East,Cash on Delivery,VIP
+ORD-00501,2024-04-08,Air Purifier,Home & Kitchen,3,199.99,0,599.97,South,Credit Card,Premium
+ORD-00738,2024-04-08,Wool Scarf,Clothing,7,24.99,0,174.93,Central,PayPal,VIP
+ORD-00339,2024-04-10,Jump Rope,Sports,5,12.99,0,64.95,East,PayPal,Premium
+ORD-00088,2024-04-11,Jump Rope,Sports,7,11.04,0.15,77.28,North,PayPal,Standard
+ORD-00515,2024-04-11,Coffee Maker,Home & Kitchen,6,76.49,0.15,458.94,East,Bank Transfer,Premium
+ORD-00834,2024-04-11,AI Revolution,Books,6,23.99,0.2,143.94,Central,Credit Card,Premium
+ORD-00220,2024-04-12,Jump Rope,Sports,3,10.39,0.2,31.17,Central,PayPal,Premium
+ORD-00444,2024-04-12,Jump Rope,Sports,1,12.99,0,12.99,East,Bank Transfer,VIP
+ORD-00514,2024-04-12,Yoga Mat,Sports,3,29.99,0,89.97,North,PayPal,Standard
+ORD-00311,2024-04-13,Laptop Pro 15,Electronics,9,1169.99,0.1,10529.91,Central,PayPal,Standard
+ORD-00413,2024-04-13,Water Bottle,Home & Kitchen,1,14.24,0.05,14.24,South,Bank Transfer,Standard
+ORD-00822,2024-04-13,USB-C Hub,Electronics,1,39.99,0.2,39.99,North,Cash on Delivery,VIP
+ORD-00652,2024-04-14,AI Revolution,Books,7,23.99,0.2,167.93,West,Cash on Delivery,Standard
+ORD-00936,2024-04-14,Yoga Mat,Sports,9,25.49,0.15,229.41,South,Bank Transfer,Standard
+ORD-00312,2024-04-15,Machine Learning Guide,Books,2,46.74,0.15,93.48,Central,Cash on Delivery,Standard
+ORD-00403,2024-04-15,Resistance Bands Set,Sports,4,15.99,0.2,63.96,North,Bank Transfer,VIP
+ORD-00716,2024-04-16,Coffee Maker,Home & Kitchen,9,76.49,0.15,688.41,West,Cash on Delivery,VIP
+ORD-00537,2024-04-17,Laptop Pro 15,Electronics,8,1299.99,0,10399.92,South,PayPal,Premium
+ORD-00914,2024-04-17,Laptop Pro 15,Electronics,6,1299.99,0,7799.94,West,Bank Transfer,Premium
+ORD-00082,2024-04-18,USB-C Hub,Electronics,7,49.99,0,349.93,West,Bank Transfer,Premium
+ORD-00095,2024-04-18,Smart Lamp,Home & Kitchen,3,33.24,0.05,99.72,East,Bank Transfer,Premium
+ORD-00410,2024-04-18,Air Purifier,Home & Kitchen,7,159.99,0.2,1119.93,West,Bank Transfer,Premium
+ORD-00227,2024-04-20,Laptop Pro 15,Electronics,1,1299.99,0,1299.99,South,Cash on Delivery,Standard
+ORD-00640,2024-04-20,Yoga Mat,Sports,5,29.99,0,149.95,West,Cash on Delivery,Premium
+ORD-00400,2024-04-21,Webcam HD,Electronics,8,53.99,0.1,431.92,West,Credit Card,VIP
+ORD-00581,2024-04-21,Dumbbell Set,Sports,9,59.49,0.15,535.41,South,PayPal,VIP
+ORD-00671,2024-04-21,Winter Jacket,Clothing,6,129.99,0,779.94,Central,Bank Transfer,Standard
+ORD-00397,2024-04-22,Cotton T-Shirt,Clothing,10,19.99,0,199.9,East,Credit Card,Premium
+ORD-00879,2024-04-22,Yoga Mat,Sports,8,29.99,0,239.92,East,Bank Transfer,Standard
+ORD-00338,2024-04-23,Coffee Maker,Home & Kitchen,10,71.99,0.2,719.9,South,Credit Card,Premium
+ORD-00378,2024-04-23,Laptop Pro 15,Electronics,2,1299.99,0,2599.98,Central,PayPal,Premium
+ORD-00614,2024-04-23,Resistance Bands Set,Sports,3,19.99,0,59.97,Central,Bank Transfer,Standard
+ORD-00620,2024-04-23,USB-C Hub,Electronics,4,39.99,0.2,159.96,West,Bank Transfer,Premium
+ORD-00745,2024-04-23,Running Shoes,Clothing,1,79.99,0,79.99,South,Bank Transfer,Standard
+ORD-00784,2024-04-23,Coffee Maker,Home & Kitchen,5,85.49,0.05,427.45,South,PayPal,Standard
+ORD-00976,2024-04-23,Wireless Mouse,Electronics,3,26.99,0.1,80.97,South,Credit Card,Premium
+ORD-00001,2024-04-24,Laptop Pro 15,Electronics,5,1299.99,0,6499.95,South,Credit Card,VIP
+ORD-00319,2024-04-24,Jump Rope,Sports,9,12.99,0,116.91,North,Credit Card,Premium
+ORD-00836,2024-04-24,Machine Learning Guide,Books,8,54.99,0,439.92,South,Bank Transfer,Premium
+ORD-00127,2024-04-25,Monitor 27-inch,Electronics,7,399.99,0,2799.93,North,Cash on Delivery,Standard
+ORD-00258,2024-04-25,Denim Jeans,Clothing,6,42.49,0.15,254.94,East,Bank Transfer,Standard
+ORD-00519,2024-04-25,Resistance Bands Set,Sports,4,16.99,0.15,67.96,South,Bank Transfer,VIP
+ORD-00008,2024-04-26,Cotton T-Shirt,Clothing,1,16.99,0.15,16.99,East,Credit Card,Standard
+ORD-00647,2024-04-27,Webcam HD,Electronics,9,56.99,0.05,512.91,West,Cash on Delivery,Premium
+ORD-00143,2024-04-28,Winter Jacket,Clothing,10,129.99,0,1299.9,West,Bank Transfer,Premium
+ORD-00781,2024-04-28,Resistance Bands Set,Sports,10,19.99,0,199.9,North,Bank Transfer,Standard
+ORD-00474,2024-04-29,Coffee Maker,Home & Kitchen,2,89.99,0,179.98,Central,PayPal,Standard
+ORD-00747,2024-04-29,AI Revolution,Books,10,29.99,0,299.9,East,Bank Transfer,Standard
+ORD-00067,2024-04-30,Dumbbell Set,Sports,2,55.99,0.2,111.98,East,PayPal,Standard
+ORD-00224,2024-04-30,Mechanical Keyboard,Electronics,9,89.99,0,809.91,West,Credit Card,Premium
+ORD-00683,2024-04-30,Cotton T-Shirt,Clothing,5,15.99,0.2,79.95,Central,Cash on Delivery,Premium
+ORD-00111,2024-05-02,Running Shoes,Clothing,2,79.99,0,159.98,South,Credit Card,Standard
+ORD-00126,2024-05-02,Webcam HD,Electronics,10,47.99,0.2,479.9,South,Bank Transfer,VIP
+ORD-00425,2024-05-02,Smart Lamp,Home & Kitchen,1,27.99,0.2,27.99,West,Cash on Delivery,Standard
+ORD-00097,2024-05-03,Water Bottle,Home & Kitchen,9,11.99,0.2,107.91,West,Cash on Delivery,Premium
+ORD-00270,2024-05-03,Mechanical Keyboard,Electronics,9,85.49,0.05,769.41,South,Bank Transfer,Standard
+ORD-00329,2024-05-03,Air Purifier,Home & Kitchen,9,189.99,0.05,1709.91,South,Bank Transfer,VIP
+ORD-00347,2024-05-03,Laptop Pro 15,Electronics,9,1299.99,0,11699.91,South,Bank Transfer,Premium
+ORD-00526,2024-05-03,Data Science Handbook,Books,3,40.49,0.1,121.47,North,Cash on Delivery,VIP
+ORD-00672,2024-05-03,Winter Jacket,Clothing,4,129.99,0,519.96,East,PayPal,Standard
+ORD-00900,2024-05-04,Mechanical Keyboard,Electronics,10,89.99,0,899.9,South,Credit Card,Standard
+ORD-00093,2024-05-05,Dumbbell Set,Sports,6,55.99,0.2,335.94,North,Bank Transfer,Premium
+ORD-00263,2024-05-05,Dumbbell Set,Sports,5,66.49,0.05,332.45,West,Bank Transfer,Premium
+ORD-00014,2024-05-06,Air Purifier,Home & Kitchen,5,199.99,0,999.95,Central,Bank Transfer,VIP
+ORD-00367,2024-05-06,Coffee Maker,Home & Kitchen,6,89.99,0,539.94,West,PayPal,Premium
+ORD-00033,2024-05-07,Air Purifier,Home & Kitchen,5,189.99,0.05,949.95,North,Cash on Delivery,VIP
+ORD-00071,2024-05-07,Jump Rope,Sports,1,11.69,0.1,11.69,North,Cash on Delivery,Standard
+ORD-00563,2024-05-07,Python Programming,Books,7,33.99,0.15,237.93,West,Bank Transfer,VIP
+ORD-00579,2024-05-07,Water Bottle,Home & Kitchen,10,12.74,0.15,127.4,East,Cash on Delivery,Premium
+ORD-00237,2024-05-09,Machine Learning Guide,Books,9,52.24,0.05,470.16,North,PayPal,Premium
+ORD-00374,2024-05-09,Air Purifier,Home & Kitchen,5,199.99,0,999.95,South,Cash on Delivery,Premium
+ORD-00521,2024-05-09,Wool Scarf,Clothing,1,24.99,0,24.99,Central,Bank Transfer,VIP
+ORD-00547,2024-05-09,Water Bottle,Home & Kitchen,2,13.49,0.1,26.98,West,PayPal,Standard
+ORD-00798,2024-05-09,Cotton T-Shirt,Clothing,10,15.99,0.2,159.9,North,Cash on Delivery,Premium
+ORD-00191,2024-05-10,Data Science Handbook,Books,3,35.99,0.2,107.97,East,Bank Transfer,Standard
+ORD-00545,2024-05-10,Python Programming,Books,7,33.99,0.15,237.93,Central,Credit Card,VIP
+ORD-00648,2024-05-10,Yoga Mat,Sports,7,29.99,0,209.93,West,PayPal,Standard
+ORD-00600,2024-05-11,Machine Learning Guide,Books,2,52.24,0.05,104.48,Central,Bank Transfer,Standard
+ORD-00867,2024-05-11,Dumbbell Set,Sports,5,55.99,0.2,279.95,North,Credit Card,VIP
+ORD-00073,2024-05-12,Air Purifier,Home & Kitchen,8,189.99,0.05,1519.92,South,Bank Transfer,VIP
+ORD-00336,2024-05-13,Desk Organizer,Home & Kitchen,6,22.99,0,137.94,East,Cash on Delivery,Premium
+ORD-00532,2024-05-13,Machine Learning Guide,Books,6,54.99,0,329.94,Central,Bank Transfer,Premium
+ORD-00651,2024-05-13,Winter Jacket,Clothing,10,129.99,0,1299.9,Central,Cash on Delivery,VIP
+ORD-00946,2024-05-13,Data Science Handbook,Books,5,44.99,0,224.95,South,Cash on Delivery,Premium
+ORD-00401,2024-05-14,Running Shoes,Clothing,1,75.99,0.05,75.99,East,Credit Card,Premium
+ORD-00496,2024-05-14,USB-C Hub,Electronics,8,47.49,0.05,379.92,South,Bank Transfer,VIP
+ORD-00680,2024-05-14,Dumbbell Set,Sports,3,62.99,0.1,188.97,South,Bank Transfer,Premium
+ORD-00706,2024-05-14,Winter Jacket,Clothing,7,129.99,0,909.93,North,Cash on Delivery,VIP
+ORD-00727,2024-05-14,Resistance Bands Set,Sports,8,19.99,0,159.92,Central,Bank Transfer,Premium
+ORD-00006,2024-05-15,USB-C Hub,Electronics,6,44.99,0.1,269.94,North,Cash on Delivery,VIP
+ORD-00046,2024-05-15,Dumbbell Set,Sports,2,69.99,0,139.98,North,Credit Card,VIP
+ORD-00272,2024-05-15,Laptop Pro 15,Electronics,7,1299.99,0,9099.93,East,Cash on Delivery,Premium
+ORD-00304,2024-05-16,Air Purifier,Home & Kitchen,8,159.99,0.2,1279.92,East,Bank Transfer,VIP
+ORD-00758,2024-05-16,Resistance Bands Set,Sports,4,19.99,0,79.96,West,Bank Transfer,VIP
+ORD-00332,2024-05-17,Monitor 27-inch,Electronics,4,399.99,0,1599.96,West,Credit Card,Standard
+ORD-00399,2024-05-17,Yoga Mat,Sports,10,29.99,0,299.9,Central,Bank Transfer,VIP
+ORD-00011,2024-05-18,Denim Jeans,Clothing,8,47.49,0.05,379.92,Central,PayPal,VIP
+ORD-00361,2024-05-18,Machine Learning Guide,Books,6,43.99,0.2,263.94,North,PayPal,Standard
+ORD-00152,2024-05-19,Dumbbell Set,Sports,9,62.99,0.1,566.91,South,Bank Transfer,Premium
+ORD-00558,2024-05-19,Mechanical Keyboard,Electronics,7,85.49,0.05,598.43,West,Cash on Delivery,Premium
+ORD-00289,2024-05-20,Smart Lamp,Home & Kitchen,9,27.99,0.2,251.91,East,Credit Card,VIP
+ORD-00675,2024-05-20,Dumbbell Set,Sports,8,62.99,0.1,503.92,West,PayPal,VIP
+ORD-00806,2024-05-20,Air Purifier,Home & Kitchen,2,169.99,0.15,339.98,East,Cash on Delivery,VIP
+ORD-00829,2024-05-20,USB-C Hub,Electronics,3,49.99,0,149.97,North,Credit Card,VIP
+ORD-00405,2024-05-21,Wireless Mouse,Electronics,7,29.99,0,209.93,South,PayPal,Standard
+ORD-00525,2024-05-21,Mechanical Keyboard,Electronics,2,89.99,0,179.98,East,Bank Transfer,Premium
+ORD-00719,2024-05-21,Smart Lamp,Home & Kitchen,1,34.99,0,34.99,Central,Credit Card,Premium
+ORD-00247,2024-05-22,Machine Learning Guide,Books,6,46.74,0.15,280.44,South,Credit Card,Standard
+ORD-00773,2024-05-23,Machine Learning Guide,Books,1,49.49,0.1,49.49,South,PayPal,Premium
+ORD-00860,2024-05-23,Wireless Mouse,Electronics,9,23.99,0.2,215.91,West,Credit Card,VIP
+ORD-00443,2024-05-24,Mechanical Keyboard,Electronics,2,85.49,0.05,170.98,East,Bank Transfer,Standard
+ORD-00730,2024-05-24,Desk Organizer,Home & Kitchen,3,20.69,0.1,62.07,East,Cash on Delivery,VIP
+ORD-00189,2024-05-25,USB-C Hub,Electronics,7,49.99,0,349.93,Central,Cash on Delivery,VIP
+ORD-00947,2024-05-25,Python Programming,Books,3,39.99,0,119.97,West,PayPal,VIP
+ORD-00204,2024-05-26,Laptop Pro 15,Electronics,6,1039.99,0.2,6239.94,North,Credit Card,VIP
+ORD-00346,2024-05-26,Monitor 27-inch,Electronics,5,359.99,0.1,1799.95,North,Cash on Delivery,Standard
+ORD-00789,2024-05-26,Machine Learning Guide,Books,7,54.99,0,384.93,West,PayPal,Premium
+ORD-00125,2024-05-27,Running Shoes,Clothing,9,79.99,0,719.91,West,Cash on Delivery,Standard
+ORD-00288,2024-05-27,Dumbbell Set,Sports,4,69.99,0,279.96,South,Cash on Delivery,Premium
+ORD-00874,2024-05-27,Wool Scarf,Clothing,7,24.99,0,174.93,West,Cash on Delivery,VIP
+ORD-00941,2024-05-27,Laptop Pro 15,Electronics,7,1299.99,0,9099.93,North,Credit Card,Standard
+ORD-00298,2024-05-28,Mechanical Keyboard,Electronics,8,89.99,0,719.92,North,Credit Card,Premium
+ORD-00754,2024-05-28,Yoga Mat,Sports,4,28.49,0.05,113.96,West,PayPal,Standard
+ORD-00893,2024-05-28,Python Programming,Books,8,31.99,0.2,255.92,South,PayPal,VIP
+ORD-00953,2024-05-28,Dumbbell Set,Sports,5,66.49,0.05,332.45,Central,PayPal,VIP
+ORD-00373,2024-05-29,Air Purifier,Home & Kitchen,8,159.99,0.2,1279.92,North,Cash on Delivery,VIP
+ORD-00404,2024-05-29,Data Science Handbook,Books,6,38.24,0.15,229.44,East,Bank Transfer,VIP
+ORD-00768,2024-05-29,AI Revolution,Books,2,29.99,0,59.98,West,PayPal,Premium
+ORD-00007,2024-05-30,Mechanical Keyboard,Electronics,2,80.99,0.1,161.98,Central,Bank Transfer,VIP
+ORD-00037,2024-05-31,Jump Rope,Sports,3,12.99,0,38.97,South,Credit Card,VIP
+ORD-00140,2024-06-02,Mechanical Keyboard,Electronics,3,76.49,0.15,229.47,North,Credit Card,Premium
+ORD-00326,2024-06-02,Wool Scarf,Clothing,4,23.74,0.05,94.96,East,Credit Card,VIP
+ORD-00499,2024-06-02,Desk Organizer,Home & Kitchen,4,21.84,0.05,87.36,North,Cash on Delivery,VIP
+ORD-00157,2024-06-03,Cotton T-Shirt,Clothing,8,16.99,0.15,135.92,West,Credit Card,Standard
+ORD-00821,2024-06-03,Air Purifier,Home & Kitchen,6,189.99,0.05,1139.94,South,Bank Transfer,Standard
+ORD-00965,2024-06-03,Machine Learning Guide,Books,1,43.99,0.2,43.99,Central,Bank Transfer,Premium
+ORD-00982,2024-06-03,USB-C Hub,Electronics,1,49.99,0,49.99,North,Credit Card,Standard
+ORD-00779,2024-06-04,USB-C Hub,Electronics,7,47.49,0.05,332.43,West,Bank Transfer,Standard
+ORD-00864,2024-06-04,Webcam HD,Electronics,10,50.99,0.15,509.9,Central,Bank Transfer,Standard
+ORD-00962,2024-06-04,Yoga Mat,Sports,3,29.99,0,89.97,West,Bank Transfer,Standard
+ORD-00930,2024-06-05,Laptop Pro 15,Electronics,8,1104.99,0.15,8839.92,South,Cash on Delivery,VIP
+ORD-00022,2024-06-06,Laptop Pro 15,Electronics,6,1039.99,0.2,6239.94,South,Credit Card,Standard
+ORD-00115,2024-06-06,Cotton T-Shirt,Clothing,1,19.99,0,19.99,Central,Bank Transfer,Premium
+ORD-00197,2024-06-07,Desk Organizer,Home & Kitchen,2,21.84,0.05,43.68,East,PayPal,Premium
+ORD-00254,2024-06-07,Wool Scarf,Clothing,2,24.99,0,49.98,West,Cash on Delivery,VIP
+ORD-00775,2024-06-08,Wool Scarf,Clothing,3,23.74,0.05,71.22,Central,Bank Transfer,Premium
+ORD-00062,2024-06-09,Coffee Maker,Home & Kitchen,6,80.99,0.1,485.94,North,Bank Transfer,VIP
+ORD-00265,2024-06-09,Running Shoes,Clothing,10,79.99,0,799.9,East,Bank Transfer,Premium
+ORD-00286,2024-06-09,Machine Learning Guide,Books,9,52.24,0.05,470.16,South,Cash on Delivery,VIP
+ORD-00562,2024-06-09,Laptop Pro 15,Electronics,5,1104.99,0.15,5524.95,North,PayPal,VIP
+ORD-00013,2024-06-10,Wireless Mouse,Electronics,10,25.49,0.15,254.9,South,Cash on Delivery,Premium
+ORD-00353,2024-06-10,Yoga Mat,Sports,3,23.99,0.2,71.97,North,PayPal,VIP
+ORD-00650,2024-06-10,Mechanical Keyboard,Electronics,4,76.49,0.15,305.96,West,Bank Transfer,Standard
+ORD-00685,2024-06-10,Wool Scarf,Clothing,9,21.24,0.15,191.16,West,Bank Transfer,Premium
+ORD-00973,2024-06-10,Wool Scarf,Clothing,6,19.99,0.2,119.94,East,Bank Transfer,VIP
+ORD-00072,2024-06-11,Desk Organizer,Home & Kitchen,9,20.69,0.1,186.21,West,Cash on Delivery,VIP
+ORD-00472,2024-06-11,Denim Jeans,Clothing,4,44.99,0.1,179.96,East,Credit Card,VIP
+ORD-00808,2024-06-11,Dumbbell Set,Sports,7,62.99,0.1,440.93,East,Bank Transfer,Standard
+ORD-00278,2024-06-12,Resistance Bands Set,Sports,6,17.99,0.1,107.94,South,Cash on Delivery,VIP
+ORD-00337,2024-06-12,Webcam HD,Electronics,8,47.99,0.2,383.92,South,Bank Transfer,Premium
+ORD-00441,2024-06-12,Data Science Handbook,Books,7,38.24,0.15,267.68,East,Credit Card,VIP
+ORD-00487,2024-06-12,Laptop Pro 15,Electronics,5,1299.99,0,6499.95,East,Credit Card,Standard
+ORD-00952,2024-06-12,Water Bottle,Home & Kitchen,3,14.24,0.05,42.72,South,Credit Card,VIP
+ORD-00970,2024-06-12,Wool Scarf,Clothing,1,24.99,0,24.99,West,PayPal,Premium
+ORD-00468,2024-06-13,Smart Lamp,Home & Kitchen,10,31.49,0.1,314.9,West,Bank Transfer,Standard
+ORD-00117,2024-06-14,Monitor 27-inch,Electronics,1,379.99,0.05,379.99,Central,Bank Transfer,Standard
+ORD-00303,2024-06-14,Wireless Mouse,Electronics,3,28.49,0.05,85.47,South,Credit Card,Premium
+ORD-00186,2024-06-15,Running Shoes,Clothing,5,67.99,0.15,339.95,Central,Credit Card,Standard
+ORD-00837,2024-06-15,Air Purifier,Home & Kitchen,6,159.99,0.2,959.94,West,Cash on Delivery,Standard
+ORD-00241,2024-06-16,AI Revolution,Books,2,29.99,0,59.98,East,Bank Transfer,Premium
+ORD-00302,2024-06-16,Jump Rope,Sports,7,11.69,0.1,81.83,North,Cash on Delivery,VIP
+ORD-00456,2024-06-16,Python Programming,Books,4,31.99,0.2,127.96,South,Credit Card,VIP
+ORD-00057,2024-06-17,Cotton T-Shirt,Clothing,4,18.99,0.05,75.96,East,Credit Card,Premium
+ORD-00889,2024-06-17,Smart Lamp,Home & Kitchen,3,29.74,0.15,89.22,West,Credit Card,VIP
+ORD-00294,2024-06-18,Cotton T-Shirt,Clothing,2,18.99,0.05,37.98,West,Credit Card,VIP
+ORD-00593,2024-06-18,Wool Scarf,Clothing,5,24.99,0,124.95,West,PayPal,Standard
+ORD-00597,2024-06-18,Data Science Handbook,Books,4,38.24,0.15,152.96,East,Bank Transfer,Premium
+ORD-00636,2024-06-18,Yoga Mat,Sports,4,28.49,0.05,113.96,North,Cash on Delivery,VIP
+ORD-00815,2024-06-18,Yoga Mat,Sports,3,29.99,0,89.97,East,Cash on Delivery,Premium
+ORD-00164,2024-06-19,Yoga Mat,Sports,1,23.99,0.2,23.99,South,PayPal,VIP
+ORD-00536,2024-06-19,Data Science Handbook,Books,2,42.74,0.05,85.48,South,Bank Transfer,VIP
+ORD-00687,2024-06-20,Machine Learning Guide,Books,2,52.24,0.05,104.48,East,Bank Transfer,Premium
+ORD-00904,2024-06-20,Cotton T-Shirt,Clothing,10,19.99,0,199.9,North,Credit Card,Premium
+ORD-00921,2024-06-20,Running Shoes,Clothing,5,79.99,0,399.95,South,Credit Card,VIP
+ORD-00005,2024-06-21,Data Science Handbook,Books,4,35.99,0.2,143.96,North,Credit Card,Premium
+ORD-00301,2024-06-21,Smart Lamp,Home & Kitchen,3,34.99,0,104.97,East,PayPal,Standard
+ORD-00877,2024-06-21,Wool Scarf,Clothing,4,22.49,0.1,89.96,South,Bank Transfer,VIP
+ORD-00209,2024-06-22,Machine Learning Guide,Books,7,43.99,0.2,307.93,Central,Credit Card,VIP
+ORD-00667,2024-06-22,Jump Rope,Sports,4,10.39,0.2,41.56,West,Cash on Delivery,VIP
+ORD-00995,2024-06-22,Cotton T-Shirt,Clothing,6,19.99,0,119.94,South,Cash on Delivery,Standard
+ORD-00090,2024-06-23,Python Programming,Books,9,33.99,0.15,305.91,North,Cash on Delivery,Premium
+ORD-00214,2024-06-23,AI Revolution,Books,3,29.99,0,89.97,West,PayPal,Standard
+ORD-00383,2024-06-24,Python Programming,Books,2,39.99,0,79.98,North,PayPal,VIP
+ORD-00535,2024-06-24,Wireless Mouse,Electronics,3,29.99,0,89.97,West,Cash on Delivery,Standard
+ORD-00712,2024-06-24,Cotton T-Shirt,Clothing,8,19.99,0,159.92,West,Bank Transfer,Premium
+ORD-00290,2024-06-25,Jump Rope,Sports,7,10.39,0.2,72.73,South,Bank Transfer,Standard
+ORD-00613,2024-06-25,Yoga Mat,Sports,5,29.99,0,149.95,South,Cash on Delivery,VIP
+ORD-00871,2024-06-25,Air Purifier,Home & Kitchen,4,179.99,0.1,719.96,North,Bank Transfer,Standard
+ORD-00482,2024-06-26,Running Shoes,Clothing,2,79.99,0,159.98,East,PayPal,VIP
+ORD-00943,2024-06-26,Desk Organizer,Home & Kitchen,3,21.84,0.05,65.52,West,Cash on Delivery,VIP
+ORD-00522,2024-06-27,Machine Learning Guide,Books,7,43.99,0.2,307.93,West,Bank Transfer,Standard
+ORD-00830,2024-06-28,Yoga Mat,Sports,4,26.99,0.1,107.96,Central,Bank Transfer,Premium
+ORD-00341,2024-06-29,Water Bottle,Home & Kitchen,3,12.74,0.15,38.22,South,PayPal,VIP
+ORD-00863,2024-06-29,Desk Organizer,Home & Kitchen,6,21.84,0.05,131.04,East,Bank Transfer,Standard
+ORD-00974,2024-06-29,Python Programming,Books,9,35.99,0.1,323.91,South,Credit Card,Standard
+ORD-00984,2024-06-29,Running Shoes,Clothing,10,79.99,0,799.9,South,PayPal,VIP
+ORD-00463,2024-06-30,Mechanical Keyboard,Electronics,7,89.99,0,629.93,South,PayPal,Premium
+ORD-00529,2024-07-02,Wool Scarf,Clothing,8,21.24,0.15,169.92,Central,Bank Transfer,Standard
+ORD-00305,2024-07-03,Yoga Mat,Sports,5,25.49,0.15,127.45,South,Credit Card,VIP
+ORD-00360,2024-07-03,Air Purifier,Home & Kitchen,7,199.99,0,1399.93,North,Credit Card,Standard
+ORD-00630,2024-07-03,Webcam HD,Electronics,4,53.99,0.1,215.96,West,Cash on Delivery,Premium
+ORD-00015,2024-07-04,Jump Rope,Sports,10,12.34,0.05,123.4,South,PayPal,VIP
+ORD-00794,2024-07-04,Webcam HD,Electronics,8,50.99,0.15,407.92,North,Cash on Delivery,VIP
+ORD-00570,2024-07-05,Resistance Bands Set,Sports,8,19.99,0,159.92,North,PayPal,Premium
+ORD-00619,2024-07-05,Data Science Handbook,Books,10,40.49,0.1,404.9,East,Cash on Delivery,Standard
+ORD-00934,2024-07-05,Python Programming,Books,9,33.99,0.15,305.91,North,Credit Card,Premium
+ORD-00427,2024-07-06,Winter Jacket,Clothing,10,123.49,0.05,1234.9,Central,PayPal,Premium
+ORD-00935,2024-07-06,Machine Learning Guide,Books,10,54.99,0,549.9,East,PayPal,VIP
+ORD-00859,2024-07-07,Monitor 27-inch,Electronics,8,339.99,0.15,2719.92,North,Cash on Delivery,VIP
+ORD-00940,2024-07-07,Dumbbell Set,Sports,8,62.99,0.1,503.92,North,PayPal,Premium
+ORD-00051,2024-07-08,Wool Scarf,Clothing,1,19.99,0.2,19.99,Central,PayPal,Premium
+ORD-00905,2024-07-08,Winter Jacket,Clothing,3,110.49,0.15,331.47,Central,PayPal,Premium
+ORD-00221,2024-07-09,Webcam HD,Electronics,8,47.99,0.2,383.92,Central,Credit Card,VIP
+ORD-00959,2024-07-09,Winter Jacket,Clothing,6,123.49,0.05,740.94,North,Bank Transfer,Premium
+ORD-00920,2024-07-10,Jump Rope,Sports,3,12.34,0.05,37.02,South,Cash on Delivery,VIP
+ORD-00185,2024-07-11,Laptop Pro 15,Electronics,9,1299.99,0,11699.91,West,Cash on Delivery,Premium
+ORD-00371,2024-07-11,Desk Organizer,Home & Kitchen,4,22.99,0,91.96,East,Cash on Delivery,Premium
+ORD-00743,2024-07-11,Wool Scarf,Clothing,9,24.99,0,224.91,Central,Bank Transfer,Premium
+ORD-00632,2024-07-12,Data Science Handbook,Books,7,38.24,0.15,267.68,East,Credit Card,VIP
+ORD-00320,2024-07-13,Desk Organizer,Home & Kitchen,7,20.69,0.1,144.83,South,PayPal,Premium
+ORD-00786,2024-07-13,Water Bottle,Home & Kitchen,1,13.49,0.1,13.49,East,Cash on Delivery,VIP
+ORD-00795,2024-07-13,Resistance Bands Set,Sports,7,17.99,0.1,125.93,North,PayPal,Premium
+ORD-00017,2024-07-14,Desk Organizer,Home & Kitchen,2,21.84,0.05,43.68,Central,Cash on Delivery,VIP
+ORD-00317,2024-07-14,Denim Jeans,Clothing,7,49.99,0,349.93,West,Cash on Delivery,Premium
+ORD-00495,2024-07-14,Jump Rope,Sports,3,12.99,0,38.97,East,PayPal,Premium
+ORD-00774,2024-07-14,Air Purifier,Home & Kitchen,2,169.99,0.15,339.98,Central,PayPal,Premium
+ORD-00133,2024-07-15,Data Science Handbook,Books,4,40.49,0.1,161.96,South,Cash on Delivery,Standard
+ORD-00245,2024-07-15,Wireless Mouse,Electronics,6,29.99,0,179.94,Central,Credit Card,VIP
+ORD-00422,2024-07-15,Wireless Mouse,Electronics,2,26.99,0.1,53.98,East,Cash on Delivery,Premium
+ORD-00541,2024-07-15,AI Revolution,Books,3,29.99,0,89.97,Central,Bank Transfer,Standard
+ORD-00643,2024-07-16,Yoga Mat,Sports,4,28.49,0.05,113.96,South,Credit Card,Standard
+ORD-00389,2024-07-17,Desk Organizer,Home & Kitchen,6,20.69,0.1,124.14,Central,Cash on Delivery,VIP
+ORD-00392,2024-07-17,Running Shoes,Clothing,3,71.99,0.1,215.97,West,PayPal,VIP
+ORD-00498,2024-07-17,Wool Scarf,Clothing,1,19.99,0.2,19.99,Central,Cash on Delivery,VIP
+ORD-00788,2024-07-17,Jump Rope,Sports,1,11.69,0.1,11.69,Central,Credit Card,Standard
+ORD-00884,2024-07-17,USB-C Hub,Electronics,1,47.49,0.05,47.49,East,Credit Card,Premium
+ORD-00078,2024-07-18,USB-C Hub,Electronics,5,39.99,0.2,199.95,West,PayPal,Premium
+ORD-00607,2024-07-18,Water Bottle,Home & Kitchen,6,14.99,0,89.94,North,Credit Card,VIP
+ORD-00697,2024-07-18,Data Science Handbook,Books,2,38.24,0.15,76.48,East,PayPal,Standard
+ORD-00847,2024-07-18,Winter Jacket,Clothing,9,129.99,0,1169.91,Central,Cash on Delivery,Standard
+ORD-00833,2024-07-19,Coffee Maker,Home & Kitchen,2,85.49,0.05,170.98,South,Cash on Delivery,VIP
+ORD-00275,2024-07-20,Yoga Mat,Sports,3,29.99,0,89.97,East,Bank Transfer,VIP
+ORD-00574,2024-07-20,Resistance Bands Set,Sports,4,19.99,0,79.96,South,Cash on Delivery,Standard
+ORD-00771,2024-07-20,Dumbbell Set,Sports,6,66.49,0.05,398.94,South,Credit Card,Premium
+ORD-00042,2024-07-21,Running Shoes,Clothing,4,79.99,0,319.96,South,Bank Transfer,Premium
+ORD-00154,2024-07-21,Desk Organizer,Home & Kitchen,6,22.99,0,137.94,North,Bank Transfer,VIP
+ORD-00368,2024-07-21,Wireless Mouse,Electronics,5,29.99,0,149.95,East,Cash on Delivery,Premium
+ORD-00994,2024-07-21,Yoga Mat,Sports,2,29.99,0,59.98,West,Credit Card,VIP
+ORD-00137,2024-07-22,AI Revolution,Books,10,25.49,0.15,254.9,North,Bank Transfer,VIP
+ORD-00503,2024-07-22,Laptop Pro 15,Electronics,7,1169.99,0.1,8189.93,Central,Bank Transfer,Premium
+ORD-00670,2024-07-23,Data Science Handbook,Books,5,44.99,0,224.95,East,Credit Card,VIP
+ORD-00035,2024-07-24,Water Bottle,Home & Kitchen,8,14.99,0,119.92,North,PayPal,Premium
+ORD-00171,2024-07-24,Laptop Pro 15,Electronics,8,1039.99,0.2,8319.92,West,Credit Card,Premium
+ORD-00840,2024-07-24,USB-C Hub,Electronics,9,47.49,0.05,427.41,Central,Cash on Delivery,Standard
+ORD-00955,2024-07-24,Yoga Mat,Sports,5,29.99,0,149.95,Central,PayPal,Premium
+ORD-00116,2024-07-25,Mechanical Keyboard,Electronics,5,76.49,0.15,382.45,East,Cash on Delivery,Premium
+ORD-00098,2024-07-26,Laptop Pro 15,Electronics,5,1299.99,0,6499.95,South,Bank Transfer,VIP
+ORD-00306,2024-07-26,Mechanical Keyboard,Electronics,5,89.99,0,449.95,Central,Bank Transfer,VIP
+ORD-00348,2024-07-26,Machine Learning Guide,Books,2,54.99,0,109.98,West,PayPal,VIP
+ORD-00624,2024-07-26,Yoga Mat,Sports,10,26.99,0.1,269.9,Central,PayPal,Standard
+ORD-00633,2024-07-26,Machine Learning Guide,Books,4,49.49,0.1,197.96,East,Bank Transfer,Premium
+ORD-00839,2024-07-26,Data Science Handbook,Books,9,44.99,0,404.91,North,Bank Transfer,VIP
+ORD-00076,2024-07-27,Denim Jeans,Clothing,2,47.49,0.05,94.98,East,Cash on Delivery,Premium
+ORD-00295,2024-07-27,Cotton T-Shirt,Clothing,9,19.99,0,179.91,West,Cash on Delivery,VIP
+ORD-00606,2024-07-27,Monitor 27-inch,Electronics,4,399.99,0,1599.96,West,Cash on Delivery,VIP
+ORD-00120,2024-07-28,Coffee Maker,Home & Kitchen,8,89.99,0,719.92,East,Bank Transfer,VIP
+ORD-00446,2024-07-28,Resistance Bands Set,Sports,3,19.99,0,59.97,North,PayPal,VIP
+ORD-00963,2024-07-28,Jump Rope,Sports,2,12.99,0,25.98,East,Cash on Delivery,Standard
+ORD-00217,2024-07-29,Resistance Bands Set,Sports,8,19.99,0,159.92,East,PayPal,Premium
+ORD-00688,2024-07-29,Dumbbell Set,Sports,6,69.99,0,419.94,North,Bank Transfer,VIP
+ORD-00858,2024-07-29,Air Purifier,Home & Kitchen,9,199.99,0,1799.91,Central,Bank Transfer,Standard
+ORD-00330,2024-07-30,Winter Jacket,Clothing,1,116.99,0.1,116.99,West,PayPal,Premium
+ORD-00580,2024-07-30,Machine Learning Guide,Books,3,54.99,0,164.97,Central,Bank Transfer,VIP
+ORD-00759,2024-07-30,Yoga Mat,Sports,2,25.49,0.15,50.98,West,Bank Transfer,Premium
+ORD-00918,2024-07-30,Data Science Handbook,Books,2,44.99,0,89.98,South,Cash on Delivery,Standard
+ORD-00130,2024-07-31,Resistance Bands Set,Sports,2,19.99,0,39.98,East,Bank Transfer,Standard
+ORD-00151,2024-07-31,Cotton T-Shirt,Clothing,5,19.99,0,99.95,South,PayPal,Standard
+ORD-00188,2024-07-31,Water Bottle,Home & Kitchen,10,14.24,0.05,142.4,East,PayPal,VIP
+ORD-00380,2024-07-31,Mechanical Keyboard,Electronics,2,89.99,0,179.98,North,Credit Card,VIP
+ORD-00596,2024-07-31,Yoga Mat,Sports,9,29.99,0,269.91,Central,Cash on Delivery,Standard
+ORD-00328,2024-08-01,Desk Organizer,Home & Kitchen,6,19.54,0.15,117.24,West,PayPal,Premium
+ORD-00511,2024-08-01,Machine Learning Guide,Books,6,54.99,0,329.94,Central,Credit Card,Standard
+ORD-00041,2024-08-02,Yoga Mat,Sports,10,29.99,0,299.9,Central,Bank Transfer,Premium
+ORD-00644,2024-08-02,Wool Scarf,Clothing,9,21.24,0.15,191.16,South,Credit Card,Standard
+ORD-00971,2024-08-02,Cotton T-Shirt,Clothing,5,19.99,0,99.95,East,Credit Card,Premium
+ORD-00938,2024-08-04,AI Revolution,Books,9,25.49,0.15,229.41,East,Credit Card,Standard
+ORD-00980,2024-08-05,Denim Jeans,Clothing,3,49.99,0,149.97,North,Credit Card,Standard
+ORD-00988,2024-08-05,Wireless Mouse,Electronics,6,28.49,0.05,170.94,South,PayPal,Premium
+ORD-00883,2024-08-06,Webcam HD,Electronics,8,59.99,0,479.92,East,Bank Transfer,Standard
+ORD-00081,2024-08-07,Yoga Mat,Sports,2,25.49,0.15,50.98,South,Cash on Delivery,Standard
+ORD-00230,2024-08-07,Resistance Bands Set,Sports,3,19.99,0,59.97,North,Bank Transfer,Standard
+ORD-00386,2024-08-07,Resistance Bands Set,Sports,8,17.99,0.1,143.92,West,Credit Card,VIP
+ORD-00592,2024-08-07,Yoga Mat,Sports,7,29.99,0,209.93,East,Bank Transfer,Standard
+ORD-00925,2024-08-07,Water Bottle,Home & Kitchen,5,14.99,0,74.95,South,PayPal,Premium
+ORD-00992,2024-08-07,Jump Rope,Sports,5,10.39,0.2,51.95,South,Credit Card,Premium
+ORD-00065,2024-08-08,USB-C Hub,Electronics,5,49.99,0,249.95,Central,Bank Transfer,Premium
+ORD-00141,2024-08-08,USB-C Hub,Electronics,6,49.99,0,299.94,South,PayPal,VIP
+ORD-00240,2024-08-08,Python Programming,Books,7,39.99,0,279.93,Central,PayPal,VIP
+ORD-00704,2024-08-08,Water Bottle,Home & Kitchen,5,14.99,0,74.95,East,PayPal,Standard
+ORD-00886,2024-08-08,Coffee Maker,Home & Kitchen,3,80.99,0.1,242.97,South,Credit Card,Premium
+ORD-00366,2024-08-10,Air Purifier,Home & Kitchen,2,199.99,0,399.98,East,Cash on Delivery,Premium
+ORD-00842,2024-08-10,Wool Scarf,Clothing,7,19.99,0.2,139.93,Central,Bank Transfer,VIP
+ORD-00852,2024-08-10,Machine Learning Guide,Books,7,52.24,0.05,365.68,Central,PayPal,VIP
+ORD-00432,2024-08-11,Yoga Mat,Sports,5,25.49,0.15,127.45,South,Credit Card,Standard
+ORD-00478,2024-08-11,AI Revolution,Books,3,29.99,0,89.97,West,Bank Transfer,Standard
+ORD-00560,2024-08-12,Jump Rope,Sports,10,11.04,0.15,110.4,South,Cash on Delivery,Premium
+ORD-00711,2024-08-12,AI Revolution,Books,3,25.49,0.15,76.47,North,PayPal,Standard
+ORD-00895,2024-08-12,Machine Learning Guide,Books,2,46.74,0.15,93.48,South,PayPal,Standard
+ORD-00150,2024-08-13,Cotton T-Shirt,Clothing,1,19.99,0,19.99,North,Bank Transfer,VIP
+ORD-00264,2024-08-13,Webcam HD,Electronics,1,59.99,0,59.99,West,Cash on Delivery,Premium
+ORD-00761,2024-08-13,Machine Learning Guide,Books,10,54.99,0,549.9,North,PayPal,Standard
+ORD-00715,2024-08-14,Laptop Pro 15,Electronics,4,1234.99,0.05,4939.96,South,Credit Card,Standard
+ORD-00741,2024-08-14,Data Science Handbook,Books,9,40.49,0.1,364.41,East,Bank Transfer,VIP
+ORD-00978,2024-08-14,AI Revolution,Books,3,23.99,0.2,71.97,Central,Bank Transfer,Standard
+ORD-00161,2024-08-15,Webcam HD,Electronics,6,59.99,0,359.94,West,PayPal,Premium
+ORD-00242,2024-08-15,Jump Rope,Sports,3,11.04,0.15,33.12,East,Cash on Delivery,Standard
+ORD-00246,2024-08-15,Winter Jacket,Clothing,6,129.99,0,779.94,North,PayPal,VIP
+ORD-00621,2024-08-16,Running Shoes,Clothing,8,75.99,0.05,607.92,East,Bank Transfer,Premium
+ORD-00690,2024-08-16,AI Revolution,Books,9,28.49,0.05,256.41,North,Cash on Delivery,VIP
+ORD-00868,2024-08-16,Wool Scarf,Clothing,3,21.24,0.15,63.72,East,PayPal,Premium
+ORD-00957,2024-08-16,Cotton T-Shirt,Clothing,2,17.99,0.1,35.98,North,Cash on Delivery,Standard
+ORD-00169,2024-08-17,Webcam HD,Electronics,2,56.99,0.05,113.98,East,Credit Card,Premium
+ORD-00109,2024-08-18,Resistance Bands Set,Sports,9,18.99,0.05,170.91,West,Bank Transfer,VIP
+ORD-00223,2024-08-18,Winter Jacket,Clothing,2,129.99,0,259.98,East,Credit Card,Premium
+ORD-00274,2024-08-18,Python Programming,Books,7,35.99,0.1,251.93,Central,Bank Transfer,VIP
+ORD-00357,2024-08-18,Webcam HD,Electronics,5,47.99,0.2,239.95,West,PayPal,Premium
+ORD-00682,2024-08-18,AI Revolution,Books,7,29.99,0,209.93,South,PayPal,VIP
+ORD-00763,2024-08-18,USB-C Hub,Electronics,2,49.99,0,99.98,West,Credit Card,Premium
+ORD-00897,2024-08-18,Machine Learning Guide,Books,9,43.99,0.2,395.91,North,Credit Card,Premium
+ORD-00407,2024-08-19,Dumbbell Set,Sports,7,66.49,0.05,465.43,North,Credit Card,Premium
+ORD-00452,2024-08-19,Machine Learning Guide,Books,6,54.99,0,329.94,East,PayPal,Standard
+ORD-00571,2024-08-19,Machine Learning Guide,Books,6,46.74,0.15,280.44,North,Credit Card,VIP
+ORD-00709,2024-08-19,Webcam HD,Electronics,8,53.99,0.1,431.92,East,Cash on Delivery,Standard
+ORD-00787,2024-08-19,Yoga Mat,Sports,9,29.99,0,269.91,West,Credit Card,Standard
+ORD-00036,2024-08-20,Mechanical Keyboard,Electronics,5,71.99,0.2,359.95,East,Cash on Delivery,VIP
+ORD-00100,2024-08-20,Dumbbell Set,Sports,6,59.49,0.15,356.94,East,Bank Transfer,Premium
+ORD-00113,2024-08-20,Running Shoes,Clothing,5,67.99,0.15,339.95,North,PayPal,Premium
+ORD-00163,2024-08-20,Data Science Handbook,Books,2,35.99,0.2,71.98,North,PayPal,VIP
+ORD-00175,2024-08-20,Air Purifier,Home & Kitchen,7,199.99,0,1399.93,West,Cash on Delivery,VIP
+ORD-00299,2024-08-20,Yoga Mat,Sports,6,29.99,0,179.94,Central,Cash on Delivery,Standard
+ORD-00664,2024-08-20,Data Science Handbook,Books,10,44.99,0,449.9,West,Credit Card,Premium
+ORD-00856,2024-08-20,Jump Rope,Sports,10,12.99,0,129.9,Central,Cash on Delivery,VIP
+ORD-00344,2024-08-21,Cotton T-Shirt,Clothing,4,17.99,0.1,71.96,East,Credit Card,VIP
+ORD-00381,2024-08-21,Running Shoes,Clothing,5,79.99,0,399.95,South,Cash on Delivery,Premium
+ORD-00542,2024-08-21,Laptop Pro 15,Electronics,5,1299.99,0,6499.95,Central,Bank Transfer,Premium
+ORD-00700,2024-08-21,Resistance Bands Set,Sports,10,17.99,0.1,179.9,Central,Cash on Delivery,VIP
+ORD-00388,2024-08-22,Running Shoes,Clothing,6,79.99,0,479.94,North,Bank Transfer,VIP
+ORD-00390,2024-08-22,USB-C Hub,Electronics,6,39.99,0.2,239.94,Central,PayPal,VIP
+ORD-00398,2024-08-22,Wool Scarf,Clothing,5,24.99,0,124.95,Central,Cash on Delivery,VIP
+ORD-00056,2024-08-23,Air Purifier,Home & Kitchen,4,159.99,0.2,639.96,East,Bank Transfer,Standard
+ORD-00091,2024-08-23,Mechanical Keyboard,Electronics,6,76.49,0.15,458.94,South,Cash on Delivery,Standard
+ORD-00412,2024-08-23,Laptop Pro 15,Electronics,2,1104.99,0.15,2209.98,North,Credit Card,Standard
+ORD-00746,2024-08-23,Data Science Handbook,Books,2,44.99,0,89.98,East,PayPal,Standard
+ORD-00219,2024-08-24,Running Shoes,Clothing,10,75.99,0.05,759.9,East,Cash on Delivery,VIP
+ORD-00554,2024-08-25,Winter Jacket,Clothing,5,129.99,0,649.95,North,Credit Card,Standard
+ORD-00626,2024-08-25,Wool Scarf,Clothing,5,24.99,0,124.95,Central,Credit Card,Premium
+ORD-00790,2024-08-25,Python Programming,Books,9,39.99,0,359.91,West,Credit Card,VIP
+ORD-00726,2024-08-27,Wool Scarf,Clothing,6,24.99,0,149.94,East,PayPal,Standard
+ORD-00202,2024-08-28,Data Science Handbook,Books,8,44.99,0,359.92,West,Bank Transfer,Premium
+ORD-00232,2024-08-28,Yoga Mat,Sports,7,23.99,0.2,167.93,North,Cash on Delivery,Premium
+ORD-00703,2024-08-28,Resistance Bands Set,Sports,6,19.99,0,119.94,Central,Credit Card,VIP
+ORD-00316,2024-08-29,Monitor 27-inch,Electronics,1,399.99,0,399.99,North,Bank Transfer,Premium
+ORD-00530,2024-08-29,Resistance Bands Set,Sports,5,19.99,0,99.95,South,Bank Transfer,VIP
+ORD-00625,2024-08-29,Dumbbell Set,Sports,9,62.99,0.1,566.91,South,Bank Transfer,Premium
+ORD-00066,2024-08-30,Water Bottle,Home & Kitchen,4,13.49,0.1,53.96,South,Credit Card,Premium
+ORD-00277,2024-08-30,Wireless Mouse,Electronics,6,23.99,0.2,143.94,Central,Cash on Delivery,Standard
+ORD-00507,2024-08-30,Water Bottle,Home & Kitchen,10,13.49,0.1,134.9,North,PayPal,Premium
+ORD-00517,2024-08-30,Jump Rope,Sports,3,10.39,0.2,31.17,Central,Bank Transfer,Premium
+ORD-00913,2024-08-30,Cotton T-Shirt,Clothing,3,16.99,0.15,50.97,West,PayPal,Standard
+ORD-00068,2024-08-31,Cotton T-Shirt,Clothing,1,19.99,0,19.99,Central,Credit Card,Premium
+ORD-00509,2024-08-31,Data Science Handbook,Books,1,38.24,0.15,38.24,East,Bank Transfer,Standard
+ORD-00872,2024-08-31,Wireless Mouse,Electronics,8,28.49,0.05,227.92,East,Cash on Delivery,VIP
+ORD-00908,2024-08-31,Dumbbell Set,Sports,7,59.49,0.15,416.43,South,PayPal,Standard
+ORD-00282,2024-09-02,Resistance Bands Set,Sports,1,17.99,0.1,17.99,South,Cash on Delivery,Standard
+ORD-00333,2024-09-02,Wool Scarf,Clothing,9,24.99,0,224.91,South,Bank Transfer,Premium
+ORD-00465,2024-09-02,Machine Learning Guide,Books,7,49.49,0.1,346.43,North,Credit Card,Premium
+ORD-00838,2024-09-02,Mechanical Keyboard,Electronics,2,89.99,0,179.98,West,PayPal,Premium
+ORD-00954,2024-09-02,Smart Lamp,Home & Kitchen,2,29.74,0.15,59.48,North,PayPal,VIP
+ORD-00841,2024-09-03,Resistance Bands Set,Sports,9,19.99,0,179.91,West,Credit Card,Premium
+ORD-00146,2024-09-04,Data Science Handbook,Books,7,35.99,0.2,251.93,North,PayPal,Premium
+ORD-00287,2024-09-04,AI Revolution,Books,5,26.99,0.1,134.95,South,PayPal,Premium
+ORD-00023,2024-09-05,Yoga Mat,Sports,2,25.49,0.15,50.98,North,PayPal,Standard
+ORD-00512,2024-09-05,Air Purifier,Home & Kitchen,7,169.99,0.15,1189.93,Central,Bank Transfer,Standard
+ORD-00618,2024-09-05,Yoga Mat,Sports,4,29.99,0,119.96,West,Bank Transfer,VIP
+ORD-00732,2024-09-05,Cotton T-Shirt,Clothing,4,19.99,0,79.96,South,Credit Card,Standard
+ORD-00975,2024-09-05,Dumbbell Set,Sports,6,55.99,0.2,335.94,West,Bank Transfer,Standard
+ORD-00138,2024-09-06,Jump Rope,Sports,6,11.04,0.15,66.24,Central,Credit Card,VIP
+ORD-00408,2024-09-06,Dumbbell Set,Sports,6,66.49,0.05,398.94,East,Credit Card,VIP
+ORD-00561,2024-09-06,Yoga Mat,Sports,3,28.49,0.05,85.47,North,Cash on Delivery,Premium
+ORD-00160,2024-09-07,Winter Jacket,Clothing,2,103.99,0.2,207.98,Central,Cash on Delivery,Premium
+ORD-00494,2024-09-07,USB-C Hub,Electronics,7,47.49,0.05,332.43,East,Credit Card,VIP
+ORD-00896,2024-09-07,Cotton T-Shirt,Clothing,10,19.99,0,199.9,West,Credit Card,VIP
+ORD-00396,2024-09-08,Jump Rope,Sports,7,11.04,0.15,77.28,West,Cash on Delivery,Premium
+ORD-00448,2024-09-08,Wool Scarf,Clothing,4,23.74,0.05,94.96,North,PayPal,VIP
+ORD-00510,2024-09-08,AI Revolution,Books,5,29.99,0,149.95,North,PayPal,Standard
+ORD-00565,2024-09-08,Water Bottle,Home & Kitchen,3,14.99,0,44.97,East,PayPal,Premium
+ORD-00885,2024-09-08,Data Science Handbook,Books,8,44.99,0,359.92,South,Cash on Delivery,Standard
+ORD-00993,2024-09-08,Data Science Handbook,Books,1,38.24,0.15,38.24,North,Cash on Delivery,Premium
+ORD-00473,2024-09-09,Data Science Handbook,Books,10,44.99,0,449.9,Central,Bank Transfer,Standard
+ORD-00485,2024-09-09,Water Bottle,Home & Kitchen,3,14.24,0.05,42.72,West,Bank Transfer,VIP
+ORD-00799,2024-09-09,Desk Organizer,Home & Kitchen,1,20.69,0.1,20.69,South,PayPal,VIP
+ORD-00327,2024-09-10,Resistance Bands Set,Sports,7,17.99,0.1,125.93,North,Bank Transfer,VIP
+ORD-00870,2024-09-10,Wool Scarf,Clothing,3,19.99,0.2,59.97,West,Cash on Delivery,Standard
+ORD-00928,2024-09-10,Water Bottle,Home & Kitchen,2,14.24,0.05,28.48,South,Credit Card,VIP
+ORD-00239,2024-09-11,Water Bottle,Home & Kitchen,6,14.99,0,89.94,West,Bank Transfer,VIP
+ORD-00527,2024-09-11,Data Science Handbook,Books,1,38.24,0.15,38.24,East,Bank Transfer,Premium
+ORD-00229,2024-09-12,Jump Rope,Sports,2,12.99,0,25.98,Central,Credit Card,VIP
+ORD-00269,2024-09-12,Winter Jacket,Clothing,9,123.49,0.05,1111.41,East,Cash on Delivery,Standard
+ORD-00437,2024-09-12,Desk Organizer,Home & Kitchen,6,22.99,0,137.94,Central,PayPal,Premium
+ORD-00576,2024-09-12,Desk Organizer,Home & Kitchen,9,22.99,0,206.91,North,Credit Card,VIP
+ORD-00681,2024-09-12,Dumbbell Set,Sports,6,69.99,0,419.94,West,PayPal,Premium
+ORD-00206,2024-09-13,Running Shoes,Clothing,10,75.99,0.05,759.9,South,Credit Card,Premium
+ORD-00772,2024-09-13,AI Revolution,Books,5,29.99,0,149.95,East,Credit Card,VIP
+ORD-00939,2024-09-13,AI Revolution,Books,8,28.49,0.05,227.92,Central,Credit Card,Premium
+ORD-00324,2024-09-14,Resistance Bands Set,Sports,1,19.99,0,19.99,East,PayPal,VIP
+ORD-00677,2024-09-14,Water Bottle,Home & Kitchen,9,14.99,0,134.91,East,Cash on Delivery,VIP
+ORD-00927,2024-09-15,Laptop Pro 15,Electronics,8,1104.99,0.15,8839.92,North,Cash on Delivery,VIP
+ORD-00276,2024-09-17,Data Science Handbook,Books,4,40.49,0.1,161.96,West,Credit Card,Standard
+ORD-00279,2024-09-17,AI Revolution,Books,9,23.99,0.2,215.91,Central,Cash on Delivery,VIP
+ORD-00601,2024-09-17,Dumbbell Set,Sports,9,55.99,0.2,503.91,West,Cash on Delivery,Standard
+ORD-00553,2024-09-18,Air Purifier,Home & Kitchen,2,159.99,0.2,319.98,North,Credit Card,Premium
+ORD-00958,2024-09-18,Smart Lamp,Home & Kitchen,10,31.49,0.1,314.9,North,Bank Transfer,Premium
+ORD-00028,2024-09-20,Laptop Pro 15,Electronics,6,1299.99,0,7799.94,South,Bank Transfer,VIP
+ORD-00096,2024-09-21,AI Revolution,Books,9,29.99,0,269.91,South,Credit Card,Standard
+ORD-00669,2024-09-21,Running Shoes,Clothing,7,79.99,0,559.93,Central,Credit Card,VIP
+ORD-00424,2024-09-22,Webcam HD,Electronics,5,59.99,0,299.95,Central,PayPal,VIP
+ORD-00678,2024-09-22,Winter Jacket,Clothing,2,110.49,0.15,220.98,West,Bank Transfer,VIP
+ORD-00737,2024-09-22,USB-C Hub,Electronics,2,49.99,0,99.98,North,Credit Card,VIP
+ORD-00061,2024-09-23,Webcam HD,Electronics,7,59.99,0,419.93,Central,PayPal,Premium
+ORD-00449,2024-09-23,Python Programming,Books,1,39.99,0,39.99,West,Bank Transfer,Premium
+ORD-00658,2024-09-23,Water Bottle,Home & Kitchen,10,12.74,0.15,127.4,East,Credit Card,Standard
+ORD-00825,2024-09-24,Mechanical Keyboard,Electronics,7,76.49,0.15,535.43,North,Credit Card,Premium
+ORD-00924,2024-09-24,Resistance Bands Set,Sports,2,18.99,0.05,37.98,West,PayPal,VIP
+ORD-00698,2024-09-26,Machine Learning Guide,Books,3,54.99,0,164.97,South,Credit Card,Standard
+ORD-00024,2024-09-27,Desk Organizer,Home & Kitchen,3,22.99,0,68.97,Central,Cash on Delivery,Standard
+ORD-00310,2024-09-27,Yoga Mat,Sports,9,28.49,0.05,256.41,East,Credit Card,VIP
+ORD-00426,2024-09-27,Winter Jacket,Clothing,10,129.99,0,1299.9,North,Bank Transfer,Premium
+ORD-00869,2024-09-27,Winter Jacket,Clothing,3,103.99,0.2,311.97,North,Bank Transfer,Standard
+ORD-00021,2024-09-28,Data Science Handbook,Books,9,35.99,0.2,323.91,North,Bank Transfer,Premium
+ORD-00099,2024-09-28,Dumbbell Set,Sports,8,62.99,0.1,503.92,East,Cash on Delivery,VIP
+ORD-00173,2024-09-28,AI Revolution,Books,7,26.99,0.1,188.93,East,Cash on Delivery,VIP
+ORD-00645,2024-09-29,Desk Organizer,Home & Kitchen,10,22.99,0,229.9,Central,Credit Card,Standard
+ORD-00828,2024-09-29,Denim Jeans,Clothing,5,49.99,0,249.95,East,Cash on Delivery,VIP
+ORD-00218,2024-09-30,Dumbbell Set,Sports,8,69.99,0,559.92,South,Bank Transfer,Premium
+ORD-00539,2024-09-30,Water Bottle,Home & Kitchen,1,14.99,0,14.99,South,Bank Transfer,Standard
+ORD-00610,2024-09-30,Coffee Maker,Home & Kitchen,8,89.99,0,719.92,South,PayPal,VIP
+ORD-00710,2024-09-30,Python Programming,Books,3,39.99,0,119.97,North,PayPal,Standard
+ORD-00951,2024-09-30,Machine Learning Guide,Books,9,54.99,0,494.91,East,Credit Card,Standard
+ORD-00018,2024-10-01,Python Programming,Books,2,33.99,0.15,67.98,East,Bank Transfer,Standard
+ORD-00454,2024-10-01,Smart Lamp,Home & Kitchen,7,34.99,0,244.93,East,PayPal,Premium
+ORD-00506,2024-10-01,Yoga Mat,Sports,5,23.99,0.2,119.95,East,Cash on Delivery,Premium
+ORD-00891,2024-10-01,Water Bottle,Home & Kitchen,2,13.49,0.1,26.98,East,Bank Transfer,VIP
+ORD-00092,2024-10-02,Dumbbell Set,Sports,10,55.99,0.2,559.9,West,Cash on Delivery,Premium
+ORD-00729,2024-10-02,Running Shoes,Clothing,2,67.99,0.15,135.98,West,PayPal,VIP
+ORD-00986,2024-10-02,Running Shoes,Clothing,3,63.99,0.2,191.97,North,Credit Card,Standard
+ORD-00699,2024-10-03,AI Revolution,Books,8,28.49,0.05,227.92,East,Cash on Delivery,Standard
+ORD-00701,2024-10-03,Dumbbell Set,Sports,6,66.49,0.05,398.94,South,Credit Card,Premium
+ORD-00251,2024-10-04,AI Revolution,Books,2,26.99,0.1,53.98,East,Bank Transfer,Standard
+ORD-00674,2024-10-04,Desk Organizer,Home & Kitchen,1,18.39,0.2,18.39,North,Cash on Delivery,Premium
+ORD-00045,2024-10-05,AI Revolution,Books,3,28.49,0.05,85.47,East,Credit Card,VIP
+ORD-00114,2024-10-05,Resistance Bands Set,Sports,7,19.99,0,139.93,South,PayPal,Premium
+ORD-00372,2024-10-06,Monitor 27-inch,Electronics,4,359.99,0.1,1439.96,South,Credit Card,VIP
+ORD-00764,2024-10-06,Wool Scarf,Clothing,4,24.99,0,99.96,Central,Bank Transfer,VIP
+ORD-00458,2024-10-08,Mechanical Keyboard,Electronics,8,80.99,0.1,647.92,South,Credit Card,Premium
+ORD-00566,2024-10-08,Python Programming,Books,9,39.99,0,359.91,West,Cash on Delivery,Standard
+ORD-00655,2024-10-08,Jump Rope,Sports,6,10.39,0.2,62.34,Central,Credit Card,Standard
+ORD-00132,2024-10-09,Jump Rope,Sports,6,12.99,0,77.94,Central,Cash on Delivery,Premium
+ORD-00256,2024-10-09,Desk Organizer,Home & Kitchen,6,22.99,0,137.94,Central,PayPal,Standard
+ORD-00335,2024-10-09,Resistance Bands Set,Sports,7,19.99,0,139.93,East,Bank Transfer,Premium
+ORD-00205,2024-10-10,Jump Rope,Sports,8,11.69,0.1,93.52,North,Cash on Delivery,VIP
+ORD-00181,2024-10-11,Air Purifier,Home & Kitchen,2,199.99,0,399.98,East,Credit Card,Premium
+ORD-00362,2024-10-11,Winter Jacket,Clothing,8,116.99,0.1,935.92,Central,Cash on Delivery,Standard
+ORD-00853,2024-10-11,Winter Jacket,Clothing,3,129.99,0,389.97,West,Bank Transfer,Premium
+ORD-00210,2024-10-12,Python Programming,Books,6,39.99,0,239.94,West,Bank Transfer,Premium
+ORD-00801,2024-10-12,Dumbbell Set,Sports,10,59.49,0.15,594.9,South,Credit Card,Standard
+ORD-00053,2024-10-13,Cotton T-Shirt,Clothing,6,15.99,0.2,95.94,West,PayPal,Standard
+ORD-00663,2024-10-13,Laptop Pro 15,Electronics,9,1299.99,0,11699.91,Central,Bank Transfer,Premium
+ORD-00665,2024-10-13,Winter Jacket,Clothing,9,129.99,0,1169.91,North,Bank Transfer,Premium
+ORD-00003,2024-10-14,Wool Scarf,Clothing,10,24.99,0,249.9,South,Cash on Delivery,Standard
+ORD-00182,2024-10-14,Resistance Bands Set,Sports,7,15.99,0.2,111.93,Central,Credit Card,VIP
+ORD-00248,2024-10-14,Winter Jacket,Clothing,9,123.49,0.05,1111.41,North,Bank Transfer,Premium
+ORD-00273,2024-10-14,Mechanical Keyboard,Electronics,1,80.99,0.1,80.99,South,Bank Transfer,VIP
+ORD-00598,2024-10-14,Wool Scarf,Clothing,9,23.74,0.05,213.66,North,Credit Card,VIP
+ORD-00705,2024-10-14,Dumbbell Set,Sports,4,66.49,0.05,265.96,West,Cash on Delivery,Standard
+ORD-00960,2024-10-14,AI Revolution,Books,8,23.99,0.2,191.92,North,PayPal,VIP
+ORD-00377,2024-10-15,Data Science Handbook,Books,10,44.99,0,449.9,West,Bank Transfer,Premium
+ORD-00817,2024-10-16,Coffee Maker,Home & Kitchen,9,89.99,0,809.91,East,Credit Card,Standard
+ORD-00064,2024-10-18,Water Bottle,Home & Kitchen,3,13.49,0.1,40.47,East,Cash on Delivery,VIP
+ORD-00029,2024-10-19,Air Purifier,Home & Kitchen,9,199.99,0,1799.91,Central,Cash on Delivery,Standard
+ORD-00500,2024-10-19,Monitor 27-inch,Electronics,10,359.99,0.1,3599.9,Central,PayPal,Standard
+ORD-00194,2024-10-20,USB-C Hub,Electronics,10,47.49,0.05,474.9,West,Cash on Delivery,Premium
+ORD-00253,2024-10-20,Coffee Maker,Home & Kitchen,6,80.99,0.1,485.94,East,Cash on Delivery,VIP
+ORD-00462,2024-10-20,Mechanical Keyboard,Electronics,1,89.99,0,89.99,West,Cash on Delivery,Premium
+ORD-00567,2024-10-20,Mechanical Keyboard,Electronics,8,71.99,0.2,575.92,West,Credit Card,Premium
+ORD-00666,2024-10-21,Monitor 27-inch,Electronics,5,359.99,0.1,1799.95,East,Cash on Delivery,Premium
+ORD-00933,2024-10-21,Smart Lamp,Home & Kitchen,10,31.49,0.1,314.9,South,Credit Card,VIP
+ORD-00107,2024-10-22,Mechanical Keyboard,Electronics,8,89.99,0,719.92,North,PayPal,Standard
+ORD-00180,2024-10-22,Dumbbell Set,Sports,6,69.99,0,419.94,Central,PayPal,Standard
+ORD-00486,2024-10-22,Coffee Maker,Home & Kitchen,8,71.99,0.2,575.92,South,PayPal,Premium
+ORD-00653,2024-10-22,Machine Learning Guide,Books,5,54.99,0,274.95,East,Cash on Delivery,VIP
+ORD-00676,2024-10-22,Machine Learning Guide,Books,4,43.99,0.2,175.96,South,Credit Card,VIP
+ORD-00827,2024-10-22,Monitor 27-inch,Electronics,5,399.99,0,1999.95,East,PayPal,Premium
+ORD-00804,2024-10-23,Resistance Bands Set,Sports,8,16.99,0.15,135.92,East,Credit Card,Standard
+ORD-00985,2024-10-23,Yoga Mat,Sports,2,23.99,0.2,47.98,North,PayPal,VIP
+ORD-00679,2024-10-24,Laptop Pro 15,Electronics,4,1234.99,0.05,4939.96,North,Bank Transfer,Premium
+ORD-00937,2024-10-24,Yoga Mat,Sports,8,25.49,0.15,203.92,South,PayPal,Premium
+ORD-00211,2024-10-25,Resistance Bands Set,Sports,6,19.99,0,119.94,South,Bank Transfer,Premium
+ORD-00375,2024-10-25,Mechanical Keyboard,Electronics,10,85.49,0.05,854.9,West,Cash on Delivery,VIP
+ORD-00583,2024-10-25,USB-C Hub,Electronics,9,47.49,0.05,427.41,Central,Cash on Delivery,VIP
+ORD-00077,2024-10-26,Wireless Mouse,Electronics,7,28.49,0.05,199.43,North,Cash on Delivery,Premium
+ORD-00791,2024-10-26,Yoga Mat,Sports,3,23.99,0.2,71.97,Central,PayPal,Premium
+ORD-00165,2024-10-27,Cotton T-Shirt,Clothing,9,19.99,0,179.91,South,PayPal,Premium
+ORD-00178,2024-10-27,Data Science Handbook,Books,9,44.99,0,404.91,Central,Bank Transfer,VIP
+ORD-00460,2024-10-27,Smart Lamp,Home & Kitchen,2,31.49,0.1,62.98,East,Credit Card,Standard
+ORD-00662,2024-10-27,Smart Lamp,Home & Kitchen,7,33.24,0.05,232.68,South,Credit Card,VIP
+ORD-00102,2024-10-28,Winter Jacket,Clothing,5,110.49,0.15,552.45,Central,Bank Transfer,Standard
+ORD-00402,2024-10-28,Wireless Mouse,Electronics,4,23.99,0.2,95.96,East,Cash on Delivery,Standard
+ORD-00479,2024-10-28,Dumbbell Set,Sports,4,59.49,0.15,237.96,South,Cash on Delivery,Premium
+ORD-00505,2024-10-28,Air Purifier,Home & Kitchen,3,179.99,0.1,539.97,Central,Credit Card,Standard
+ORD-00987,2024-10-28,Jump Rope,Sports,6,11.04,0.15,66.24,South,Cash on Delivery,VIP
+ORD-00445,2024-10-29,Resistance Bands Set,Sports,8,19.99,0,159.92,West,PayPal,VIP
+ORD-00416,2024-10-30,Winter Jacket,Clothing,2,129.99,0,259.98,South,Cash on Delivery,Standard
+ORD-00945,2024-10-30,Dumbbell Set,Sports,6,66.49,0.05,398.94,Central,Cash on Delivery,Premium
+ORD-00112,2024-10-31,Mechanical Keyboard,Electronics,8,76.49,0.15,611.92,West,Bank Transfer,Standard
+ORD-00524,2024-10-31,Dumbbell Set,Sports,9,59.49,0.15,535.41,Central,Bank Transfer,Premium
+ORD-00059,2024-11-01,Dumbbell Set,Sports,1,69.99,0,69.99,West,Bank Transfer,VIP
+ORD-00769,2024-11-01,Yoga Mat,Sports,6,28.49,0.05,170.94,Central,Credit Card,Standard
+ORD-00190,2024-11-02,Python Programming,Books,4,37.99,0.05,151.96,North,Credit Card,Standard
+ORD-00968,2024-11-02,USB-C Hub,Electronics,8,49.99,0,399.92,East,Cash on Delivery,VIP
+ORD-00578,2024-11-03,Cotton T-Shirt,Clothing,7,16.99,0.15,118.93,Central,Bank Transfer,VIP
+ORD-00991,2024-11-03,Mechanical Keyboard,Electronics,5,85.49,0.05,427.45,East,Cash on Delivery,Standard
+ORD-00997,2024-11-04,Smart Lamp,Home & Kitchen,8,29.74,0.15,237.92,West,Cash on Delivery,VIP
+ORD-00047,2024-11-05,Resistance Bands Set,Sports,5,19.99,0,99.95,South,Bank Transfer,Standard
+ORD-00782,2024-11-05,Air Purifier,Home & Kitchen,9,159.99,0.2,1439.91,West,Bank Transfer,Standard
+ORD-00881,2024-11-05,Webcam HD,Electronics,2,59.99,0,119.98,South,Cash on Delivery,VIP
+ORD-00923,2024-11-05,Running Shoes,Clothing,4,79.99,0,319.96,South,PayPal,VIP
+ORD-00308,2024-11-06,Air Purifier,Home & Kitchen,8,169.99,0.15,1359.92,East,Cash on Delivery,VIP
+ORD-00622,2024-11-06,Yoga Mat,Sports,3,25.49,0.15,76.47,North,Bank Transfer,Standard
+ORD-00819,2024-11-06,Desk Organizer,Home & Kitchen,3,20.69,0.1,62.07,West,PayPal,VIP
+ORD-00172,2024-11-07,Coffee Maker,Home & Kitchen,2,89.99,0,179.98,South,Credit Card,Standard
+ORD-00244,2024-11-07,Resistance Bands Set,Sports,1,19.99,0,19.99,West,Credit Card,Standard
+ORD-00550,2024-11-07,Laptop Pro 15,Electronics,8,1299.99,0,10399.92,South,Bank Transfer,VIP
+ORD-00956,2024-11-07,Python Programming,Books,6,39.99,0,239.94,South,PayPal,Premium
+ORD-00208,2024-11-08,Water Bottle,Home & Kitchen,9,13.49,0.1,121.41,South,Bank Transfer,Premium
+ORD-00901,2024-11-08,USB-C Hub,Electronics,2,47.49,0.05,94.98,South,Credit Card,Standard
+ORD-00433,2024-11-09,Mechanical Keyboard,Electronics,2,85.49,0.05,170.98,Central,Credit Card,Premium
+ORD-00481,2024-11-09,Wireless Mouse,Electronics,10,29.99,0,299.9,South,Credit Card,Premium
+ORD-00849,2024-11-09,Python Programming,Books,10,39.99,0,399.9,Central,Cash on Delivery,Standard
+ORD-00307,2024-11-10,Webcam HD,Electronics,5,59.99,0,299.95,South,PayPal,Standard
+ORD-00464,2024-11-10,Machine Learning Guide,Books,3,54.99,0,164.97,Central,PayPal,VIP
+ORD-00475,2024-11-10,Jump Rope,Sports,1,12.99,0,12.99,South,PayPal,Premium
+ORD-00599,2024-11-10,Machine Learning Guide,Books,4,46.74,0.15,186.96,Central,PayPal,Standard
+ORD-00627,2024-11-10,Python Programming,Books,4,31.99,0.2,127.96,South,PayPal,Premium
+ORD-00430,2024-11-11,Coffee Maker,Home & Kitchen,9,80.99,0.1,728.91,South,Bank Transfer,Standard
+ORD-00587,2024-11-11,USB-C Hub,Electronics,8,49.99,0,399.92,Central,PayPal,VIP
+ORD-00736,2024-11-11,Smart Lamp,Home & Kitchen,1,27.99,0.2,27.99,East,Credit Card,VIP
+ORD-00811,2024-11-11,Webcam HD,Electronics,4,47.99,0.2,191.96,West,Cash on Delivery,Standard
+ORD-00902,2024-11-11,Mechanical Keyboard,Electronics,10,71.99,0.2,719.9,South,Credit Card,Standard
+ORD-00043,2024-11-14,Python Programming,Books,1,37.99,0.05,37.99,Central,Credit Card,Standard
+ORD-00080,2024-11-14,Air Purifier,Home & Kitchen,8,199.99,0,1599.92,Central,Credit Card,Premium
+ORD-00124,2024-11-14,Wireless Mouse,Electronics,9,29.99,0,269.91,West,Cash on Delivery,Standard
+ORD-00523,2024-11-15,Smart Lamp,Home & Kitchen,9,27.99,0.2,251.91,West,Credit Card,Standard
+ORD-00733,2024-11-15,Jump Rope,Sports,8,11.69,0.1,93.52,Central,Bank Transfer,Standard
+ORD-00594,2024-11-16,Running Shoes,Clothing,10,79.99,0,799.9,Central,Bank Transfer,Premium
+ORD-00623,2024-11-16,Resistance Bands Set,Sports,5,16.99,0.15,84.95,North,Credit Card,Standard
+ORD-00797,2024-11-16,AI Revolution,Books,8,29.99,0,239.92,South,Credit Card,Standard
+ORD-00912,2024-11-16,Data Science Handbook,Books,8,35.99,0.2,287.92,South,Bank Transfer,Standard
+ORD-00200,2024-11-17,Resistance Bands Set,Sports,2,19.99,0,39.98,West,Cash on Delivery,VIP
+ORD-00429,2024-11-17,Mechanical Keyboard,Electronics,9,89.99,0,809.91,Central,Cash on Delivery,Premium
+ORD-00502,2024-11-17,Webcam HD,Electronics,7,59.99,0,419.93,South,Bank Transfer,Premium
+ORD-00910,2024-11-17,Winter Jacket,Clothing,10,129.99,0,1299.9,East,Bank Transfer,Premium
+ORD-00972,2024-11-17,Python Programming,Books,9,39.99,0,359.91,South,Credit Card,VIP
+ORD-00343,2024-11-18,Laptop Pro 15,Electronics,7,1299.99,0,9099.93,South,Credit Card,VIP
+ORD-00861,2024-11-18,Yoga Mat,Sports,4,28.49,0.05,113.96,North,Bank Transfer,VIP
+ORD-00809,2024-11-19,Jump Rope,Sports,9,11.04,0.15,99.36,West,Cash on Delivery,Standard
+ORD-00533,2024-11-20,Mechanical Keyboard,Electronics,1,71.99,0.2,71.99,Central,Credit Card,Premium
+ORD-00538,2024-11-20,Wireless Mouse,Electronics,10,28.49,0.05,284.9,West,Cash on Delivery,Premium
+ORD-00572,2024-11-20,Cotton T-Shirt,Clothing,6,19.99,0,119.94,East,Bank Transfer,VIP
+ORD-00575,2024-11-20,Python Programming,Books,7,39.99,0,279.93,Central,Credit Card,Premium
+ORD-00742,2024-11-20,AI Revolution,Books,7,23.99,0.2,167.93,West,Bank Transfer,VIP
+ORD-00009,2024-11-21,Mechanical Keyboard,Electronics,5,85.49,0.05,427.45,East,PayPal,Premium
+ORD-00149,2024-11-21,Wool Scarf,Clothing,6,24.99,0,149.94,South,Bank Transfer,VIP
+ORD-00201,2024-11-21,Jump Rope,Sports,10,11.04,0.15,110.4,Central,Bank Transfer,VIP
+ORD-00393,2024-11-21,Water Bottle,Home & Kitchen,3,14.24,0.05,42.72,Central,PayPal,VIP
+ORD-00376,2024-11-22,USB-C Hub,Electronics,9,44.99,0.1,404.91,North,Credit Card,Standard
+ORD-00493,2024-11-22,Laptop Pro 15,Electronics,4,1299.99,0,5199.96,East,Credit Card,Premium
+ORD-00812,2024-11-22,AI Revolution,Books,9,23.99,0.2,215.91,South,Credit Card,VIP
+ORD-00875,2024-11-22,Python Programming,Books,2,35.99,0.1,71.98,East,Cash on Delivery,VIP
+ORD-00020,2024-11-23,Webcam HD,Electronics,5,47.99,0.2,239.95,Central,PayPal,Standard
+ORD-00145,2024-11-23,Smart Lamp,Home & Kitchen,10,34.99,0,349.9,West,Bank Transfer,Premium
+ORD-00262,2024-11-23,Wool Scarf,Clothing,7,22.49,0.1,157.43,North,Cash on Delivery,VIP
+ORD-00385,2024-11-23,Winter Jacket,Clothing,3,129.99,0,389.97,West,Cash on Delivery,Standard
+ORD-00735,2024-11-23,Coffee Maker,Home & Kitchen,8,71.99,0.2,575.92,North,Bank Transfer,VIP
+ORD-00888,2024-11-23,Mechanical Keyboard,Electronics,3,76.49,0.15,229.47,North,Credit Card,VIP
+ORD-00261,2024-11-24,Laptop Pro 15,Electronics,2,1299.99,0,2599.98,Central,Bank Transfer,VIP
+ORD-00342,2024-11-24,Jump Rope,Sports,3,11.69,0.1,35.07,North,Credit Card,Standard
+ORD-00749,2024-11-24,Desk Organizer,Home & Kitchen,2,20.69,0.1,41.38,East,Credit Card,VIP
+ORD-00466,2024-11-25,Air Purifier,Home & Kitchen,7,199.99,0,1399.93,Central,PayPal,VIP
+ORD-00162,2024-11-26,Webcam HD,Electronics,6,53.99,0.1,323.94,East,Credit Card,Premium
+ORD-00207,2024-11-26,USB-C Hub,Electronics,2,44.99,0.1,89.98,South,Credit Card,Standard
+ORD-00213,2024-11-26,Data Science Handbook,Books,9,44.99,0,404.91,West,Bank Transfer,Standard
+ORD-00296,2024-11-26,Running Shoes,Clothing,6,79.99,0,479.94,North,Credit Card,VIP
+ORD-00693,2024-11-26,AI Revolution,Books,5,26.99,0.1,134.95,West,Bank Transfer,Premium
+ORD-00723,2024-11-26,Air Purifier,Home & Kitchen,6,179.99,0.1,1079.94,East,Cash on Delivery,VIP
+ORD-00331,2024-11-27,Running Shoes,Clothing,4,79.99,0,319.96,North,Cash on Delivery,Premium
+ORD-00892,2024-11-27,Machine Learning Guide,Books,1,46.74,0.15,46.74,North,Bank Transfer,VIP
+ORD-00084,2024-11-28,Yoga Mat,Sports,6,29.99,0,179.94,North,Credit Card,Standard
+ORD-00349,2024-11-28,Running Shoes,Clothing,2,67.99,0.15,135.98,North,Credit Card,Premium
+ORD-00582,2024-11-28,AI Revolution,Books,3,25.49,0.15,76.47,South,Bank Transfer,VIP
+ORD-00689,2024-11-28,Resistance Bands Set,Sports,10,17.99,0.1,179.9,Central,PayPal,Premium
+ORD-00793,2024-11-28,USB-C Hub,Electronics,6,42.49,0.15,254.94,South,Credit Card,Standard
+ORD-00369,2024-11-29,Smart Lamp,Home & Kitchen,7,27.99,0.2,195.93,Central,PayPal,Premium
+ORD-00757,2024-11-29,Resistance Bands Set,Sports,8,18.99,0.05,151.92,Central,PayPal,VIP
+ORD-00031,2024-11-30,Water Bottle,Home & Kitchen,1,12.74,0.15,12.74,North,Credit Card,Premium
+ORD-00271,2024-11-30,USB-C Hub,Electronics,8,44.99,0.1,359.92,West,Bank Transfer,VIP
+ORD-00318,2024-11-30,Webcam HD,Electronics,9,59.99,0,539.91,East,Credit Card,Standard
+ORD-00489,2024-11-30,Jump Rope,Sports,1,12.34,0.05,12.34,South,Cash on Delivery,Standard
+ORD-00568,2024-11-30,Smart Lamp,Home & Kitchen,2,33.24,0.05,66.48,North,Credit Card,Premium
+ORD-00751,2024-11-30,Coffee Maker,Home & Kitchen,4,76.49,0.15,305.96,Central,Credit Card,VIP
+ORD-00136,2024-12-01,Coffee Maker,Home & Kitchen,3,85.49,0.05,256.47,South,Credit Card,Premium
+ORD-00291,2024-12-01,Python Programming,Books,6,37.99,0.05,227.94,East,Cash on Delivery,Standard
+ORD-00340,2024-12-01,Resistance Bands Set,Sports,8,17.99,0.1,143.92,East,Bank Transfer,Premium
+ORD-00415,2024-12-01,Smart Lamp,Home & Kitchen,4,33.24,0.05,132.96,North,Credit Card,Standard
+ORD-00760,2024-12-01,Running Shoes,Clothing,6,71.99,0.1,431.94,North,Bank Transfer,Standard
+ORD-00767,2024-12-01,Dumbbell Set,Sports,1,66.49,0.05,66.49,North,Credit Card,Premium
+ORD-00184,2024-12-02,Wireless Mouse,Electronics,3,26.99,0.1,80.97,West,Credit Card,Standard
+ORD-00447,2024-12-02,Python Programming,Books,6,39.99,0,239.94,West,Bank Transfer,Standard
+ORD-00659,2024-12-02,Water Bottle,Home & Kitchen,1,14.99,0,14.99,Central,Bank Transfer,Standard
+ORD-00131,2024-12-03,AI Revolution,Books,10,26.99,0.1,269.9,West,PayPal,Premium
+ORD-00170,2024-12-03,Resistance Bands Set,Sports,10,19.99,0,199.9,Central,Bank Transfer,Premium
+ORD-00628,2024-12-03,Denim Jeans,Clothing,10,44.99,0.1,449.9,South,Cash on Delivery,Premium
+ORD-00731,2024-12-03,Python Programming,Books,2,35.99,0.1,71.98,North,Credit Card,Standard
+ORD-00134,2024-12-05,Machine Learning Guide,Books,7,52.24,0.05,365.68,South,Cash on Delivery,Standard
+ORD-00176,2024-12-06,USB-C Hub,Electronics,7,49.99,0,349.93,East,Bank Transfer,Standard
+ORD-00179,2024-12-06,Mechanical Keyboard,Electronics,6,71.99,0.2,431.94,West,Credit Card,Premium
+ORD-00309,2024-12-06,Jump Rope,Sports,9,10.39,0.2,93.51,South,PayPal,VIP
+ORD-00409,2024-12-06,Webcam HD,Electronics,8,50.99,0.15,407.92,East,Credit Card,VIP
+ORD-00094,2024-12-08,Winter Jacket,Clothing,10,116.99,0.1,1169.9,West,Bank Transfer,Standard
+ORD-00231,2024-12-08,Jump Rope,Sports,3,11.04,0.15,33.12,North,Bank Transfer,Standard
+ORD-00293,2024-12-08,Resistance Bands Set,Sports,4,19.99,0,79.96,Central,PayPal,VIP
+ORD-00497,2024-12-08,Wireless Mouse,Electronics,2,29.99,0,59.98,East,Cash on Delivery,VIP
+ORD-00025,2024-12-09,Resistance Bands Set,Sports,5,18.99,0.05,94.95,East,Cash on Delivery,VIP
+ORD-00159,2024-12-09,Winter Jacket,Clothing,8,129.99,0,1039.92,Central,Cash on Delivery,VIP
+ORD-00603,2024-12-09,Yoga Mat,Sports,2,29.99,0,59.98,South,Cash on Delivery,Standard
+ORD-00155,2024-12-10,Mechanical Keyboard,Electronics,6,76.49,0.15,458.94,East,Cash on Delivery,VIP
+ORD-00314,2024-12-10,Yoga Mat,Sports,9,28.49,0.05,256.41,East,Credit Card,Premium
+ORD-00325,2024-12-10,Dumbbell Set,Sports,10,62.99,0.1,629.9,East,PayPal,Premium
+ORD-00753,2024-12-10,Resistance Bands Set,Sports,3,19.99,0,59.97,West,Cash on Delivery,VIP
+ORD-00187,2024-12-11,Denim Jeans,Clothing,10,49.99,0,499.9,North,Bank Transfer,Premium
+ORD-00438,2024-12-11,Running Shoes,Clothing,2,71.99,0.1,143.98,North,PayPal,VIP
+ORD-00144,2024-12-12,Python Programming,Books,8,39.99,0,319.92,Central,PayPal,Standard
+ORD-00406,2024-12-12,Running Shoes,Clothing,4,63.99,0.2,255.96,West,Cash on Delivery,Standard
+ORD-00555,2024-12-12,USB-C Hub,Electronics,6,39.99,0.2,239.94,East,Cash on Delivery,VIP
+ORD-00917,2024-12-12,Dumbbell Set,Sports,7,69.99,0,489.93,East,PayPal,Standard
+ORD-00379,2024-12-13,Machine Learning Guide,Books,8,43.99,0.2,351.92,Central,PayPal,Premium
+ORD-00848,2024-12-13,Running Shoes,Clothing,5,71.99,0.1,359.95,East,Cash on Delivery,VIP
+ORD-01000,2024-12-13,Wireless Mouse,Electronics,7,26.99,0.1,188.93,East,PayPal,Premium
+ORD-00358,2024-12-14,Jump Rope,Sports,7,12.99,0,90.93,Central,Cash on Delivery,Standard
+ORD-00508,2024-12-14,Air Purifier,Home & Kitchen,10,179.99,0.1,1799.9,West,Credit Card,Premium
+ORD-00534,2024-12-14,Wool Scarf,Clothing,2,19.99,0.2,39.98,West,Bank Transfer,Premium
+ORD-00010,2024-12-15,Data Science Handbook,Books,5,38.24,0.15,191.2,North,PayPal,VIP
+ORD-00520,2024-12-15,Desk Organizer,Home & Kitchen,1,18.39,0.2,18.39,North,Cash on Delivery,Standard
+ORD-00591,2024-12-15,Running Shoes,Clothing,8,79.99,0,639.92,North,PayPal,Standard
+ORD-00845,2024-12-16,Coffee Maker,Home & Kitchen,10,89.99,0,899.9,Central,Cash on Delivery,Premium
+ORD-00148,2024-12-17,Smart Lamp,Home & Kitchen,1,31.49,0.1,31.49,North,Cash on Delivery,Premium
+ORD-00421,2024-12-17,Denim Jeans,Clothing,7,44.99,0.1,314.93,West,PayPal,Standard
+ORD-00642,2024-12-17,Dumbbell Set,Sports,3,59.49,0.15,178.47,East,Cash on Delivery,VIP
+ORD-00814,2024-12-17,Dumbbell Set,Sports,1,69.99,0,69.99,East,Bank Transfer,Premium
+ORD-00281,2024-12-18,Mechanical Keyboard,Electronics,10,89.99,0,899.9,North,Cash on Delivery,Premium
+ORD-00785,2024-12-18,Winter Jacket,Clothing,10,123.49,0.05,1234.9,East,Cash on Delivery,Standard
+ORD-00284,2024-12-19,Machine Learning Guide,Books,3,52.24,0.05,156.72,South,Cash on Delivery,VIP
+ORD-00686,2024-12-19,Yoga Mat,Sports,7,29.99,0,209.93,South,Credit Card,Standard
+ORD-00720,2024-12-19,Cotton T-Shirt,Clothing,1,17.99,0.1,17.99,West,PayPal,Premium
+ORD-00932,2024-12-19,Coffee Maker,Home & Kitchen,2,85.49,0.05,170.98,East,Credit Card,Premium
+ORD-00121,2024-12-21,Wireless Mouse,Electronics,6,28.49,0.05,170.94,West,Bank Transfer,VIP
+ORD-00249,2024-12-21,Air Purifier,Home & Kitchen,10,199.99,0,1999.9,West,PayPal,Standard
+ORD-00707,2024-12-21,Wool Scarf,Clothing,10,19.99,0.2,199.9,East,Bank Transfer,VIP
+ORD-00063,2024-12-22,Machine Learning Guide,Books,6,52.24,0.05,313.44,East,PayPal,Standard
+ORD-00069,2024-12-22,Desk Organizer,Home & Kitchen,4,19.54,0.15,78.16,West,Cash on Delivery,Premium
+ORD-00292,2024-12-22,Wool Scarf,Clothing,5,22.49,0.1,112.45,East,PayPal,Standard
+ORD-00382,2024-12-22,Coffee Maker,Home & Kitchen,8,76.49,0.15,611.92,West,Bank Transfer,Standard
+ORD-00588,2024-12-22,Jump Rope,Sports,4,11.69,0.1,46.76,East,Credit Card,Premium
+ORD-00725,2024-12-22,Desk Organizer,Home & Kitchen,5,20.69,0.1,103.45,West,PayPal,VIP
+ORD-00894,2024-12-22,Mechanical Keyboard,Electronics,4,89.99,0,359.96,West,Credit Card,VIP
+ORD-00660,2024-12-23,Monitor 27-inch,Electronics,9,359.99,0.1,3239.91,South,PayPal,VIP
+ORD-00756,2024-12-23,Mechanical Keyboard,Electronics,9,85.49,0.05,769.41,South,PayPal,Premium
+ORD-00765,2024-12-23,Desk Organizer,Home & Kitchen,3,19.54,0.15,58.62,North,Cash on Delivery,VIP
+ORD-00835,2024-12-23,Resistance Bands Set,Sports,2,15.99,0.2,31.98,West,Credit Card,Premium
+ORD-00086,2024-12-24,Monitor 27-inch,Electronics,4,379.99,0.05,1519.96,East,Bank Transfer,Standard
+ORD-00147,2024-12-24,Dumbbell Set,Sports,10,69.99,0,699.9,East,Credit Card,VIP
+ORD-00504,2024-12-24,Jump Rope,Sports,1,10.39,0.2,10.39,Central,Cash on Delivery,Standard
+ORD-00608,2024-12-24,Yoga Mat,Sports,10,29.99,0,299.9,North,Bank Transfer,VIP
+ORD-00654,2024-12-24,Cotton T-Shirt,Clothing,4,18.99,0.05,75.96,South,Credit Card,Standard
+ORD-00055,2024-12-25,Running Shoes,Clothing,3,63.99,0.2,191.97,North,Cash on Delivery,Standard
+ORD-00174,2024-12-25,Jump Rope,Sports,2,10.39,0.2,20.78,North,PayPal,Premium
+ORD-00183,2024-12-25,Python Programming,Books,3,39.99,0,119.97,East,Bank Transfer,Premium
+ORD-00851,2024-12-25,Python Programming,Books,4,37.99,0.05,151.96,Central,Cash on Delivery,VIP
+ORD-00387,2024-12-26,Denim Jeans,Clothing,5,39.99,0.2,199.95,North,Credit Card,VIP
+ORD-00477,2024-12-26,Dumbbell Set,Sports,2,69.99,0,139.98,West,Credit Card,Premium
+ORD-00590,2024-12-26,Jump Rope,Sports,4,11.04,0.15,44.16,East,PayPal,VIP
+ORD-00631,2024-12-26,Laptop Pro 15,Electronics,6,1299.99,0,7799.94,Central,Bank Transfer,VIP
+ORD-00128,2024-12-27,Winter Jacket,Clothing,5,116.99,0.1,584.95,East,Cash on Delivery,Premium
+ORD-00873,2024-12-27,Resistance Bands Set,Sports,7,16.99,0.15,118.93,West,Cash on Delivery,Premium
+ORD-00528,2024-12-28,Water Bottle,Home & Kitchen,1,13.49,0.1,13.49,Central,PayPal,Premium
+ORD-00595,2024-12-28,Dumbbell Set,Sports,2,55.99,0.2,111.98,East,PayPal,Standard
+ORD-00513,2024-12-29,Resistance Bands Set,Sports,2,19.99,0,39.98,Central,Cash on Delivery,Standard
+ORD-00770,2024-12-30,Wool Scarf,Clothing,8,22.49,0.1,179.92,North,Credit Card,Standard
+ORD-00843,2024-12-30,Denim Jeans,Clothing,2,42.49,0.15,84.98,Central,Cash on Delivery,Standard
+ORD-00225,2024-12-31,Cotton T-Shirt,Clothing,6,19.99,0,119.94,East,PayPal,Standard
+ORD-00250,2024-12-31,Cotton T-Shirt,Clothing,8,19.99,0,159.92,West,Credit Card,VIP
+ORD-00467,2024-12-31,Yoga Mat,Sports,7,23.99,0.2,167.93,East,Cash on Delivery,VIP
+ORD-00996,2024-12-31,Winter Jacket,Clothing,8,129.99,0,1039.92,Central,Bank Transfer,VIP
