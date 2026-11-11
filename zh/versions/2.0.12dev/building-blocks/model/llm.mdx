@@ -83,6 +83,58 @@ model = DashScopeChatModel(
 | `context_size` | `int` | 上下文窗口大小，用于上下文压缩 |
 | `formatter` | `FormatterBase \| None` | 覆盖默认的消息格式化器（参见[格式化器](#格式化器)） |
 
+### 使用 Gemini 4
+
+`GeminiChatModel` 支持 `gemini-4-argon` 和 `gemini-4-carbon`。开发者需要安装 `agentscope[model-gemini]`，确保 `google-genai>=2.30.1`，并在运行示例前设置环境变量 `GEMINI_API_KEY`。将模型名改为 Argon，即可复用相同配置。
+
+下面的示例使用中等推理强度，并请求返回简短回答和思考摘要：
+
+```python Gemini 4
+import asyncio
+import os
+
+from agentscope.credential import GeminiCredential
+from agentscope.message import UserMsg
+from agentscope.model import GeminiChatModel
+
+
+async def main():
+    model = GeminiChatModel(
+        credential=GeminiCredential(api_key=os.environ["GEMINI_API_KEY"]),
+        model="gemini-4-carbon",
+        stream=False,
+        parameters=GeminiChatModel.Parameters(
+            thinking_level="medium",
+            thinking_enable=True,  # Include summaries, not a reasoning toggle.
+            max_tokens=65_536,  # Budget shared by thinking and answer tokens.
+        ),
+    )
+    response = await model(
+        [UserMsg(name="user", content="简要解释二分查找。")],
+    )
+    print(response.content)
+
+
+asyncio.run(main())
+```
+
+返回内容包含文本，以及模型提供的思考摘要。需要流式输出时，设置 `stream=True`，并按[调用模型](#调用模型)中的方式迭代响应。
+
+这两个 Gemini 4 模型均遵循以下适配规则：
+
+| 配置项 | 行为 |
+|--------|------|
+| `thinking_level` | 支持 `"low"`、`"medium"`、`"high"`；未指定时，模型默认使用 medium。 |
+| `thinking_enable` | 控制是否返回思考摘要；设置为 `False` 不会关闭推理。 |
+| `thinking_budget` | 最终请求配置中不允许使用，请改用 `thinking_level`。 |
+| `max_tokens` | 最终配置不得超过 65,536；当前适配器不支持请求更大的长解码预算。 |
+| `temperature`、`top_p`、`top_k` | 均不生效。无论来自模型级配置还是单次调用，每个非 `None` 值都会触发警告，并从请求中移除。 |
+| 客户端超时 | 默认 900,000 毫秒（15 分钟）。通过 `client_kwargs={"http_options": {"timeout": ...}}` 显式指定的值会被保留；`0` 表示禁用 SDK 客户端超时，服务端仍可能有自身限制。 |
+
+单次调用的 SDK 配置会先覆盖模型级参数，再进行模型专属校验。例如，`await model(messages, thinking_config={"thinking_level": "LOW"}, max_output_tokens=32768)` 会覆盖预设的推理强度和输出预算。显式传入 `None` 可清除对应的模型级配置；传入 `thinking_config` 会整体替换该项，而非合并内部字段。配置校验先于消息格式化执行，非法配置不会触发媒体文件读取或下载。
+
+上述配置还接受单次调用中的驼峰别名：`thinkingConfig`、`maxOutputTokens`、`topP`、`topK`。思考配置内部的别名由 SDK 统一处理；同一字段同时传入两种名称会报错。Python 代码建议统一使用 snake_case 名称。
+
 ## 调用模型
 
 通过传入一组 `Msg` 对象（以及可选的 `tools` 和 `tool_choice`）调用模型：
