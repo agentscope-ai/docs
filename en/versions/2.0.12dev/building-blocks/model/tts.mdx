@@ -9,6 +9,7 @@ A **TTS Model** converts text into synthesized speech audio, supporting both sta
 |----------|-------------|------------|
 | OpenAI | `OpenAITTSModel` | tts-1, tts-1-hd, gpt-4o-mini-tts; multiple voices; configurable output format (mp3, wav, opus, …) |
 | Gemini | `GeminiTTSModel` | gemini-2.5-flash-preview-tts, gemini-2.5-pro-preview-tts; 30 prebuilt voices; streaming output |
+| MiniMax | `MiniMaxTTSModel` | Speech models; preset and cloned voices; streaming output |
 | DashScope | `DashScopeTTSModel` | Qwen3-TTS, multiple voices, streaming output |
 | DashScope (Realtime) | `DashScopeRealtimeTTSModel` | Qwen3-TTS WebSocket streaming input, ideal for LLM output piping |
 | DashScope (CosyVoice) | `DashScopeCosyVoiceTTSModel` | CosyVoice-v3, supports both standard and realtime (streaming-input) modes; cosyvoice-v3-flash/plus |
@@ -437,6 +438,64 @@ cards = DashScopeTTSModel.list_models()
 # CosyVoice models
 cosyvoice_cards = DashScopeCosyVoiceTTSModel.list_models()
 ```
+
+## Clone a MiniMax Voice
+
+Use `MiniMaxVoiceCloningClient` to create a voice from a recording, then pass the returned `voice_id` to `MiniMaxTTSModel.Parameters(voice=...)`. Reuse the same MiniMax credential and endpoint for both operations.
+
+Prepare an MP3, M4A, or WAV recording of 10 seconds to 5 minutes, up to 20 MiB. For the China mainland endpoint, complete the required individual or enterprise account verification and set `base_url="https://api.minimax.cn/anthropic"`.
+
+With `MINIMAX_API_KEY` set and `voice.wav` in the working directory, this example prints the new voice ID and writes synthesized speech to `cloned-voice.mp3`:
+
+```python MiniMax Voice Cloning
+import asyncio
+import base64
+import os
+from pathlib import Path
+
+from agentscope.credential import MiniMaxCredential
+from agentscope.tts import MiniMaxTTSModel, MiniMaxVoiceCloningClient
+
+
+async def main() -> None:
+    credential = MiniMaxCredential(
+        api_key=os.environ["MINIMAX_API_KEY"],
+        base_url="https://api.minimax.io/anthropic",
+    )
+    sample = Path("voice.wav")
+    # Create the voice once, then retain its ID for later synthesis.
+    voice_id = await MiniMaxVoiceCloningClient(credential).create_voice(
+        sample.read_bytes(),
+        filename=sample.name,
+    )
+    print(voice_id)
+
+    # Reuse the same account and endpoint for speech synthesis.
+    tts = MiniMaxTTSModel(
+        credential=credential,
+        model="speech-2.8-hd",
+        parameters=MiniMaxTTSModel.Parameters(voice=voice_id),
+        stream=False,
+    )
+    response = await tts.synthesize("Hello from my cloned voice.")
+    if response.content:
+        Path("cloned-voice.mp3").write_bytes(
+            base64.b64decode(response.content.source.data),
+        )
+
+
+asyncio.run(main())
+```
+
+`create_voice()` uploads the recording and creates the voice without requesting a synthesis preview. The subsequent `synthesize()` call uses MiniMax's normal speech synthesis billing. Invalid local inputs raise `ValueError`; provider or network failures raise `VoiceCloningError`.
+
+<Note>
+Use a newly cloned voice for speech synthesis within seven days, or MiniMax deletes it. Saving its ID or creating an App voice profile alone does not activate it.
+</Note>
+
+In the App, open **Voice Profiles**, create a profile, choose **MiniMax TTS**, an owned credential, and a synthesis model, then upload the recording and save. Select that profile in the conversation's TTS settings. MiniMax uploads allow 20 MiB; other voice creation uploads retain their 10 MiB limit.
+
+See the [MiniMax voice cloning API requirements](https://platform.minimax.io/docs/api-reference/voice-cloning-clone) for provider-side constraints.
 
 ## Custom TTS Provider
 
