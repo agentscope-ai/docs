@@ -9,6 +9,7 @@ description: "将文本转换为语音，支持标准与实时两种合成模式
 |--------|--------|------|
 | OpenAI | `OpenAITTSModel` | tts-1、tts-1-hd、gpt-4o-mini-tts；多种音色；可配置输出格式（mp3、wav、opus 等） |
 | Gemini | `GeminiTTSModel` | gemini-2.5-flash-preview-tts、gemini-2.5-pro-preview-tts；30 种预设音色；流式输出 |
+| MiniMax | `MiniMaxTTSModel` | Speech 系列模型；预设与复刻音色；流式输出 |
 | DashScope | `DashScopeTTSModel` | Qwen3-TTS，多种音色，流式输出 |
 | DashScope (Realtime) | `DashScopeRealtimeTTSModel` | Qwen3-TTS WebSocket 流式输入，适合对接大语言模型的流式输出 |
 | DashScope (CosyVoice) | `DashScopeCosyVoiceTTSModel` | CosyVoice-v3，支持标准与实时（流式输入）两种模式；cosyvoice-v3-flash/plus |
@@ -436,6 +437,64 @@ cards = DashScopeTTSModel.list_models()
 # CosyVoice 模型
 cosyvoice_cards = DashScopeCosyVoiceTTSModel.list_models()
 ```
+
+## 复刻 MiniMax 音色
+
+开发者可以用 `MiniMaxVoiceCloningClient` 从录音创建音色，再将返回的 `voice_id` 传入 `MiniMaxTTSModel.Parameters(voice=...)`。复刻和合成需要使用同一 MiniMax 凭证和接口地址。
+
+准备一段 10 秒至 5 分钟的 MP3、M4A 或 WAV 录音，最大 20 MiB。使用国内接口前，需完成个人或企业认证，并将 `base_url` 设置为 `"https://api.minimax.cn/anthropic"`。
+
+设置 `MINIMAX_API_KEY` 环境变量，并将 `voice.wav` 放在工作目录中。以下示例会输出新音色 ID，并将合成语音保存到 `cloned-voice.mp3`：
+
+```python MiniMax Voice Cloning
+import asyncio
+import base64
+import os
+from pathlib import Path
+
+from agentscope.credential import MiniMaxCredential
+from agentscope.tts import MiniMaxTTSModel, MiniMaxVoiceCloningClient
+
+
+async def main() -> None:
+    credential = MiniMaxCredential(
+        api_key=os.environ["MINIMAX_API_KEY"],
+        base_url="https://api.minimax.io/anthropic",
+    )
+    sample = Path("voice.wav")
+    # Create the voice once, then retain its ID for later synthesis.
+    voice_id = await MiniMaxVoiceCloningClient(credential).create_voice(
+        sample.read_bytes(),
+        filename=sample.name,
+    )
+    print(voice_id)
+
+    # Reuse the same account and endpoint for speech synthesis.
+    tts = MiniMaxTTSModel(
+        credential=credential,
+        model="speech-2.8-hd",
+        parameters=MiniMaxTTSModel.Parameters(voice=voice_id),
+        stream=False,
+    )
+    response = await tts.synthesize("Hello from my cloned voice.")
+    if response.content:
+        Path("cloned-voice.mp3").write_bytes(
+            base64.b64decode(response.content.source.data),
+        )
+
+
+asyncio.run(main())
+```
+
+`create_voice()` 上传录音并创建音色，不请求合成试听。随后调用的 `synthesize()` 按 MiniMax 的语音合成规则计费。本地输入无效时抛出 `ValueError`，接口或网络失败时抛出 `VoiceCloningError`。
+
+<Note>
+新音色须在七天内用于语音合成，否则 MiniMax 会将其删除。仅保存音色 ID 或在应用中保存音色配置不会激活音色。
+</Note>
+
+在应用中打开「音色管理」，新建音色，选择 **MiniMax TTS**、自己拥有的凭证和合成模型，上传录音后保存。随后在会话的语音合成设置中选择该音色。MiniMax 录音上传上限为 20 MiB，其他音色创建接口仍保留 10 MiB 上限。
+
+完整的接口约束参见 [MiniMax 音色复刻文档](https://platform.minimax.cn/docs/api-reference/voice-cloning-clone)。
 
 ## 自定义模型 API
 
