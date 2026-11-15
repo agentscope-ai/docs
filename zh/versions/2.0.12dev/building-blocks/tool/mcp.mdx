@@ -103,6 +103,16 @@ await client.set_runtime_headers({"Authorization": "Bearer new-token"})
 | 覆盖关系 | MCP 自己按请求设置的 header（`mcp-session-id`、`content-type` 等）始终优先；`connection`、`content-length`、`host`、`transfer-encoding` 由 HTTP 层所有，传入会被拒绝 |
 | 持久化 | 运行时 header 是实例上的活跃状态，不参与 `model_dump`，也不会写入工作区持久化 |
 
+静态请求头与运行时覆盖合并后的内容发生变化时，AgentScope 会清空工具目录缓存。
+随后调用 `get_tool()` 会重新发现工具；清除覆盖后，如果生效的请求头发生变化，也会刷新。
+请求头名称不区分大小写。等价更新会保留缓存，无效更新抛出 `ValueError`，不会修改缓存。
+
+如果请求头在工具发现期间发生变化，AgentScope 会丢弃过期结果并重试一次。
+若重试仍被更新打断，工具发现会抛出 `RuntimeError`；请在请求头更新稳定后重新查询。
+
+已经返回的 `MCPTool` 对象和已经注册到工具集中的工具不会自动更新其工具定义。
+需要新工具定义时，请重新获取并替换这些工具。更新请求头不会重放正在执行的工具调用。
+
 <Note>
 Docker 工作区中真正的 MCP 客户端跑在网关进程里，主机侧持有的是代理对象。对代理调用 `set_runtime_headers()` 会转发给网关，详见 [MCP 网关](/zh/versions/2.0.12dev/building-blocks/workspace/mcp-gateway)。
 </Note>
