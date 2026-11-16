@@ -1,0 +1,49 @@
+---
+title: "Meta Tool"
+description: "Let the agent activate and deactivate tool groups at runtime"
+---
+
+The built-in **meta tool** (`reset_tools`) lets the agent self-manage which tool groups are active at runtime. This keeps its context focused: only tools relevant to the current task are exposed.
+
+## Define Tool Group
+
+A `ToolGroup` is a named bundle of tools, MCP clients, and skills. Pass groups to `Toolkit(tool_groups=[...])`. The reserved `"basic"` group is created automatically from the constructor's top-level `tools`, `mcps`, and `skills_or_loaders` arguments and is always active.
+
+```python
+from agentscope.tool import Toolkit, ToolGroup, Bash, Read, Write, Edit
+
+toolkit = Toolkit(
+    tools=[Bash(), Read(), Write(), Edit()],
+    tool_groups=[
+        ToolGroup(
+            name="database",
+            description="Tools for database operations.",
+            instructions="Always wrap mutations in a transaction.",
+            tools=[db_query_tool, db_migrate_tool],
+        ),
+        ToolGroup(
+            name="deployment",
+            description="Tools for deploying services.",
+            instructions="Confirm the target environment before deploying.",
+            tools=[deploy_tool, rollback_tool],
+        ),
+    ],
+)
+```
+
+`ToolGroup` accepts the same `tools`, `mcps`, and `skills_or_loaders` arguments as the toolkit, plus a `description` shown to the agent in the meta tool schema and an optional `instructions` string returned when the group is activated.
+
+## Use Meta Tool
+
+When at least one non-basic tool group exists, `Toolkit` auto-registers `reset_tools` and exposes its schema to the agent. Each non-basic group becomes a boolean field on that schema, and the agent calls the meta tool with the desired final state.
+
+The behavior at runtime:
+
+- Tools in the `"basic"` group are always exposed; they are never affected by the meta tool.
+- Each call to `reset_tools` overwrites the activated set: any non-basic group not explicitly set to `True` becomes inactive, regardless of its previous state.
+- For each group transitioning to active, its `instructions` (when provided) are concatenated and returned in the meta tool's response, telling the agent how to use that group properly.
+- Tools from inactive groups are hidden from the agent's tool schema, freeing context space for the active set.
+
+<Warning>
+The meta tool input represents the **final state** of all groups, not incremental changes. Any group not explicitly set to `True` will be deactivated, regardless of its previous state.
+</Warning>

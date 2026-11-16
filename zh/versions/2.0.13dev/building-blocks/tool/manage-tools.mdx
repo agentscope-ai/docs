@@ -1,0 +1,49 @@
+---
+title: "元工具"
+description: "让智能体在运行时自主激活或停用工具组"
+---
+
+AgentScope 内置**元工具**（`reset_tools`），让智能体在运行时自主管理哪些工具组处于激活状态，从而保持上下文聚焦：只有与当前任务相关的工具才会暴露给模型。
+
+## 定义工具组
+
+`ToolGroup` 是带有名称和描述的工具 / MCP / skill 集合，通过 `Toolkit(tool_groups=[...])` 接口进行设置。其中保留名 `"basic"` 由构造函数顶层的 `tools`、`mcps`、`skills_or_loaders` 自动构成，且始终处于激活状态。
+
+```python
+from agentscope.tool import Toolkit, ToolGroup, Bash, Read, Write, Edit
+
+toolkit = Toolkit(
+    tools=[Bash(), Read(), Write(), Edit()],
+    tool_groups=[
+        ToolGroup(
+            name="database",
+            description="Tools for database operations.",
+            instructions="Always wrap mutations in a transaction.",
+            tools=[db_query_tool, db_migrate_tool],
+        ),
+        ToolGroup(
+            name="deployment",
+            description="Tools for deploying services.",
+            instructions="Confirm the target environment before deploying.",
+            tools=[deploy_tool, rollback_tool],
+        ),
+    ],
+)
+```
+
+`ToolGroup` 接收与 toolkit 相同的 `tools`、`mcps`、`skills_or_loaders` 参数，再加上一个用于向智能体描述本工具组的 `description` 字段，以及工具组激活时返回给智能体的可选 `instructions` 参数。
+
+## 使用元工具
+
+只要存在至少一个非 basic 的工具组，`Toolkit` 就会自动注册元工具 `reset_tools`。除默认组外，每个工具组都对应 `reset_tools` 中的一个布尔型参数，代表是否激活该工具组。
+
+运行时行为：
+
+- `"basic"` 组中的工具始终暴露，元工具不会影响它们。
+- 每次调用 `reset_tools` 都会**整体覆盖**激活集合：任何未显式置为 `True` 的非 basic 组都会被停用。
+- 被激活的工具组，其 `instructions`（若有）会被拼接进元工具的返回值，告诉智能体如何正确使用该组。
+- 未被激活的工具以及 skill 不会出现在大模型调用的输入中。
+
+<Warning>
+元工具的输入表示所有工具组的**最终状态**。任何未显式置为 `True` 的工具组都会被停用，无论之前的状态如何。
+</Warning>
