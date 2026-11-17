@@ -1,0 +1,140 @@
+---
+title: "语音识别"
+description: "使用批量或实时语音识别模型将音频转写为文本"
+---
+
+语音识别模型（ASR）将语音音频转换为文本。AgentScope 为完整音频文件转写和
+实时音频输入提供统一接口。2.0.11目前包含以下内置实现：
+
+| 模型 API | 模型类 | 模式 | 内置模型 |
+|----------|--------|------|----------|
+| OpenAI | `OpenAIASRModel` | 批量 | `gpt-4o-mini-transcribe`、`gpt-4o-transcribe` |
+
+## 创建语音识别模型
+
+使用 `OpenAICredential` 创建 `OpenAIASRModel`。默认模型为
+`gpt-4o-mini-transcribe`：
+
+```python
+import os
+
+from agentscope.asr import OpenAIASRModel
+from agentscope.credential import OpenAICredential
+
+asr = OpenAIASRModel(
+    credential=OpenAICredential(
+        api_key=os.environ["OPENAI_API_KEY"],
+    ),
+    model="gpt-4o-mini-transcribe",
+    parameters=OpenAIASRModel.Parameters(
+        language="zh",
+        prompt="AgentScope 产品会议",
+    ),
+)
+```
+
+OpenAI 实现支持两个可选参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `language` | `str \| None` | 音频语言的 ISO-639-1 代码 |
+| `prompt` | `str \| None` | 用于引导转写词汇和风格的文本 |
+
+## 转写音频
+
+`transcribe()` 接收完整音频的字节数据。请传入原始文件名，让模型 API 能够
+识别内存中音频的格式：
+
+```python
+import asyncio
+import os
+from pathlib import Path
+
+from agentscope.asr import OpenAIASRModel
+from agentscope.credential import OpenAICredential
+
+
+async def main() -> None:
+    audio_path = Path("meeting.wav")
+    asr = OpenAIASRModel(
+        credential=OpenAICredential(
+            api_key=os.environ["OPENAI_API_KEY"],
+        ),
+    )
+    response = await asr.transcribe(
+        audio=audio_path.read_bytes(),
+        filename=audio_path.name,
+    )
+    if response.content is not None:
+        print(response.content.text)
+
+
+asyncio.run(main())
+```
+
+内置的 OpenAI 模型卡片声明支持 FLAC、MP3/MPEG、MP4、OGG、WAV 和 WebM
+输入。`audio` 或 `filename` 为空时会抛出 `ValueError`。直接传给
+`transcribe()` 的关键字参数只在本次调用中生效，并覆盖模型 `Parameters`
+对象中的同名配置。
+
+## 读取响应
+
+`transcribe()` 返回 `ASRResponse`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `content` | `TextBlock \| None` | 转写文本；实时模型暂时没有新文本时为空 |
+| `id` | `str` | 唯一响应标识符 |
+| `created_at` | `str` | 响应创建时间 |
+| `type` | `"asr"` | 响应类型判别值 |
+| `metadata` | `dict \| None` | 可选的模型 API 专属元数据 |
+| `is_last` | `bool` | 是否为最后一条转写响应 |
+
+批量模型返回的最终响应中 `is_last=True`。实时模型通过 `push()` 返回的中间
+响应可以使用 `is_last=False`。
+
+## 发现可用模型
+
+ASR 模型卡片描述支持的音频类型、输出类型、实时能力以及模型 API 参数
+schema。可以从凭证类或模型类发现模型：
+
+<CodeGroup>
+```python 凭证
+from agentscope.credential import OpenAICredential
+
+cards = OpenAICredential.list_asr_models()
+for card in cards:
+    print(f"{card.name}: {card.input_types}")
+```
+
+```python 模型类
+from agentscope.asr import OpenAIASRModel
+
+cards = OpenAIASRModel.list_models()
+for card in cards:
+    print(f"{card.name}: realtime={card.realtime}")
+```
+</CodeGroup>
+
+## 实现自定义语音识别模型
+
+批量模型需要继承 `ASRModelBase` 并实现 `transcribe()`：
+
+```python
+async def transcribe(
+    self,
+    audio: bytes | None = None,
+    filename: str = "audio.wav",
+    **kwargs: Any,
+) -> ASRResponse:
+    ...
+```
+
+实时模型还需要设置 `realtime=True`，实现 `connect()`、`push()` 和 `close()`，
+并通过异步上下文管理器使用。调用 `push()` 发送音频分块，最后调用不带音频的
+`transcribe()` 结束当前转写。
+
+<Note>
+AgentScope 2.0.11 当前仅内置 OpenAI 批量语音识别实现；实时生命周期接口
+用于自定义实现和后续模型 API。
+</Note>
