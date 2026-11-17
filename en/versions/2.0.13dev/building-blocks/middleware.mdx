@@ -143,6 +143,45 @@ When no `TracerProvider` is configured, every hook short-circuits directly to `n
 When the agent receives an `ExternalExecutionResultEvent` (a tool executed outside the agent), `TracingMiddleware` synthesizes a compensating span for each external execution result, preserving full observability for tools run by external systems.
 </Info>
 
+#### Export Traces To MLflow
+
+Developers can send the existing agent, model-call, and tool-execution spans to an MLflow experiment using its [OTLP ingestion endpoint](https://mlflow.org/docs/latest/genai/tracing/opentelemetry/ingest/). OTLP ingestion requires MLflow 3.6.0 or later with a SQL-backed tracking server. The `/v1/traces` endpoint accepts OTLP/HTTP protobuf, not OTLP/gRPC.
+
+After installing MLflow, start a local tracking server with a SQLite backend:
+
+```bash Local tracking server
+mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
+```
+
+Create or select an experiment in the MLflow UI, then set `MLFLOW_EXPERIMENT_ID` to its ID. Replace the generic collector configuration above with the following setup before running the agent:
+
+```python MLflow exporter
+import os
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+provider = TracerProvider()
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="http://127.0.0.1:5000/v1/traces",
+            # Route every exported span to this MLflow experiment.
+            headers={"x-mlflow-experiment-id": os.environ["MLFLOW_EXPERIMENT_ID"]},
+            timeout=10,
+        ),
+    ),
+)
+trace.set_tracer_provider(provider)
+```
+
+Keep `TracingMiddleware` on the agent as shown above. Flush and shut down the process-owned provider when the application exits so queued spans can be exported. The [runnable MLflow tracing example](https://github.com/agentscope-ai/agentscope/tree/main/examples/mlflow) includes setup and cleanup instructions. This integration exports traces; it does not create MLflow experiment runs, log run metrics or artifacts, or calculate cost automatically.
+
+<Warning>
+`TracingMiddleware` includes message contents, tool arguments, and tool results in exported spans. Use non-sensitive example data, or review and redact the data before exporting it to a tracking server.
+</Warning>
+
 #### Add Additional Spans
 
 To trace custom operations within the agent lifecycle, use the [standard OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/) directly. Obtain a tracer scoped to AgentScope and wrap any target code in a span:
