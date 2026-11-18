@@ -103,6 +103,21 @@ The behaviour has a few boundaries worth knowing:
 | Precedence | Headers MCP sets per request (`mcp-session-id`, `content-type`, ...) always win; `connection`, `content-length`, `host` and `transfer-encoding` are owned by the HTTP layer and are rejected |
 | Persistence | Runtime headers are live instance state, excluded from `model_dump` and from workspace persistence |
 
+When the merged static and runtime headers change, AgentScope clears the
+cached tool catalog. The next `get_tool()` discovers the catalog again,
+including when clearing an override changes the effective headers.
+Header names are case-insensitive: equivalent updates keep the cache, and
+invalid updates raise `ValueError` without changing it.
+
+If headers change during discovery, AgentScope discards the stale result
+and retries once. If the retry is also invalidated, discovery raises
+`RuntimeError`; retry the lookup after the header updates settle.
+
+Previously returned `MCPTool` objects and tools already registered in a
+toolkit retain their existing schemas. Retrieve and replace those tools
+when refreshed schemas are needed. Updating headers does not replay tool
+calls already in flight.
+
 <Note>
 In a Docker workspace the live MCP client runs inside the gateway process and the host holds a proxy. Calling `set_runtime_headers()` on the proxy relays the update to the gateway — see [MCP Gateway](/en/versions/2.0.13dev/building-blocks/workspace/mcp-gateway).
 </Note>
