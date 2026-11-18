@@ -364,8 +364,8 @@ toolkit = Toolkit(tools=[FunctionTool(get_weather)])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `func` | `Callable` | The Python function to wrap |
-| `name` | `str \| None` | Override the tool name (defaults to `func.__name__`) |
-| `description` | `str \| None` | Override the description (defaults to the docstring) |
+| `name` | `str \| None` | Override the tool name (inferred from the callable when omitted) |
+| `description` | `str \| None` | Override the description (inferred from the callable's docstring when omitted) |
 | `input_schema` | `dict \| type[BaseModel] \| None` | Provide a JSON Schema or Pydantic model for the arguments explicitly; inferred from the function annotations when omitted |
 | `is_concurrency_safe` | `bool` | Whether parallel calls are safe (default `True`) |
 | `is_read_only` | `bool` | Whether the function has side effects (default `False`) |
@@ -391,6 +391,8 @@ weather_tool = FunctionTool(get_forecast, input_schema=WeatherInput)
 
 <Note>
 `FunctionTool` also resolves the deferred annotations produced by `from __future__ import annotations`. When automatic inference cannot express the constraints you need, prefer `input_schema`.
+
+When wrapping a `functools.partial`, `FunctionTool` uses the underlying function's name and docstring by default; a name or docstring explicitly set on the partial takes precedence. You can still override the tool's name and description using `name` and `description`. Schema inference resolves deferred custom types and `Annotated` metadata for the remaining parameters; explicit, resolvable partial annotations override the corresponding function annotations. Positionally bound parameters are omitted; keyword-bound parameters keep their defaults and can still be overridden by a call.
 </Note>
 
 <Note>
