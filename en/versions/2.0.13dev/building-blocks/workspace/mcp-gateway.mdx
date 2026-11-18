@@ -29,6 +29,10 @@ The gateway exposes a small REST surface (`GET /health`, `GET/POST/DELETE /mcps`
 
 <Note>
 [Updating HTTP headers at runtime](/en/versions/2.0.13dev/building-blocks/tool/mcp#update-http-headers-at-runtime) works through the gateway proxy too, but the proxy must already be connected, since what changes is the live client on the gateway side. `connect` registers the current runtime headers along with the client, so they survive a reconnect. A `RuntimeError` is raised when the workspace image predates the endpoint or the gateway restarted and holds no live client.
+
+Each successful `set_runtime_headers` call clears the proxy's cached tool definitions, including calls that repeat the same headers. The next `get_tool` or `list_tools` lookup uses current definitions. Previously returned tool objects keep their existing metadata; fetch them again when needed. Failed or rejected updates leave the proxy cache unchanged.
+
+If a header update succeeds during tool discovery, discovery retries once. If another update succeeds during the retry, it raises `RuntimeError`; wait for header updates to finish before retrying discovery.
 </Note>
 
 This abstraction keeps the agent-side code identical across every workspace backend: a workspace returns `MCPClient` instances from `list_mcps()` regardless of whether the upstream session lives on the host (`LocalWorkspace`) or inside an isolated environment (all sandboxed workspaces).
