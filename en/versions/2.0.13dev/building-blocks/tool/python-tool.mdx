@@ -145,13 +145,15 @@ Its execution model differs from `Bash` in a few ways:
 
 ### File Tools (Read, Write, Edit)
 
-The file tools enforce a read-before-write rule: `Write` and `Edit` require the target file to have been read via `Read` first. This prevents blind overwrites and ensures the agent always operates on current content.
+When used by an agent, the file tools enforce a read-before-write rule: `Write` and `Edit` require an existing target file to have been read via `Read` first. This lets the agent inspect the contents before changing them.
 
 | Tool | Operation | Key behavior |
 |------|-----------|--------------|
 | `Read` | Read file contents | Returns text with line numbers; returns images and PDFs as `DataBlock`s when the model supports them |
 | `Write` | Create or overwrite a file | Fails if the file exists but has not been read first |
 | `Edit` | Replace exact strings in a file | Fails if `old_string` is not found or is not unique (unless `replace_all=True`); requires prior read |
+
+If another process changes a text file, for example through a command in the sandbox, `Read` refreshes its cached contents when the backend's reported modification time differs from the cached timestamp. `Edit` and `Write` reject the stale read and require another `Read` before retrying. This check can detect changes within the same second when the backend and filesystem report sufficient timestamp precision.
 
 `check_permissions()`: `Write` and `Edit` share the same permission logic:
 
