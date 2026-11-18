@@ -301,6 +301,12 @@ async with store:
 返回结果是 `VectorSearchResult` 数组，每条记录包含 `score`、`document_id` 与命中 `chunk`。
 
 <Note>
+`MongoDBStore.search` 的 `top_k` 最大为 10000，超过此值会抛出 `ValueError`。近似搜索最多考察 10000 个候选，返回条数的上限仍为请求的 `top_k`。
+
+请求超过 500 条结果时，10000 的候选上限不足以满足 [MongoDB 的建议](https://www.mongodb.com/docs/vector-search/query/aggregation-stages/vector-search-stage/)：候选数至少是请求结果数的 20 倍。需要较多结果时，请用自己的数据验证检索质量。
+</Note>
+
+<Note>
 `score` 统一为**越大越相关**：使用距离度量（如 L2）的向量库会在返回前取负，因此这类知识库的分数为负值，`score_threshold` 也要相应地填负数。分数只在同一个知识库内部可比，不同嵌入模型或不同度量的知识库之间没有可比性。
 </Note>
 

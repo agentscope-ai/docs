@@ -301,6 +301,12 @@ async with store:
 The return value is a list of `VectorSearchResult`s; each entry carries `score`, `document_id`, and the matched `chunk`.
 
 <Note>
+The maximum `top_k` for `MongoDBStore.search` is 10000; larger values raise `ValueError`. Its approximate search considers at most 10000 candidates, while the requested result limit remains `top_k`.
+
+For requests above 500 results, this cap cannot maintain [MongoDB's recommendation](https://www.mongodb.com/docs/vector-search/query/aggregation-stages/vector-search-stage/) of at least 20 candidates per requested result. Evaluate retrieval quality on your data when requesting large result sets.
+</Note>
+
+<Note>
 A higher `score` always means a better match: stores that use a distance metric (L2, for instance) negate it before returning, so scores from those knowledge bases are negative and `score_threshold` has to be negative too. Scores are comparable only within one knowledge base, never across knowledge bases built on different embedding models or metrics.
 </Note>
 
