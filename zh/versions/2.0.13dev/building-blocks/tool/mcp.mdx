@@ -72,6 +72,15 @@ toolkit = Toolkit(mcps=[client])
 ```
 </CodeGroup>
 
+## 关闭与重连
+
+重新连接本地有状态 `MCPClient` 时，先等待 `client.close()` 完成，再调用
+`client.connect()` 创建新的传输连接。如果多个清理流程同时关闭旧连接，
+尚未返回的旧关闭调用不会清除新连接的状态。
+
+对已经关闭的客户端再次调用 `close()`，仍会抛出 `RuntimeError`。
+`ignore_errors` 仅控制是否忽略清理过程中的错误，不会跳过这一前置检查。
+
 ## 筛选暴露的工具
 
 如果希望只暴露 MCP 服务的部分工具，可以在客户端上配置 `enable_tools` 或 `disable_tools` 参数：

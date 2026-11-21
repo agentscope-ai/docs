@@ -72,6 +72,16 @@ toolkit = Toolkit(mcps=[client])
 ```
 </CodeGroup>
 
+## Close And Reconnect
+
+To reconnect a local stateful `MCPClient`, await `client.close()` before calling
+`client.connect()` again. Reconnecting creates a fresh transport. If cleanup
+paths overlap, close calls that started on the previous connection do not clear
+the replacement connection.
+
+Calling `close()` on an already closed client still raises `RuntimeError`.
+The `ignore_errors` option controls errors during cleanup, not this precondition.
+
 ## Filter Exposed Tools
 
 To expose only a subset of an MCP server's tools, set `enable_tools` or `disable_tools` on the client itself:
