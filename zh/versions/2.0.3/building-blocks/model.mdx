@@ -601,7 +601,7 @@ asyncio.run(main())
 
 ### 与 Agent 集成
 
-在 agent 层，TTS 通过 [`TTSMiddleware`](/zh/versions/2.0.3/building-blocks/middleware#ttsmiddleware) 集成 —— 自动拦截 agent 的文本输出并合成语音：
+在 agent 层，TTS 通过 [`TTSMiddleware`](/zh/versions/2.0.3/building-blocks/middleware#文本转语音中间件（ttsmiddleware）) 集成 —— 自动拦截 agent 的文本输出并合成语音：
 
 ```python
 from agentscope.agent import Agent
