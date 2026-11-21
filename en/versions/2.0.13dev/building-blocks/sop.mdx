@@ -130,7 +130,7 @@ The engine advances through the steps in order and skips those already completed
 
 Only handovers cross between steps; files and conversations do not. The first step receives the run's input, and every later step receives the previous step's handover wrapped in a `<handover from="previous step name">` tag. An executor should therefore write its handover for someone who has seen none of its work.
 
-The following cases also count as a refusal and spend `max_attempts` in the same way:
+When an agent finishes normally, missing structured output also counts as a refusal and spends `max_attempts`:
 
 | Case | Recorded reason |
 |------|-----------------|
@@ -150,7 +150,7 @@ Steps and the run as a whole share one set of phases, `SOPPhase`:
 
 | Phase | Meaning |
 |-------|---------|
-| `PENDING` | Not started, or refused and waiting to be retried |
+| `PENDING` | Not started, refused and waiting to be retried, or interrupted without a verdict |
 | `RUNNING` | In progress |
 | `AWAITING` | Parked until an outside answer arrives |
 | `COMPLETED` | Accepted |
@@ -181,6 +181,12 @@ async for event in engine.reply_stream(user_confirm_result_event):
 | `ExternalExecutionResultEvent` | The result of an external execution, passed to the parked step |
 | `UserInterruptEvent` | Abandon the parked call. The attempt is dropped without counting as a refusal, and the step goes back to `PENDING` |
 | `None` | Continue from the current state with no new input |
+
+### Interrupt an Active Step
+
+If developers cancel the task consuming `reply_stream` and the executor or verifier emits a final `Msg` with `finished_reason=ReplyFinishedReason.INTERRUPTED`, the engine forwards the remaining interruption events and stops. It does not retry the missing output, dispatch another agent, or advance to the next step.
+
+The interrupted `SOPStep` returns to `PENDING`, drops its current handover, and records no verdict or refusal for this attempt. Call `engine.reply_stream` again to rerun the step rather than sending a confirmation for a parked call. Completed steps are skipped, but interruption does not undo external changes: check what the interrupted step's tools already did before repeating it.
 
 ### Persist the Run State
 

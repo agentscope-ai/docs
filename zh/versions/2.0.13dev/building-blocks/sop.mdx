@@ -130,7 +130,7 @@ asyncio.run(main())
 
 步骤之间只传递交付内容，不传递文件或对话。第一步收到运行的输入，之后每一步收到的是上一步的交付，包在 `<handover from="上一步名称">` 标签里。因此执行者写交付时，要假设后续步骤没有看过它的任何工作过程。
 
-以下情况也会被记为一次驳回，同样消耗 `max_attempts`：
+智能体正常结束回复时，以下缺少结构化输出的情况也会记为一次驳回，消耗 `max_attempts`：
 
 | 情况 | 记录的原因 |
 |------|------------|
@@ -150,7 +150,7 @@ asyncio.run(main())
 
 | 阶段 | 含义 |
 |------|------|
-| `PENDING` | 尚未开始，或被驳回后等待重做 |
+| `PENDING` | 尚未开始、被驳回后等待重做，或已中断但没有验收结论 |
 | `RUNNING` | 正在进行 |
 | `AWAITING` | 已挂起，等待外部答复后才能继续 |
 | `COMPLETED` | 已通过验收 |
@@ -181,6 +181,12 @@ async for event in engine.reply_stream(user_confirm_result_event):
 | `ExternalExecutionResultEvent` | 外部执行的结果，交给挂起的那一步 |
 | `UserInterruptEvent` | 放弃挂起的调用；本次尝试作废但不计入驳回次数，这一步回到 `PENDING` |
 | `None` | 不带新输入，从当前状态继续 |
+
+### 中断正在执行的步骤
+
+开发者取消消费 `reply_stream` 的任务时，如果执行者或验证者返回的最终 `Msg` 带有 `finished_reason=ReplyFinishedReason.INTERRUPTED`，引擎会转发剩余的中断事件，然后停止。它不会因为缺少结构化输出而重试，也不会调用另一个智能体或推进到下一步。
+
+被中断的 `SOPStep` 回到 `PENDING`，本次交付被清空，不记录验收结论，也不计入驳回次数。要重做这一步，请再次调用 `engine.reply_stream`，而不是像恢复挂起的调用那样传入确认结果。引擎会跳过已完成的步骤，但中断不会撤销外部变更；重做前请先核对这一步的工具已经执行了哪些操作。
 
 ### 持久化运行状态
 
