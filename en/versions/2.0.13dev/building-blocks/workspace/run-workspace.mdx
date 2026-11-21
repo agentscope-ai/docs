@@ -92,6 +92,11 @@ Each backend has its own persistence model and directory layout. Pick the tab ma
     )
     await workspace.initialize()
     ```
+
+    When `Write` or `Edit` overwrites an existing regular file in a Docker workspace, it preserves the file's read, write, and execute permission bits (`0o777` mask) and numeric owner and group IDs. Editing a script therefore keeps its execute bits, and a private `0600` file stays `0600`.
+
+    New files use `0644` permissions. Overwriting a file clears any setuid, setgid, and sticky bits; it does not make concurrent writes atomic.
+
   </Tab>
 
   <Tab title="E2B">
