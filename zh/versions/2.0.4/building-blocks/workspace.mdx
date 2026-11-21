@@ -220,7 +220,7 @@ ws = await manager.get_workspace(
 )
 ```
 
-要换用其他隔离策略（按 user、按 session 或混合），继承 `WorkspaceManagerBase` 并按自己的键重写 `get_workspace` / `create_workspace` —— 关于 manager 如何接入服务请求生命周期，详见 [Agent Service · Workspace 实现与隔离](/zh/versions/2.0.4/deploy/agent-service#workspace-实现与隔离)。
+要换用其他隔离策略（按 user、按 session 或混合），继承 `WorkspaceManagerBase` 并按自己的键重写 `get_workspace` / `create_workspace` —— 关于 manager 如何接入服务请求生命周期，详见 [Agent Service · Workspace 实现与隔离](/zh/versions/2.0.4/deploy/agent-service#工作区实现与隔离)。
 
 <Tip>
 Agent Service 在 lifespan 期间把 workspace manager 绑定到 FastAPI 应用状态上，所有请求共享；router 通过 `get_workspace_manager` 依赖注入获取 workspace。完整集成方式见 [Agent Service](/zh/versions/2.0.4/deploy/agent-service)。

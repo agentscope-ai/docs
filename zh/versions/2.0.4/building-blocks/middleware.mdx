@@ -20,7 +20,7 @@ AgentScope 暴露了 6 个 hook 位置外加一个工具提供 hook，覆盖了�
 | `list_tools` | Tool source | 可选。返回中间件贡献的 `list[ToolBase]`。**不会被自动调用** —— 由组装智能体 toolkit 的调用方决定是否调用以及如何合并结果。 |
 
 <Note>
-以上 hook 均作用于**智能体**层面。若需要在单个工具实例上挂钩 —— 无论该工具是在智能体内部还是外部被调用 —— 请参见[工具中间件](/zh/versions/2.0.4/building-blocks/tool#工具中间件)。
+以上 hook 均作用于**智能体**层面。若需要在单个工具实例上挂钩 —— 无论该工具是在智能体内部还是外部被调用 —— 请参见[工具中间件](/zh/versions/2.0.4/building-blocks/tool#中间件)。
 </Note>
 
 三种类型的差别：
