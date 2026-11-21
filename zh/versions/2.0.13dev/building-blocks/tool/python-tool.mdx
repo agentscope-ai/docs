@@ -451,6 +451,11 @@ class HumanApproval(ToolBase):
 | `input_kwargs` | `dict[str, Any]` | 本次调用的输入参数。将（可能经修改的）参数传给 `next_handler`，可控制内层接收到的内容 |
 | `next_handler` | `Callable[..., AsyncGenerator[ToolChunk, None]]` | 通过 `next_handler(**input_kwargs)` 继续执行下一层。无论底层工具是否流式，始终返回 async generator |
 
+工具参数 `index` 与其他参数一样包含在 `input_kwargs` 中，通过
+`next_handler(**input_kwargs)` 继续传递。例如，针对搜索工具，中间件可以设置
+`input_kwargs["index"] = "products"`，让内层中间件和工具使用该搜索索引。
+修改这一参数不会改变已注册中间件的执行顺序。
+
 ### 执行模型
 
 - **第一个**注册的中间件是**最外层**：其前置逻辑最先执行，后置逻辑最后执行。

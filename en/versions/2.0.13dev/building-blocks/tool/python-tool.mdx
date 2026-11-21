@@ -451,6 +451,12 @@ Subclass `ToolMiddlewareBase` and implement the single abstract async-generator 
 | `input_kwargs` | `dict[str, Any]` | Input arguments for this invocation. Pass (possibly modified) arguments to `next_handler` to control what the inner layers receive |
 | `next_handler` | `Callable[..., AsyncGenerator[ToolChunk, None]]` | Call as `next_handler(**input_kwargs)` to continue to the next layer. Always returns an async generator regardless of whether the underlying tool is streaming or not |
 
+A tool parameter named `index` is included in `input_kwargs` like other tool
+arguments. Forward it with `next_handler(**input_kwargs)`. For a search tool,
+middleware can set `input_kwargs["index"] = "products"` to select the search
+index passed to the inner layers and the tool. Changing this argument leaves
+the registered middleware execution order unchanged.
+
 ### Execution Model
 
 - The **first** registered middleware is the **outermost** layer: its pre-logic runs first, its post-logic runs last.
