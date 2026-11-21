@@ -153,6 +153,13 @@ The file tools enforce a read-before-write rule: `Write` and `Edit` require the 
 | `Write` | Create or overwrite a file | Fails if the file exists but has not been read first |
 | `Edit` | Replace exact strings in a file | Fails if `old_string` is not found or is not unique (unless `replace_all=True`); requires prior read |
 
+When these tools use the agent's text-file read cache, they validate it against
+the backend's reported modification time. If the backend cannot report it
+(`stat_mtime()` returns `None`), `Read` reads the file without reusing or storing
+a cache entry. `Edit` and `Write` refuse to modify an existing file until its
+modification time can be checked. Restore timestamp reporting, then read the
+file again before retrying. `Write` can still create a new file.
+
 `check_permissions()`: `Write` and `Edit` share the same permission logic:
 
 1. **Dangerous path protection**: operations on sensitive files (`.bashrc`, `.env`, `.ssh/`) return a bypass-immune ASK (`bypass_immune=True`), so allow rules cannot silently authorize them. The ASK is still skipped in `BYPASS` mode (which opts out of safety prompts by design) and converted to DENY in `DONT_ASK` mode. See the [permission system docs](/en/versions/2.0.13dev/building-blocks/permission-system/tool-check#safety-check-contract) for the full contract.

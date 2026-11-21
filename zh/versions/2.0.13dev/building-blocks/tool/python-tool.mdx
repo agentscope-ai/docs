@@ -153,6 +153,11 @@ pwsh = PowerShell(cwd="C:\\Users\\me\\project")
 | `Write` | 创建或覆写文件 | 文件已存在但未被读取过则失败 |
 | `Edit` | 替换文件中的精确字符串 | `old_string` 找不到或不唯一时失败（除非 `replace_all=True`）；要求先读取 |
 
+这些工具使用智能体的文本文件读取缓存时，会根据执行后端报告的文件修改时间检查缓存是否仍然有效。
+如果后端无法提供修改时间（`stat_mtime()` 返回 `None`），`Read` 会重新读取文件，不复用或保存缓存。
+此时，`Edit` 和 `Write` 会拒绝修改已有文件；请先恢复后端的修改时间读取能力，再重新读取文件后重试。
+`Write` 仍可创建新文件。
+
 `check_permissions()`：`Write` 与 `Edit` 共用同一权限逻辑：
 
 1. **危险路径保护**：操作敏感文件（`.bashrc`、`.env`、`.ssh/`）返回带 `bypass_immune=True` 的 ASK，allow 规则无法静默授权。`BYPASS` 模式下该 ASK 仍然被跳过（BYPASS 明确选择放弃 safety 提示），`DONT_ASK` 下被转为 DENY。完整契约见[安全检查契约](/zh/versions/2.0.13dev/building-blocks/permission-system/tool-check#安全检查契约)。
