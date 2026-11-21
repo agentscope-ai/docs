@@ -127,7 +127,7 @@ Two kinds of retry are counted differently, and only the first spends an attempt
 | Case | Meaning | Spends `max_iters` |
 |------|---------|--------------------|
 | The verifier returns `fail` | The work genuinely is not good enough | Yes |
-| Either agent returns no valid structured output | The model did not call the tool it was asked to | No, it is reminded and asked again |
+| Either agent finishes normally without valid structured output | The model did not call the tool it was asked to | No, it is reminded and asked again |
 
 The second is a malfunction rather than a judgement; charging it would quietly cost the executor attempts. `max_retries` caps how many times it is asked again. Once `max_iters` is reached the pipeline stops, the stream ends, and the last `message` stays in the verifier's conversation.
 
@@ -161,6 +161,12 @@ Resuming does not require saying who to resume. The event carries the `reply_id`
 <Note>
 The attempt budget lives on the pipeline instance rather than inside `reply_stream`, so resuming does not hand the run a fresh set of attempts.
 </Note>
+
+### Interrupt an Active Run
+
+If developers cancel the task consuming `reply_stream` and the executor or verifier emits a final `Msg` with `finished_reason=ReplyFinishedReason.INTERRUPTED`, the pipeline forwards the remaining interruption events and stops. It neither retries the missing output nor starts another agent. The interrupted reply spends no additional `max_retries` or `max_iters` budget.
+
+Unlike a parked tool call, an interrupted attempt cannot be resumed with a confirmation. To start a fresh run, pass a new `Msg` or `list[Msg]` to `reply_stream`. Check the effects of completed tools first: interruption does not undo external changes.
 
 ## Debugging in the Terminal
 
