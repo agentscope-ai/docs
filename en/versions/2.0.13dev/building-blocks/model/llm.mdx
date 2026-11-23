@@ -267,6 +267,30 @@ model = OpenAIChatModel(
 
 For non-standard payload shapes (e.g. a provider whose API doesn't follow the OpenAI or Anthropic conventions), subclass `FormatterBase` and pass an instance through the same `formatter` argument.
 
+### Remote Media URLs
+
+When a formatter downloads a `URLSource` to inline its bytes, the URL must use HTTP or HTTPS and resolve only to public IP addresses. Loopback, private network and link-local destinations are rejected, including destinations reached through redirects. URLs containing credentials are also rejected.
+
+These downloads bypass environment proxies so the formatter connects to the address it checked. HTTPS certificate verification remains enabled. URLs passed directly to a model provider, rather than downloaded by AgentScope, follow that provider's behavior.
+
+For private media, load the bytes in trusted application code and supply a `Base64Source`. For example, this creates a PDF block from an application-owned file:
+
+```python Private PDF
+import base64
+from pathlib import Path
+
+from agentscope.message import Base64Source, DataBlock
+
+# Read a file chosen by your application, not a path supplied by a caller.
+pdf_bytes = Path("report.pdf").read_bytes()
+block = DataBlock(
+    source=Base64Source(
+        media_type="application/pdf",
+        data=base64.b64encode(pdf_bytes).decode("ascii"),
+    ),
+)
+```
+
 ### Multimodal Tool Results
 
 A tool can return images, audio and other `DataBlock`s, and APIs differ in how much of that they can carry, so the formatter decides how those blocks enter the request:

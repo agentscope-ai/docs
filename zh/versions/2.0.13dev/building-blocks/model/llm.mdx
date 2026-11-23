@@ -265,6 +265,30 @@ model = OpenAIChatModel(
 
 如果模型 API 的载荷格式不属于 OpenAI 或 Anthropic 风格，开发者可以继承 `FormatterBase` 实现自定义格式化器，并通过同一个 `formatter` 参数传入。
 
+### 远程媒体 URL
+
+格式化器下载 `URLSource` 并将其内容内嵌到请求时，URL 必须使用 HTTP 或 HTTPS，且所有解析结果都必须是公网 IP 地址。回环地址、私有网络地址和链路本地地址会被拒绝，重定向的目标地址也受同样限制。URL 中不能包含用户名或密码。
+
+这类下载不使用环境变量配置的代理，以确保实际连接的地址就是经过检查的地址。HTTPS 证书验证保持开启。如果 URL 直接传给模型服务方，而不是由 AgentScope 下载，则由模型服务方处理。
+
+对于私有媒体，开发者可以在可信的应用代码中读取内容，再通过 `Base64Source` 提供。例如，下面的代码从应用管理的文件创建 PDF 数据块：
+
+```python 私有 PDF
+import base64
+from pathlib import Path
+
+from agentscope.message import Base64Source, DataBlock
+
+# 文件路径由应用指定，不接受调用方提供的任意路径。
+pdf_bytes = Path("report.pdf").read_bytes()
+block = DataBlock(
+    source=Base64Source(
+        media_type="application/pdf",
+        data=base64.b64encode(pdf_bytes).decode("ascii"),
+    ),
+)
+```
+
 ### 多模态工具结果
 
 工具可以返回图片、音频等 `DataBlock`，各模型 API 承载这类内容的能力不同，格式化器据此决定它们如何进入请求：
